@@ -1,0 +1,13 @@
+config:
+  entities:
+    nodeTypes:
+      "33":
+        defaultStorageLocation: null
+        isDisabled: false
+  packageVariables: ""
+fileVersion: 1
+id: "@example/package-datavault"
+name: DataVault
+packageID: "@example/package-datavault"
+releaseID: release-package-datavault-1
+type: Package

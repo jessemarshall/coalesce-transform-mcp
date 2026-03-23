@@ -1,0 +1,18 @@
+config:
+  entities:
+    nodeTypes:
+      "65":
+        defaultStorageLocation: null
+        isDisabled: false
+      "66":
+        defaultStorageLocation: null
+        isDisabled: false
+  packageVariables: |-
+    {% set feature_flag = true %}
+    {% set warehouse_name = "WH_ETL" %}
+fileVersion: 1
+id: "@example/package-alpha"
+name: package-alpha
+packageID: "@example/package-alpha"
+releaseID: release-package-alpha-1
+type: Package

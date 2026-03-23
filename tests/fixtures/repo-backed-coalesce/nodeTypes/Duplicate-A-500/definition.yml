@@ -1,0 +1,13 @@
+fileVersion: 1
+id: "500"
+isDisabled: false
+metadata:
+  defaultStorageLocation: null
+  error: null
+  nodeMetadataSpec: |-
+    capitalized: Duplicate A
+    short: DUPA
+    plural: Duplicate As
+    tagColor: "#444444"
+name: Duplicate A
+type: NodeType

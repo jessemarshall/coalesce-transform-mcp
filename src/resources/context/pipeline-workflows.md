@@ -1,0 +1,355 @@
+# Pipeline Building Workflows
+
+## Quick Reference
+
+| User says | Node type | Action |
+|-----------|-----------|--------|
+| "stage my X data" | `Stage` | `create-workspace-node-from-predecessor` with source node |
+| "create a dimension for X" | `Dimension` | `create-workspace-node-from-predecessor` with staging node |
+| "build a fact table from X and Y" | `Fact` | `create-workspace-node-from-predecessor` with both, then `convert-join-to-aggregation` |
+| "create a view for X" | `View` | `create-workspace-node-from-predecessor` with upstream node |
+| "join X and Y" | `View` | `create-workspace-node-from-predecessor` with both, then apply join condition |
+| "build an incremental pipeline" | `Incremental Load` | See "Incremental Pipeline Setup" below |
+| "create an empty node" | Any | `create-workspace-node-from-scratch` with `name` and `metadata.columns` |
+
+When the user specifies the node type or the intent maps clearly, skip discovery and create directly. Use the full workflow only when the intent is ambiguous or involves multiple layers.
+
+## Choosing the Right Node Type
+
+**Step 1: Check available types**
+
+```javascript
+list-workspace-node-types({ workspaceID })
+```
+
+Prefer types already in use. If `base-nodes:::Stage` etc. are observed, use those over built-in types. If a recommended type is not observed, tell the user it may need installation via Build Settings > Packages.
+
+**Step 2: Read source columns**
+
+```javascript
+get-workspace-node({ workspaceID, nodeID: "source-id" })
+```
+
+Look for timestamp columns (UPDATED_AT, CREATED_AT) for incremental loading, business keys (CUSTOMER_ID) for merge keys, and SCD columns (EFFECTIVE_FROM, IS_CURRENT) for dimension tracking.
+
+**Step 3: Select by pipeline layer**
+
+| Layer | Default | Use Instead When |
+|-------|---------|-----------------|
+| Staging | `Stage` | Source has timestamps AND is large -> `Incremental Load` (requires package) |
+| Intermediate | `View` | Expensive computation -> `Stage` or `Work` |
+| Dimension (gold) | `Dimension` | Has SCD columns -> configure SCD Type 2 |
+| Fact (gold) | `Fact` | Large append-heavy data -> incremental config |
+| Metrics | `View` | Complex/frequently queried -> `Fact` |
+
+IMPORTANT: `View` types can ONLY materialize as views. For aggregations queried repeatedly, use `Dimension` or `Fact`. See `coalesce://context/data-engineering-principles` for platform-specific materialization guidance.
+
+Node type format: `"Stage"` (simple) or `"IncrementalLoading:::230"` (PackageName:::NodeTypeID). Prefer the package-prefixed format when known.
+
+## Pipeline Building Sequence
+
+### Step 1: Discover the Workspace
+
+```javascript
+list-projects({ includeWorkspaces: true })
+```
+
+### Step 2: Find Source Nodes
+
+```javascript
+list-workspace-nodes({ workspaceID, detail: true })
+```
+
+Note node IDs, names, and `locationName` (needed for `{{ ref() }}` syntax).
+
+### Step 3: Plan to discover the correct node type
+
+**Always call `plan-pipeline` before creating nodes.** The planner scans the repo for all committed node type definitions, scores them against your use case, and returns the best match. Do not guess node types — use what the planner recommends.
+
+```javascript
+plan-pipeline({
+  workspaceID,
+  goal: "stage customer data",
+  sourceNodeIDs: ["source-id-1"],
+  repoPath: "/path/to/repo"  // or rely on COALESCE_REPO_PATH
+})
+```
+
+The response includes:
+
+- `nodeTypeSelection.consideredNodeTypes` — ranked candidates with scores and reasons
+- `supportedNodeTypes` — types that support automatic creation
+- `nodes[].nodeType` — the recommended type for each planned node
+
+**If the user provides SQL:** Pass it directly to the planner.
+
+```javascript
+plan-pipeline({ workspaceID, sql: "<USER-PROVIDED SQL HERE>" })
+```
+
+Never author SQL yourself to pass to these tools.
+
+### Step 4: Review and Execute
+
+- Plan returns `status: "ready"` -> use the recommended node type to create, or call `create-pipeline-from-plan`
+- Plan returns `status: "needs_clarification"` -> address `openQuestions`, then re-plan
+
+### Step 5: Create Nodes with the planned node type
+
+Use `create-workspace-node-from-predecessor` with the node type from the plan. **Always pass `repoPath`** so config completion runs automatically:
+
+```javascript
+create-workspace-node-from-predecessor({
+  workspaceID,
+  nodeType: "base-nodes:::Stage",  // from plan-pipeline result
+  predecessorNodeIDs: ["source-id-1"],
+  changes: { name: "STG_CUSTOMER" },
+  repoPath: "/path/to/repo"  // enables automatic config completion
+})
+```
+
+**Always use `create-workspace-node-from-predecessor` or `create-workspace-node-from-scratch`** — they handle validation, config completion, and column-level attributes automatically.
+
+For joins and aggregations:
+
+```javascript
+convert-join-to-aggregation({
+  workspaceID, nodeID: "join-node-id",
+  groupByColumns: [...], aggregates: [...],
+  maintainJoins: true,
+  repoPath: "/path/to/repo"
+})
+```
+
+### Step 6: Verify Config Completion
+
+Config is applied automatically when `repoPath` is provided. Check the `configCompletion` field in the response:
+
+- `configCompletion.configReview.status` — `complete`, `needs_attention`, or `incomplete`
+- `configCompletion.configReview.summary` — human-readable status summary
+- `configCompletion.configReview.missingRequired` — required fields/columnSelectors still unset
+- `configCompletion.configReview.warnings` — issues needing manual review (e.g., missing business keys on dimension nodes)
+- `configCompletion.configReview.suggestions` — optional improvements (e.g., change tracking, materialization)
+- `configCompletion.appliedConfig` — node-level config values that were set
+- `configCompletion.columnAttributeChanges.applied` — column-level attributes (isBusinessKey, etc.)
+- `configCompletion.reasoning` — why each decision was made
+
+**Action required when `configReview.status` is not `complete`:**
+
+- `incomplete` — required fields are missing. Set them via `update-workspace-node` or `replace-workspace-node-columns`.
+- `needs_attention` — warnings need manual review (e.g., set `isBusinessKey` on the correct columns).
+
+If `configCompletionSkipped` appears instead, call `complete-node-configuration` with `repoPath` to retry.
+
+### Step 7: Follow-Up Edits
+
+Use `update-workspace-node` for post-creation changes.
+
+## Multi-Node Pipelines
+
+Create nodes bottom-up — upstream before downstream. Each step uses node IDs from the previous step.
+
+**Example: join two sources then aggregate**
+
+```javascript
+// 0. Plan to discover correct node types for each layer
+plan-pipeline({
+  workspaceID,
+  goal: "stage customer and orders, then build CLV fact",
+  sourceNodeIDs: ["source-customer-id", "source-orders-id"],
+  repoPath: "/path/to/repo"
+})
+// -> nodeTypeSelection shows e.g. "base-nodes:::Stage" for staging,
+//    "base-nodes:::Fact" for the fact layer
+
+// 1. Stage each source using the planned node type (independent — parallelize)
+create-workspace-node-from-predecessor({
+  workspaceID, nodeType: "base-nodes:::Stage",  // from plan
+  predecessorNodeIDs: ["source-customer-id"],
+  changes: { name: "STG_CUSTOMER" },
+  repoPath: "/path/to/repo"  // auto-completes config
+})
+// -> "stg-cust-id" + configCompletion shows applied config
+
+create-workspace-node-from-predecessor({
+  workspaceID, nodeType: "base-nodes:::Stage",  // from plan
+  predecessorNodeIDs: ["source-orders-id"],
+  changes: { name: "STG_ORDERS" },
+  repoPath: "/path/to/repo"
+})
+// -> "stg-orders-id" + configCompletion shows applied config
+
+// 2. Create join/fact node with planned fact type
+create-workspace-node-from-predecessor({
+  workspaceID, nodeType: "base-nodes:::Fact",  // from plan
+  predecessorNodeIDs: ["stg-cust-id", "stg-orders-id"],
+  changes: { name: "FACT_CLV" },
+  repoPath: "/path/to/repo"
+})
+// -> "fact-clv-id", joinSuggestions with common columns, configCompletion
+
+// 3. Aggregate with automatic JOIN ON generation
+convert-join-to-aggregation({
+  workspaceID, nodeID: "fact-clv-id",
+  groupByColumns: ['"STG_CUSTOMER"."CUSTOMER_ID"'],
+  aggregates: [
+    { name: "TOTAL_ORDERS", function: "COUNT", expression: 'DISTINCT "STG_ORDERS"."ORDER_ID"' },
+    { name: "LIFETIME_VALUE", function: "SUM", expression: '"STG_ORDERS"."ORDER_TOTAL"' }
+  ],
+  maintainJoins: true,
+  repoPath: "/path/to/repo"
+})
+```
+
+**Verification after each step:** Check `validation.allPredecessorsRepresented`, `validation.autoPopulatedColumns`, `warning`, and `joinSuggestions` before proceeding.
+
+**If a node is created with 0 columns:** The predecessor may have no columns, the IDs were wrong, or the node type doesn't auto-inherit. Try a projection-capable type (Stage, View, Work) or add columns with `replace-workspace-node-columns`.
+
+### UNION / Multi-Source Nodes
+
+```javascript
+create-workspace-node-from-predecessor({
+  workspaceID, nodeType: "Stage",
+  predecessorNodeIDs: ["stg-orders-us-id", "stg-orders-eu-id"],
+  changes: { name: "STG_ORDERS_ALL" }
+})
+
+update-workspace-node({
+  workspaceID, nodeID: "new-node-id",
+  changes: { config: { insertStrategy: "UNION ALL" } }
+})
+```
+
+Values: `"UNION"` (dedup), `"UNION ALL"` (keep all), `"INSERT"` (sequential, default).
+
+## Incremental Pipeline Setup
+
+**With the Incremental-Nodes package** (check `list-workspace-node-types` for `IncrementalLoading:::230`):
+
+```javascript
+// 1. Create the node
+create-workspace-node-from-predecessor({
+  workspaceID, nodeType: "IncrementalLoading:::230",
+  predecessorNodeIDs: ["source-orders-id"],
+  changes: { name: "INC_ORDERS" }
+})
+
+// 2. Configure incremental settings
+update-workspace-node({
+  workspaceID, nodeID: "inc-orders-id",
+  changes: {
+    config: {
+      filterBasedOnPersistentTable: true,
+      persistentTableLocationName: "STAGING",
+      persistentTableName: "INC_ORDERS",
+      incrementalLoadColumn: "UPDATED_AT"
+    }
+  }
+})
+```
+
+How it works: reads MAX of the high-water mark column from the target, filters source to rows above that value, INSERTs new rows. Any MERGE/upsert/SCD logic happens downstream in Dimension or Fact nodes.
+
+**Without the package** — use a regular Stage with a MAX subquery in joinCondition:
+
+```javascript
+update-workspace-node({
+  workspaceID, nodeID: "new-node-id",
+  changes: {
+    config: { truncateBefore: false },
+    metadata: {
+      sourceMapping: [{
+        name: "STG_ORDERS_INCREMENTAL",
+        dependencies: [{ locationName: "RAW", nodeName: "ORDERS" }],
+        join: {
+          joinCondition: 'FROM {{ ref(\'RAW\', \'ORDERS\') }} "ORDERS"\nWHERE "ORDERS"."UPDATED_AT" > (\n  SELECT COALESCE(MAX("UPDATED_AT"), \'1900-01-01\')\n  FROM {{ ref_no_link(\'STAGING\', \'STG_ORDERS_INCREMENTAL\') }}\n)'
+        },
+        customSQL: { customSQL: "" }, aliases: {}, noLinkRefs: []
+      }]
+    }
+  }
+})
+```
+
+Use `{{ ref_no_link() }}` for the self-reference to avoid circular DAG dependencies.
+
+## Data Engineering Best Practices
+
+### Naming Conventions
+
+Follow layer-appropriate naming to keep pipelines readable:
+
+| Layer | Convention | Examples |
+|-------|-----------|----------|
+| Staging | `STG_<SOURCE>` | `STG_CUSTOMERS`, `STG_ORDERS` |
+| Intermediate | `INT_<PURPOSE>` or `WRK_<PURPOSE>` | `INT_ORDER_ENRICHMENT`, `WRK_CUSTOMER_DEDUP` |
+| Dimension | `DIM_<ENTITY>` | `DIM_CUSTOMER`, `DIM_PRODUCT` |
+| Fact | `FACT_<PROCESS>` or `FCT_<PROCESS>` | `FACT_SALES`, `FCT_CLV` |
+| View | `V_<PURPOSE>` | `V_ACTIVE_CUSTOMERS` |
+| Hub | `HUB_<KEY>` | `HUB_CUSTOMER` |
+| Satellite | `SAT_<HUB>_<CONTEXT>` | `SAT_CUSTOMER_DETAILS` |
+| Link | `LNK_<RELATIONSHIP>` | `LNK_CUSTOMER_ORDER` |
+
+For Snowflake, always use UPPERCASE node names (`STG_LOCATION`, not `stg_location`). Snowflake treats unquoted identifiers as uppercase — matching this convention avoids case-sensitivity issues. For Databricks/BigQuery, follow that platform's conventions (typically lowercase).
+
+### Join Verification Checklist
+
+After creating a multi-predecessor node, ALWAYS:
+
+1. **Review `joinSuggestions`** — the response shows common columns between predecessors. Confirm these are the correct business keys for the join.
+2. **Choose the right join type:**
+   - `INNER JOIN` — only matching rows (use when every record must exist in both tables)
+   - `LEFT JOIN` — keep all rows from the primary table (use when the left table is the "driver" and right table may have missing matches)
+   - `FULL OUTER JOIN` — keep all rows from both tables (rare, use for reconciliation)
+3. **Verify join cardinality:** Joining a 1M-row table to a 10M-row table on a non-unique key causes fan-out (row multiplication). Ensure at least one side of the join is unique on the join key.
+4. **Set the join condition** — call `convert-join-to-aggregation` (for aggregation), `apply-join-condition` (for row-level joins), or `update-workspace-node` (for full manual control)
+5. **Verify columns** — call `get-workspace-node` to confirm the final column list and transforms are correct
+
+### Fact Table Grain
+
+When building fact tables, define the **grain** (the set of columns that uniquely identifies each row):
+
+- Grain columns become your `groupByColumns` in `convert-join-to-aggregation`
+- Mark grain columns as `isBusinessKey: true`
+- All other columns should be aggregates (COUNT, SUM, AVG, etc.)
+- If unsure about the grain, ask the user: "What uniquely identifies each row in this fact table?"
+
+Example: A sales fact table might have grain = `[CUSTOMER_ID, ORDER_DATE, PRODUCT_ID]` with measures `QUANTITY`, `REVENUE`, `DISCOUNT_AMOUNT`.
+
+### Post-Creation Verification
+
+After creating each node, verify before moving to the next:
+
+1. **Check `nextSteps`** in the creation response — follow all required steps
+2. **Check `validation.allPredecessorsRepresented`** — if false, predecessors are missing from column sources
+3. **Check `configCompletion`** — verify applied config and column attributes make sense
+4. **For multi-predecessor nodes:** Confirm the join condition was set (call `get-workspace-node` to verify `metadata.sourceMapping[].join.joinCondition` is not empty)
+5. **For aggregation nodes:** Verify GROUP BY is valid (`validation.valid: true` from `convert-join-to-aggregation`)
+
+### Materialization Strategy
+
+Choose materialization based on the node's role and query patterns:
+
+- **Staging/Bronze:** Always `table` (preserve raw data; Snowflake: use transient tables)
+- **Intermediate:** `view` for lightweight transforms; `table` for expensive computations
+- **Dimensions:** `table` (small, queried repeatedly, need persistence)
+- **Facts:** `table` with incremental loading for large volumes
+- **Metrics/aggregations queried frequently:** `table` via Dimension or Fact (NEVER `view` for repeated aggregation queries)
+
+IMPORTANT: `View` node types can ONLY materialize as views. If you need a table, use `Dimension`, `Fact`, `Stage`, or `Work`.
+
+## After Building the Pipeline
+
+1. **Deploy**: `start-run` with `runType: "deploy"`
+2. **Run**: `start-run` with `runType: "refresh"`
+3. **Monitor**: `run-status` or `run-and-wait`
+4. **Troubleshoot**: `get-run-results` for errors, `retry-run` to re-run
+
+Scheduling is configured via Jobs in the Coalesce UI. Trigger existing jobs with `start-run` and `jobID`. See `coalesce://context/run-operations` for full guidance.
+
+## Related Resources
+
+- `coalesce://context/node-creation-decision-tree` — routing: which tool to use
+- `coalesce://context/node-operations` — editing nodes after creation
+- `coalesce://context/data-engineering-principles` — architecture and materialization
+- `coalesce://context/aggregation-patterns` — GROUP BY, datatype inference

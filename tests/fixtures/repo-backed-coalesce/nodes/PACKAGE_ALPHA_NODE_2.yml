@@ -1,0 +1,9 @@
+fileVersion: 1
+id: node-package-2
+name: PACKAGE_ALPHA_NODE_2
+operation:
+  name: PACKAGE_ALPHA_NODE_2
+  sqlType: package-alpha:::65
+  type: transform
+  version: 1
+type: Node

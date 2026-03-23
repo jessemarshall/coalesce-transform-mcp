@@ -1,0 +1,9 @@
+fileVersion: 1
+id: node-stage-1
+name: STG_ORDERS
+operation:
+  name: STG_ORDERS
+  sqlType: Stage
+  type: transform
+  version: 1
+type: Node
