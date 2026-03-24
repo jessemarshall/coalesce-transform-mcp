@@ -1,5 +1,5 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { CoalesceClient, QueryParams } from "../../client.js";
 import { listEnvironmentNodes, listWorkspaceNodes } from "../../coalesce/api/nodes.js";
 import { listRuns } from "../../coalesce/api/runs.js";
@@ -102,6 +102,89 @@ async function fetchAllPaginated(
     orderBy,
     ...(orderByDirection ? { orderByDirection } : {}),
   };
+}
+
+type StreamToDiskOptions = {
+  ndjsonPath: string;
+  metaPath: string;
+  itemTransform?: (item: unknown) => unknown;
+};
+
+type StreamToDiskResult = {
+  totalItems: number;
+  pageCount: number;
+  pageSize: number;
+  orderBy: string;
+  orderByDirection?: "asc" | "desc";
+  cachedAt: string;
+};
+
+export async function streamAllPaginatedToDisk(
+  fetchPage: FetchPage,
+  baseParams: QueryParams,
+  params: PaginatedParams,
+  options: StreamToDiskOptions
+): Promise<StreamToDiskResult> {
+  const { ndjsonPath, metaPath, itemTransform } = options;
+  const seenCursors = new Set<string>();
+  const pageSize = Math.max(1, Math.floor(params.pageSize ?? DEFAULT_PAGE_SIZE));
+  const orderBy = params.orderBy ?? "id";
+  const orderByDirection = params.orderByDirection;
+  const cachedAt = new Date().toISOString();
+
+  // Ensure parent directory exists
+  mkdirSync(dirname(ndjsonPath), { recursive: true });
+
+  // Write empty file to start (truncates any previous file)
+  writeFileSync(ndjsonPath, "", "utf8");
+
+  let totalItems = 0;
+  let next: string | undefined;
+  let isFirstPage = true;
+  let pageCount = 0;
+
+  while (isFirstPage || next) {
+    const response = await fetchPage({
+      ...baseParams,
+      limit: pageSize,
+      orderBy,
+      ...(orderByDirection ? { orderByDirection } : {}),
+      ...(next ? { startingFrom: next } : {}),
+    });
+
+    const page = parseCollectionPage(response);
+    pageCount += 1;
+
+    // Write each item as a single NDJSON line
+    for (const item of page.data) {
+      const transformed = itemTransform ? itemTransform(item) : item;
+      appendFileSync(ndjsonPath, JSON.stringify(transformed) + "\n", "utf8");
+      totalItems += 1;
+    }
+
+    if (page.next) {
+      if (seenCursors.has(page.next)) {
+        throw new Error(`Pagination repeated cursor ${page.next}`);
+      }
+      seenCursors.add(page.next);
+    }
+
+    next = page.next;
+    isFirstPage = false;
+  }
+
+  // Write meta file only on successful completion
+  const meta: StreamToDiskResult = {
+    totalItems,
+    pageCount,
+    pageSize,
+    orderBy,
+    ...(orderByDirection ? { orderByDirection } : {}),
+    cachedAt,
+  };
+  writeFileSync(metaPath, JSON.stringify(meta, null, 2) + "\n", "utf8");
+
+  return meta;
 }
 
 function ensureDirectory(...parts: string[]): string {
