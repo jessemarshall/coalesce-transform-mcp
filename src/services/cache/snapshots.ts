@@ -213,9 +213,9 @@ function buildNodeCacheFileName(
 ): string {
   const safeID = validatePathSegment(id, `${scope}ID`);
   if (detail) {
-    return `${scope}-${safeID}-nodes.json`;
+    return `${scope}-${safeID}-nodes.ndjson`;
   }
-  return `${scope}-${safeID}-nodes-summary.json`;
+  return `${scope}-${safeID}-nodes-summary.ndjson`;
 }
 
 function buildRunsCacheFileName(params: {
@@ -235,7 +235,7 @@ function buildRunsCacheFileName(params: {
     parts.push(params.runStatus);
   }
   parts.push(params.detail === true ? "detail" : "summary");
-  return `${parts.join("-")}.json`;
+  return `${parts.join("-")}.ndjson`;
 }
 
 export async function fetchAllWorkspaceNodes(
@@ -327,39 +327,38 @@ export async function cacheWorkspaceNodes(
   orderBy: string;
   orderByDirection?: "asc" | "desc";
   filePath: string;
+  metaPath: string;
   cachedAt: string;
 }> {
   const detail = params.detail ?? true;
-  const cachedAt = new Date().toISOString();
-  const result = await fetchAllWorkspaceNodes(client, { ...params, detail });
-  const filePath = writeSnapshotFile(
-    ["nodes"],
-    buildNodeCacheFileName("workspace", params.workspaceID, detail),
+  const baseDir = options?.baseDir ?? process.cwd();
+  const directory = ensureDirectory(baseDir, "data", "nodes");
+  const baseName = buildNodeCacheFileName("workspace", params.workspaceID, detail);
+  const ndjsonPath = join(directory, baseName);
+  const metaPath = join(directory, baseName.replace(/\.ndjson$/, ".meta.json"));
+
+  const result = await streamAllPaginatedToDisk(
+    (queryParams) =>
+      listWorkspaceNodes(client, queryParams as QueryParams & { workspaceID: string }),
     {
-      cachedAt,
-      scope: "workspace",
-      workspaceID: params.workspaceID,
-      detail,
-      totalNodes: result.items.length,
-      pageCount: result.pageCount,
-      pageSize: result.pageSize,
-      orderBy: result.orderBy,
-      ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-      nodes: result.items,
+      workspaceID: validatePathSegment(params.workspaceID, "workspaceID"),
+      ...(detail !== undefined ? { detail } : {}),
     },
-    options
+    params,
+    { ndjsonPath, metaPath }
   );
 
   return {
     workspaceID: params.workspaceID,
     detail,
-    totalNodes: result.items.length,
+    totalNodes: result.totalItems,
     pageCount: result.pageCount,
     pageSize: result.pageSize,
     orderBy: result.orderBy,
     ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-    filePath,
-    cachedAt,
+    filePath: ndjsonPath,
+    metaPath,
+    cachedAt: result.cachedAt,
   };
 }
 
@@ -376,39 +375,38 @@ export async function cacheEnvironmentNodes(
   orderBy: string;
   orderByDirection?: "asc" | "desc";
   filePath: string;
+  metaPath: string;
   cachedAt: string;
 }> {
   const detail = params.detail ?? true;
-  const cachedAt = new Date().toISOString();
-  const result = await fetchAllEnvironmentNodes(client, { ...params, detail });
-  const filePath = writeSnapshotFile(
-    ["nodes"],
-    buildNodeCacheFileName("environment", params.environmentID, detail),
+  const baseDir = options?.baseDir ?? process.cwd();
+  const directory = ensureDirectory(baseDir, "data", "nodes");
+  const baseName = buildNodeCacheFileName("environment", params.environmentID, detail);
+  const ndjsonPath = join(directory, baseName);
+  const metaPath = join(directory, baseName.replace(/\.ndjson$/, ".meta.json"));
+
+  const result = await streamAllPaginatedToDisk(
+    (queryParams) =>
+      listEnvironmentNodes(client, queryParams as QueryParams & { environmentID: string }),
     {
-      cachedAt,
-      scope: "environment",
-      environmentID: params.environmentID,
-      detail,
-      totalNodes: result.items.length,
-      pageCount: result.pageCount,
-      pageSize: result.pageSize,
-      orderBy: result.orderBy,
-      ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-      nodes: result.items,
+      environmentID: validatePathSegment(params.environmentID, "environmentID"),
+      ...(detail !== undefined ? { detail } : {}),
     },
-    options
+    params,
+    { ndjsonPath, metaPath }
   );
 
   return {
     environmentID: params.environmentID,
     detail,
-    totalNodes: result.items.length,
+    totalNodes: result.totalItems,
     pageCount: result.pageCount,
     pageSize: result.pageSize,
     orderBy: result.orderBy,
     ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-    filePath,
-    cachedAt,
+    filePath: ndjsonPath,
+    metaPath,
+    cachedAt: result.cachedAt,
   };
 }
 
@@ -429,43 +427,47 @@ export async function cacheRuns(
   orderBy: string;
   orderByDirection?: "asc" | "desc";
   filePath: string;
+  metaPath: string;
   cachedAt: string;
   runType?: "deploy" | "refresh";
   runStatus?: "completed" | "failed" | "canceled" | "running" | "waitingToRun";
   environmentID?: string;
 }> {
   const detail = params.detail ?? false;
-  const cachedAt = new Date().toISOString();
-  const result = await fetchAllRuns(client, { ...params, detail });
-  const runs = sanitizeResponse(result.items);
-  const filePath = writeSnapshotFile(
-    ["runs"],
-    buildRunsCacheFileName({ ...params, detail }),
+  const baseDir = options?.baseDir ?? process.cwd();
+  const directory = ensureDirectory(baseDir, "data", "runs");
+  const baseName = buildRunsCacheFileName({ ...params, detail });
+  const ndjsonPath = join(directory, baseName);
+  const metaPath = join(directory, baseName.replace(/\.ndjson$/, ".meta.json"));
+
+  const result = await streamAllPaginatedToDisk(
+    (queryParams) => listRuns(client, queryParams),
     {
-      cachedAt,
-      detail,
       ...(params.runType ? { runType: params.runType } : {}),
       ...(params.runStatus ? { runStatus: params.runStatus } : {}),
-      ...(params.environmentID ? { environmentID: params.environmentID } : {}),
-      totalRuns: result.items.length,
-      pageCount: result.pageCount,
-      pageSize: result.pageSize,
-      orderBy: result.orderBy,
-      ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-      runs,
+      ...(params.environmentID
+        ? { environmentID: validatePathSegment(params.environmentID, "environmentID") }
+        : {}),
+      ...(detail !== undefined ? { detail } : {}),
     },
-    options
+    params,
+    {
+      ndjsonPath,
+      metaPath,
+      itemTransform: (item) => sanitizeResponse(item),
+    }
   );
 
   return {
     detail,
-    totalRuns: result.items.length,
+    totalRuns: result.totalItems,
     pageCount: result.pageCount,
     pageSize: result.pageSize,
     orderBy: result.orderBy,
     ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-    filePath,
-    cachedAt,
+    filePath: ndjsonPath,
+    metaPath,
+    cachedAt: result.cachedAt,
     ...(params.runType ? { runType: params.runType } : {}),
     ...(params.runStatus ? { runStatus: params.runStatus } : {}),
     ...(params.environmentID ? { environmentID: params.environmentID } : {}),
@@ -483,32 +485,29 @@ export async function cacheOrgUsers(
   orderBy: string;
   orderByDirection?: "asc" | "desc";
   filePath: string;
+  metaPath: string;
   cachedAt: string;
 }> {
-  const cachedAt = new Date().toISOString();
-  const result = await fetchAllOrgUsers(client, params);
-  const filePath = writeSnapshotFile(
-    ["users"],
-    "org-users.json",
-    {
-      cachedAt,
-      totalUsers: result.items.length,
-      pageCount: result.pageCount,
-      pageSize: result.pageSize,
-      orderBy: result.orderBy,
-      ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-      users: result.items,
-    },
-    options
+  const baseDir = options?.baseDir ?? process.cwd();
+  const directory = ensureDirectory(baseDir, "data", "users");
+  const ndjsonPath = join(directory, "org-users.ndjson");
+  const metaPath = join(directory, "org-users.meta.json");
+
+  const result = await streamAllPaginatedToDisk(
+    (queryParams) => listOrgUsers(client, queryParams),
+    {},
+    params,
+    { ndjsonPath, metaPath }
   );
 
   return {
-    totalUsers: result.items.length,
+    totalUsers: result.totalItems,
     pageCount: result.pageCount,
     pageSize: result.pageSize,
     orderBy: result.orderBy,
     ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-    filePath,
-    cachedAt,
+    filePath: ndjsonPath,
+    metaPath,
+    cachedAt: result.cachedAt,
   };
 }
