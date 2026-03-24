@@ -1073,7 +1073,7 @@ function buildDefaultNodeName(
   shortName?: string | null
 ): string {
   if (targetName && targetName.trim().length > 0) {
-    return targetName.toUpperCase();
+    return targetName.trim();
   }
 
   const prefix = buildDefaultNodePrefix(nodeTypeFamily, shortName);

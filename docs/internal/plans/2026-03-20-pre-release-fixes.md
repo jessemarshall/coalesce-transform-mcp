@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Zod, vitest, @modelcontextprotocol/sdk
 
-**Spec:** `docs/superpowers/specs/2026-03-20-pre-release-fixes-design.md`
+**Spec:** `docs/internal/specs/2026-03-20-pre-release-fixes-design.md`
 
 ---
 

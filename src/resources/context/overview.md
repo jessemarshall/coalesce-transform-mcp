@@ -84,7 +84,7 @@ Config completion is automatic when `repoPath` is provided — the response incl
 2. Check `validation.allPredecessorsRepresented` — if false, the join is incomplete
 3. For multi-predecessor nodes: set up the join condition via `convert-join-to-aggregation` (aggregation), `apply-join-condition` (row-level joins), or `update-workspace-node` (manual)
 4. Verify the final node with `get-workspace-node` — confirm columns, joinCondition, and config are correct
-5. Follow naming conventions in UPPERCASE: STG_ for staging, DIM_ for dimensions, FACT_ for facts, INT_ for intermediate (e.g., `STG_LOCATION`, `FACT_ORDERS`)
+5. Follow naming conventions: STG_ for staging, DIM_ for dimensions, FACT_ for facts, INT_ for intermediate (e.g., `STG_LOCATION`, `FACT_ORDERS`). Default to UPPERCASE for Snowflake, but **respect the user's chosen casing**
 
 **Anti-pattern — writing SQL and passing it to the planner:**
 

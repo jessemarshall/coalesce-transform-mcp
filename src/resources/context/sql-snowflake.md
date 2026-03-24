@@ -4,8 +4,8 @@ This guidance is based on the AI runtime platform rules for Snowflake and the re
 
 ## Default SQL Style
 
-- Use uppercase unquoted identifiers by default — this applies to **node names**, column names, aliases, and all SQL identifiers.
-- Node names become Snowflake table/view names. Always use UPPERCASE: `STG_LOCATION`, `FACT_ORDERS`, `DIM_CUSTOMER`.
+- Default to uppercase unquoted identifiers for column names, aliases, and SQL identifiers (Snowflake convention).
+- Node names become Snowflake table/view names. Default to UPPERCASE (`STG_LOCATION`, `FACT_ORDERS`), but **respect the user's chosen casing** — if they name a node in lowercase, preserve it.
 - Use double quotes only when you must preserve exact case or quote a reserved word.
 - Column names and aliases should normally be uppercase and unquoted.
 - Table aliases should normally be uppercase and unquoted.
