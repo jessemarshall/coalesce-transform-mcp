@@ -9,6 +9,7 @@ import type { NodeSummary } from "../workspace/analysis.js";
 import { isPlainObject } from "../../utils.js";
 
 const DEFAULT_PAGE_SIZE = 250;
+const MAX_IN_MEMORY_ITEMS = 250;
 
 type PaginatedParams = {
   pageSize?: number;
@@ -75,6 +76,12 @@ async function fetchAllPaginated(
 
     const page = parseCollectionPage(response);
     items.push(...page.data);
+    if (items.length > MAX_IN_MEMORY_ITEMS) {
+      throw new Error(
+        `Pagination exceeded ${MAX_IN_MEMORY_ITEMS} item safety limit. ` +
+        `Use a cache-* tool for large collections.`
+      );
+    }
     pageCount += 1;
 
     if (page.next) {
