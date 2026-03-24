@@ -290,7 +290,7 @@ Follow layer-appropriate naming to keep pipelines readable:
 | Satellite | `SAT_<HUB>_<CONTEXT>` | `SAT_CUSTOMER_DETAILS` |
 | Link | `LNK_<RELATIONSHIP>` | `LNK_CUSTOMER_ORDER` |
 
-For Snowflake, always use UPPERCASE node names (`STG_LOCATION`, not `stg_location`). Snowflake treats unquoted identifiers as uppercase — matching this convention avoids case-sensitivity issues. For Databricks/BigQuery, follow that platform's conventions (typically lowercase).
+For Snowflake, UPPERCASE node names are conventional (`STG_LOCATION`) since unquoted identifiers are uppercase. For Databricks/BigQuery, lowercase is typical. **Always respect the user's chosen casing** — if they provide or create a node with a specific case, preserve it exactly.
 
 ### Join Verification Checklist
 

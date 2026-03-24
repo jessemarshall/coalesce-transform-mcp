@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Vitest, Zod, Coalesce API, existing repo/corpus tools
 
-**Related Spec:** [docs/superpowers/specs/2026-03-22-intelligent-node-configuration-design.md](../specs/2026-03-22-intelligent-node-configuration-design.md)
+**Related Spec:** [docs/internal/specs/2026-03-22-intelligent-node-configuration-design.md](../specs/2026-03-22-intelligent-node-configuration-design.md)
 
 ---
 

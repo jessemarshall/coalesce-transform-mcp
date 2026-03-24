@@ -32,7 +32,7 @@
 **Files:**
 - Create: `src/resources/context/data-engineering-principles.md`
 
-This is the core deliverable — the markdown content that teaches the AI how to make data engineering decisions. All content comes from the approved design spec at `docs/superpowers/specs/2026-03-20-data-engineering-principles-design.md`.
+This is the core deliverable — the markdown content that teaches the AI how to make data engineering decisions. All content comes from the approved design spec at `docs/internal/specs/2026-03-20-data-engineering-principles-design.md`.
 
 - [ ] **Step 1: Create the resource file**
 

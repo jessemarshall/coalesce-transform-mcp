@@ -236,10 +236,9 @@ export function buildUpdatedWorkspaceNodeBody(
     throw new Error("Synchronized workspace node update was not an object");
   }
 
-  // Enforce UPPERCASE node names (Snowflake convention — unquoted identifiers are uppercase)
-  if (typeof synchronized.name === "string") {
-    synchronized.name = synchronized.name.toUpperCase();
-  }
+  // Preserve the node name casing as provided by the user or existing node.
+  // Snowflake treats unquoted identifiers as uppercase, but users may choose
+  // lowercase names (e.g., for Databricks or personal preference) — respect that.
 
   // Validate nodeType and materializationType compatibility
   validateNodeTypeMaterializationCompatibility(
