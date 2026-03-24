@@ -50,7 +50,7 @@ function parseCollectionPage(response: unknown): CollectionPage {
   };
 }
 
-async function fetchAllPaginated(
+async function fetchAllPaginatedToMemory(
   fetchPage: FetchPage,
   baseParams: QueryParams,
   params: PaginatedParams
@@ -193,19 +193,6 @@ function ensureDirectory(...parts: string[]): string {
   return directory;
 }
 
-function writeSnapshotFile(
-  relativeDirectory: string[],
-  fileName: string,
-  body: unknown,
-  options?: CacheWriteOptions
-): string {
-  const baseDir = options?.baseDir ?? process.cwd();
-  const directory = ensureDirectory(baseDir, "data", ...relativeDirectory);
-  const filePath = join(directory, fileName);
-  writeFileSync(filePath, `${JSON.stringify(body, null, 2)}\n`, "utf8");
-  return filePath;
-}
-
 function buildNodeCacheFileName(
   scope: "workspace" | "environment",
   id: string,
@@ -242,7 +229,7 @@ export async function fetchAllWorkspaceNodes(
   client: CoalesceClient,
   params: { workspaceID: string; detail?: boolean } & PaginatedParams
 ): Promise<PaginatedCollectionResult> {
-  return fetchAllPaginated(
+  return fetchAllPaginatedToMemory(
     (queryParams) => listWorkspaceNodes(client, queryParams as QueryParams & { workspaceID: string }),
     {
       workspaceID: validatePathSegment(params.workspaceID, "workspaceID"),
@@ -256,7 +243,7 @@ export async function fetchAllEnvironmentNodes(
   client: CoalesceClient,
   params: { environmentID: string; detail?: boolean } & PaginatedParams
 ): Promise<PaginatedCollectionResult> {
-  return fetchAllPaginated(
+  return fetchAllPaginatedToMemory(
     (queryParams) =>
       listEnvironmentNodes(client, queryParams as QueryParams & { environmentID: string }),
     {
@@ -276,7 +263,7 @@ export async function fetchAllRuns(
     detail?: boolean;
   } & PaginatedParams
 ): Promise<PaginatedCollectionResult> {
-  return fetchAllPaginated(
+  return fetchAllPaginatedToMemory(
     (queryParams) => listRuns(client, queryParams),
     {
       ...(params.runType ? { runType: params.runType } : {}),
@@ -294,7 +281,7 @@ export async function fetchAllOrgUsers(
   client: CoalesceClient,
   params: PaginatedParams
 ): Promise<PaginatedCollectionResult> {
-  return fetchAllPaginated((queryParams) => listOrgUsers(client, queryParams), {}, params);
+  return fetchAllPaginatedToMemory((queryParams) => listOrgUsers(client, queryParams), {}, params);
 }
 
 export function toNodeSummaries(nodes: unknown[]): NodeSummary[] {
