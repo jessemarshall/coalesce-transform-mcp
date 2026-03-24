@@ -48,23 +48,18 @@ describe("cache snapshot tools", () => {
           next: "cursor-2",
         });
       }
-
       if (params.startingFrom === "cursor-2") {
         return Promise.resolve({
           data: [{ id: "node-2", name: "DIM_CUSTOMER", nodeType: "Dimension" }],
         });
       }
-
       throw new Error(`Unexpected cursor ${String(params.startingFrom)}`);
     });
 
-    const result = await cacheWorkspaceNodes(
-      client as any,
-      { workspaceID: "ws-1" },
-      { baseDir }
-    );
+    const result = await cacheWorkspaceNodes(client as any, { workspaceID: "ws-1" }, { baseDir });
 
-    expect(result.filePath).toBe(join(baseDir, "data", "nodes", "workspace-ws-1-nodes.json"));
+    expect(result.filePath).toBe(join(baseDir, "data", "nodes", "workspace-ws-1-nodes.ndjson"));
+    expect(result.metaPath).toBe(join(baseDir, "data", "nodes", "workspace-ws-1-nodes.meta.json"));
     expect(result.totalNodes).toBe(2);
     expect(client.get).toHaveBeenNthCalledWith(
       1,
@@ -77,14 +72,15 @@ describe("cache snapshot tools", () => {
       { detail: true, limit: 250, orderBy: "id", startingFrom: "cursor-2" }
     );
 
-    const snapshot = JSON.parse(readFileSync(result.filePath, "utf8"));
-    expect(snapshot).toMatchObject({
-      scope: "workspace",
-      workspaceID: "ws-1",
-      detail: true,
-      totalNodes: 2,
-    });
-    expect(snapshot.nodes).toHaveLength(2);
+    const lines = readFileSync(result.filePath, "utf8").trimEnd().split("\n");
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0])).toMatchObject({ id: "node-1", name: "STG_ORDERS" });
+    expect(JSON.parse(lines[1])).toMatchObject({ id: "node-2", name: "DIM_CUSTOMER" });
+
+    const meta = JSON.parse(readFileSync(result.metaPath, "utf8"));
+    expect(meta.totalItems).toBe(2);
+    expect(meta.pageCount).toBe(2);
+    expect(typeof meta.cachedAt).toBe("string");
   });
 
   it("caches environment nodes with summary payloads when detail is false", async () => {
@@ -102,7 +98,10 @@ describe("cache snapshot tools", () => {
     );
 
     expect(result.filePath).toBe(
-      join(baseDir, "data", "nodes", "environment-env-1-nodes-summary.json")
+      join(baseDir, "data", "nodes", "environment-env-1-nodes-summary.ndjson")
+    );
+    expect(result.metaPath).toBe(
+      join(baseDir, "data", "nodes", "environment-env-1-nodes-summary.meta.json")
     );
     expect(result.detail).toBe(false);
     expect(client.get).toHaveBeenCalledWith("/api/v1/environments/env-1/nodes", {
@@ -110,9 +109,16 @@ describe("cache snapshot tools", () => {
       limit: 250,
       orderBy: "id",
     });
+
+    const lines = readFileSync(result.filePath, "utf8").trimEnd().split("\n");
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toMatchObject({ id: "env-node-1", name: "RAW_CUSTOMER" });
+
+    const meta = JSON.parse(readFileSync(result.metaPath, "utf8"));
+    expect(meta.totalItems).toBe(1);
   });
 
-  it("caches runs and strips userCredentials from the saved snapshot", async () => {
+  it("caches runs and strips userCredentials from each NDJSON line", async () => {
     const client = createMockClient();
     const baseDir = createTempDir();
 
@@ -132,18 +138,17 @@ describe("cache snapshot tools", () => {
       { baseDir }
     );
 
-    expect(result.filePath).toBe(join(baseDir, "data", "runs", "runs-failed-detail.json"));
+    expect(result.filePath).toBe(join(baseDir, "data", "runs", "runs-failed-detail.ndjson"));
+    expect(result.metaPath).toBe(join(baseDir, "data", "runs", "runs-failed-detail.meta.json"));
 
-    const snapshot = JSON.parse(readFileSync(result.filePath, "utf8"));
-    expect(snapshot).toMatchObject({
-      runStatus: "failed",
-      detail: true,
-      totalRuns: 1,
-    });
-    expect(snapshot.runs[0]).toEqual({
-      id: "run-1",
-      runStatus: "failed",
-    });
+    const lines = readFileSync(result.filePath, "utf8").trimEnd().split("\n");
+    expect(lines).toHaveLength(1);
+    const parsed = JSON.parse(lines[0]);
+    expect(parsed).toEqual({ id: "run-1", runStatus: "failed" });
+    expect(parsed).not.toHaveProperty("userCredentials");
+
+    const meta = JSON.parse(readFileSync(result.metaPath, "utf8"));
+    expect(meta.totalItems).toBe(1);
   });
 
   it("caches organization users into data/users", async () => {
@@ -156,10 +161,16 @@ describe("cache snapshot tools", () => {
 
     const result = await cacheOrgUsers(client as any, {}, { baseDir });
 
-    expect(result.filePath).toBe(join(baseDir, "data", "users", "org-users.json"));
+    expect(result.filePath).toBe(join(baseDir, "data", "users", "org-users.ndjson"));
+    expect(result.metaPath).toBe(join(baseDir, "data", "users", "org-users.meta.json"));
     expect(result.totalUsers).toBe(2);
 
-    const snapshot = JSON.parse(readFileSync(result.filePath, "utf8"));
-    expect(snapshot.users).toHaveLength(2);
+    const lines = readFileSync(result.filePath, "utf8").trimEnd().split("\n");
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0])).toMatchObject({ id: "user-1", name: "Alice" });
+    expect(JSON.parse(lines[1])).toMatchObject({ id: "user-2", name: "Bob" });
+
+    const meta = JSON.parse(readFileSync(result.metaPath, "utf8"));
+    expect(meta.totalItems).toBe(2);
   });
 });
