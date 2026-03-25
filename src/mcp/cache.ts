@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
 import {
+  DESTRUCTIVE_ANNOTATIONS,
   IDEMPOTENT_WRITE_ANNOTATIONS,
   buildJsonToolResponse,
   handleToolError,
@@ -129,7 +130,7 @@ export function registerCacheTools(
     "Delete all cached data files created by this MCP server, including snapshots, auto-cached responses, and plan summaries. " +
     "Returns a summary of what was deleted. Use this when the user wants to free disk space or start fresh.",
     {},
-    IDEMPOTENT_WRITE_ANNOTATIONS,
+    DESTRUCTIVE_ANNOTATIONS,
     async () => {
       try {
         const cacheDir = getCacheDir();

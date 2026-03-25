@@ -113,5 +113,15 @@ describe("Tool Registration", () => {
     expect(toolNames).toContain("analyze-workspace-patterns");
     expect(toolNames).toContain("list-workspace-node-types");
     expect(toolNames).toContain("complete-node-configuration");
+
+    const clearCacheCall = toolSpy.mock.calls.find(
+      (call: unknown[]) => call[0] === "clear_coalesce_transform_mcp_data_cache"
+    );
+    expect(clearCacheCall).toBeDefined();
+    expect(clearCacheCall?.[3]).toMatchObject({
+      readOnlyHint: false,
+      idempotentHint: false,
+      destructiveHint: true,
+    });
   });
 });
