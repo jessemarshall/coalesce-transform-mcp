@@ -9,6 +9,9 @@ export interface RequestOptions {
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const MAX_RETRY_ATTEMPTS = 5;
+const RETRY_BASE_DELAY_MS = 1_000;
+const RETRY_MAX_DELAY_MS = 30_000;
 
 export function validateConfig(): ClientConfig {
   const accessToken = process.env.COALESCE_ACCESS_TOKEN;
@@ -42,6 +45,28 @@ export class CoalesceApiError extends Error {
     super(message);
     this.name = "CoalesceApiError";
   }
+}
+
+function parseRetryAfterMs(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.ceil(seconds * 1000);
+  }
+  // Retry-After can also be an HTTP-date; fall back to undefined
+  return undefined;
+}
+
+function retryDelayMs(attempt: number, retryAfterMs?: number): number {
+  if (retryAfterMs !== undefined && retryAfterMs > 0) {
+    return Math.min(retryAfterMs, RETRY_MAX_DELAY_MS);
+  }
+  // Exponential backoff: 1s, 2s, 4s, 8s, ...
+  return Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt), RETRY_MAX_DELAY_MS);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function handleResponse(response: Response): Promise<unknown> {
@@ -83,6 +108,15 @@ async function handleResponse(response: Response): Promise<unknown> {
         );
       case 404:
         throw new CoalesceApiError("Resource not found", 404, detail);
+      case 429: {
+        const retryAfterHeader = response.headers.get("Retry-After");
+        const retryAfterMs = parseRetryAfterMs(retryAfterHeader);
+        throw new CoalesceApiError(
+          "Coalesce API rate limit exceeded",
+          429,
+          { ...(retryAfterMs !== undefined ? { retryAfterMs } : {}), ...( detail && typeof detail === "object" ? detail : {}) }
+        );
+      }
       default:
         throw new CoalesceApiError(
           `Coalesce API unavailable (HTTP ${response.status})`,
@@ -138,7 +172,7 @@ export function createClient(config: ClientConfig) {
     );
   }
 
-  async function request(
+  async function requestOnce(
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
     params?: QueryParams,
@@ -177,6 +211,36 @@ export function createClient(config: ClientConfig) {
     } finally {
       clearTimeout(timeoutHandle);
     }
+  }
+
+  async function request(
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+    path: string,
+    params?: QueryParams,
+    body?: unknown,
+    options?: RequestOptions
+  ): Promise<unknown> {
+    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+      try {
+        return await requestOnce(method, path, params, body, options);
+      } catch (error) {
+        if (
+          error instanceof CoalesceApiError &&
+          error.status === 429 &&
+          attempt < MAX_RETRY_ATTEMPTS - 1
+        ) {
+          const detail = error.detail as Record<string, unknown> | undefined;
+          const retryAfterMs = typeof detail?.retryAfterMs === "number"
+            ? detail.retryAfterMs
+            : undefined;
+          await sleep(retryDelayMs(attempt, retryAfterMs));
+          continue;
+        }
+        throw error;
+      }
+    }
+    // Unreachable, but satisfies TypeScript
+    throw new CoalesceApiError("Unexpected retry loop exit", 500);
   }
 
   return {

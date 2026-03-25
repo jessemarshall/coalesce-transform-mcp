@@ -198,6 +198,156 @@ describe("CoalesceClient", () => {
       );
     });
 
+    it("retries on 429 and succeeds on subsequent attempt", async () => {
+      vi.useFakeTimers();
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: new Headers({ "Retry-After": "1" }),
+          json: () => Promise.resolve({}),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: "ok" }),
+        });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+      const promise = client.get("/api/v1/environments");
+
+      // Advance past the Retry-After delay
+      await vi.advanceTimersByTimeAsync(1_000);
+      const result = await promise;
+
+      expect(result).toEqual({ data: "ok" });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("throws after exhausting all 5 retry attempts on 429", async () => {
+      vi.useFakeTimers();
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Headers(),
+        json: () => Promise.resolve({}),
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+      const promise = expect(client.get("/api/v1/environments")).rejects.toMatchObject({
+        message: "Coalesce API rate limit exceeded",
+        status: 429,
+      });
+
+      // Advance through all 4 retry delays: 1s + 2s + 4s + 8s = 15s
+      await vi.advanceTimersByTimeAsync(15_000);
+      await promise;
+
+      expect(mockFetch).toHaveBeenCalledTimes(5);
+    });
+
+    it("uses exponential backoff when no Retry-After header", async () => {
+      vi.useFakeTimers();
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: new Headers(),
+          json: () => Promise.resolve({}),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: new Headers(),
+          json: () => Promise.resolve({}),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: "ok" }),
+        });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+      const promise = client.get("/api/v1/environments");
+
+      // First retry: 1s backoff (attempt 0)
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+
+      // Second retry: 2s backoff (attempt 1)
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+
+      const result = await promise;
+      expect(result).toEqual({ data: "ok" });
+    });
+
+    it("respects Retry-After header over exponential backoff", async () => {
+      vi.useFakeTimers();
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: new Headers({ "Retry-After": "5" }),
+          json: () => Promise.resolve({}),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: "ok" }),
+        });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+      const promise = client.get("/api/v1/environments");
+
+      // Should not have retried yet at 1s (exponential would be 1s, but Retry-After says 5)
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      // Should retry after 5s
+      await vi.advanceTimersByTimeAsync(4_000);
+      const result = await promise;
+
+      expect(result).toEqual({ data: "ok" });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not retry non-429 errors", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        headers: new Headers(),
+        json: () => Promise.resolve({}),
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+
+      await expect(client.get("/api/v1/environments")).rejects.toMatchObject({
+        status: 500,
+      });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
     it("handles 204 no-content response", async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
