@@ -171,6 +171,82 @@ describe("Pipeline Tools", () => {
     expect(true).toBe(true);
   });
 
+  it("plan-pipeline returns an MCP error when sql contains rewritten ref() syntax", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "tool");
+    const client = createMockClient();
+
+    registerPipelineTools(server, client as any);
+
+    const planToolCall = toolSpy.mock.calls.find(
+      (call) => call[0] === "plan-pipeline"
+    );
+    const handler = planToolCall?.[4] as
+      | ((params: { workspaceID: string; sql: string }) => Promise<{
+          isError?: boolean;
+          content: { type: "text"; text: string }[];
+        }>)
+      | undefined;
+
+    expect(typeof handler).toBe("function");
+
+    const result = await handler!({
+      workspaceID: "ws-1",
+      sql: "SELECT * FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
+    });
+
+    expect(result).toEqual({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: expect.stringContaining("The sql parameter contains {{ ref() }} syntax"),
+        },
+      ],
+    });
+    expect(client.get).not.toHaveBeenCalled();
+    expect(client.post).not.toHaveBeenCalled();
+    expect(client.put).not.toHaveBeenCalled();
+  });
+
+  it("create-pipeline-from-sql returns an MCP error when sql contains rewritten ref() syntax", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "tool");
+    const client = createMockClient();
+
+    registerPipelineTools(server, client as any);
+
+    const createToolCall = toolSpy.mock.calls.find(
+      (call) => call[0] === "create-pipeline-from-sql"
+    );
+    const handler = createToolCall?.[4] as
+      | ((params: { workspaceID: string; sql: string }) => Promise<{
+          isError?: boolean;
+          content: { type: "text"; text: string }[];
+        }>)
+      | undefined;
+
+    expect(typeof handler).toBe("function");
+
+    const result = await handler!({
+      workspaceID: "ws-1",
+      sql: "SELECT * FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
+    });
+
+    expect(result).toEqual({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: expect.stringContaining("The sql parameter contains {{ ref() }} syntax"),
+        },
+      ],
+    });
+    expect(client.get).not.toHaveBeenCalled();
+    expect(client.post).not.toHaveBeenCalled();
+    expect(client.put).not.toHaveBeenCalled();
+  });
+
   it("planPipeline builds a ready Stage plan from ref-based SQL", async () => {
     const client = createMockClient();
     const sourceNode = buildSourceNode("source-1", "CUSTOMER");
