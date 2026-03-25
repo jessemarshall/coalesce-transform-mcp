@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { CoalesceApiError } from "../../src/client.js";
 import { planPipeline } from "../../src/services/pipelines/planning.js";
 import {
   createPipelineFromPlan,
@@ -1146,8 +1147,124 @@ describe("Pipeline Tools", () => {
       created: false,
       incomplete: true,
       failedPlanNodeID: "node-1",
+      cleanupFailedNodeIDs: ["new-node"],
+      cleanupFailures: [
+        {
+          nodeID: "new-node",
+          message: "delete failed",
+        },
+      ],
+      error: {
+        message: expect.stringContaining(
+          "Predecessor-based creation for STG_CUSTOMER did not confirm full auto-population"
+        ),
+      },
     });
     expect((result as any).warning).toContain("automatic cleanup did not fully succeed");
+  });
+
+  it("createPipelineFromPlan includes rollback delete status and detail when cleanup fails", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+
+    client.post.mockResolvedValue({ id: "new-node" });
+    client.delete.mockRejectedValue(
+      new CoalesceApiError("Insufficient permissions for this operation", 403, {
+        endpoint: "/api/v1/workspaces/ws-1/nodes/new-node",
+      })
+    );
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(sourceNode);
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/new-node") {
+        return Promise.resolve({
+          id: "new-node",
+          name: "STG_CUSTOMER",
+          metadata: {
+            columns: [],
+            sourceMapping: [],
+          },
+        });
+      }
+      throw new Error(`Unexpected GET ${path}`);
+    });
+
+    const result = await createPipelineFromPlan(client as any, {
+      workspaceID: "ws-1",
+      plan: {
+        version: 1,
+        intent: "sql",
+        status: "ready",
+        workspaceID: "ws-1",
+        platform: null,
+        goal: null,
+        sql: "SELECT CUSTOMER_ID FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
+        nodes: [
+          {
+            planNodeID: "node-1",
+            name: "STG_CUSTOMER",
+            nodeType: "Stage",
+            predecessorNodeIDs: ["source-1"],
+            predecessorPlanNodeIDs: [],
+            predecessorNodeNames: ["CUSTOMER"],
+            description: null,
+            sql: null,
+            selectItems: [
+              {
+                expression: "CUSTOMER_ID",
+                outputName: "CUSTOMER_ID",
+                sourceNodeAlias: "CUSTOMER",
+                sourceNodeName: "CUSTOMER",
+                sourceNodeID: "source-1",
+                sourceColumnName: "CUSTOMER_ID",
+                kind: "column",
+                supported: true,
+              },
+            ],
+            outputColumnNames: ["CUSTOMER_ID"],
+            configOverrides: {},
+            sourceRefs: [
+              {
+                locationName: "RAW",
+                nodeName: "CUSTOMER",
+                alias: "CUSTOMER",
+                nodeID: "source-1",
+              },
+            ],
+            joinCondition: "FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
+            location: {},
+            requiresFullSetNode: true,
+          },
+        ],
+        assumptions: [],
+        openQuestions: [],
+        warnings: [],
+        supportedNodeTypes: ["Stage"],
+      },
+    });
+
+    expect(result).toMatchObject({
+      created: false,
+      incomplete: true,
+      failedPlanNodeID: "node-1",
+      cleanupFailedNodeIDs: ["new-node"],
+      cleanupFailures: [
+        {
+          nodeID: "new-node",
+          message: "Insufficient permissions for this operation",
+          status: 403,
+          detail: {
+            endpoint: "/api/v1/workspaces/ws-1/nodes/new-node",
+          },
+        },
+      ],
+    });
   });
 
   describe("plan-pipeline node type validation", () => {
