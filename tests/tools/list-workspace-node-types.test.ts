@@ -137,4 +137,49 @@ describe('listWorkspaceNodeTypes', () => {
       basis: 'observed_nodes'
     });
   });
+
+  it('continues counting node types when the workspace has more than 250 nodes', async () => {
+    const stageNodes = Array.from({ length: 200 }, (_, i) => ({
+      id: `stage-${i}`,
+      nodeType: 'Stage'
+    }));
+    const mixedNodes = [
+      ...Array.from({ length: 60 }, (_, i) => ({
+        id: `dim-${i}`,
+        nodeType: 'Dimension'
+      })),
+      ...Array.from({ length: 40 }, (_, i) => ({
+        id: `view-${i}`,
+        nodeType: 'View'
+      }))
+    ];
+
+    const mockClient = {
+      get: vi.fn().mockImplementation((_path: string, params?: Record<string, unknown>) => {
+        if (!params?.startingFrom) {
+          return Promise.resolve({ data: stageNodes, next: 'cursor-2' });
+        }
+
+        if (params.startingFrom === 'cursor-2') {
+          return Promise.resolve({ data: mixedNodes });
+        }
+
+        throw new Error(`Unexpected cursor ${String(params.startingFrom)}`);
+      })
+    } as unknown as CoalesceClient;
+
+    const result = await listWorkspaceNodeTypes(mockClient, { workspaceID: '1' });
+
+    expect(result).toEqual({
+      workspaceID: '1',
+      nodeTypes: ['Stage', 'Dimension', 'View'],
+      counts: {
+        Stage: 200,
+        Dimension: 60,
+        View: 40
+      },
+      total: 300,
+      basis: 'observed_nodes'
+    });
+  });
 });
