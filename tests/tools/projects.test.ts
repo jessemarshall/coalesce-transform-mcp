@@ -89,7 +89,7 @@ describe("Project Tools", () => {
 
     const result = await updateProject(client as any, { projectID: "proj-1", body });
 
-    expect(client.patch).toHaveBeenCalledWith("/api/v1/projects/proj-1", {}, body);
+    expect(client.patch).toHaveBeenCalledWith("/api/v1/projects/proj-1", body, {});
     expect(result).toEqual({ id: "proj-1", name: "Updated Project" });
   });
 

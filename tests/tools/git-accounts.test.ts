@@ -65,7 +65,7 @@ describe("Git Account Tools", () => {
 
     const result = await updateGitAccount(client as any, { gitAccountID: "ga-1", body });
 
-    expect(client.patch).toHaveBeenCalledWith("/api/v1/gitAccounts/ga-1", {}, body);
+    expect(client.patch).toHaveBeenCalledWith("/api/v1/gitAccounts/ga-1", body, {});
     expect(result).toEqual({ id: "ga-1", name: "Updated Git Account" });
   });
 
