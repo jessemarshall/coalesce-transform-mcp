@@ -44,7 +44,12 @@ export async function retryAndWait(
   const rerunResult = (await client.post("/scheduler/rerun", body, undefined, {
     timeoutMs: remainingTimeMs(startedAt, timeout),
   })) as Record<string, unknown>;
-  const runCounter = rerunResult.runCounter as number;
+  if (typeof rerunResult.runCounter !== "number") {
+    throw new Error(
+      `rerun response did not include a numeric runCounter (got ${typeof rerunResult.runCounter})`
+    );
+  }
+  const runCounter: number = rerunResult.runCounter;
 
   // Poll for status
   let lastStatus: unknown = null;

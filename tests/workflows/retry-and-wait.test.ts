@@ -295,4 +295,13 @@ describe("retry-and-wait workflow", () => {
       incomplete: true,
     });
   });
+
+  it("throws a descriptive error when rerun response lacks a numeric runCounter", async () => {
+    const client = createMockClient();
+    client.post.mockResolvedValue({ runCounter: "not-a-number" });
+
+    await expect(
+      retryAndWait(client as any, { runDetails: { runID: "0" } })
+    ).rejects.toThrow("rerun response did not include a numeric runCounter (got string)");
+  });
 });
