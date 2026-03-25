@@ -25,6 +25,7 @@ import { buildWorkspaceProfile } from "../services/workspace/analysis.js";
 import { fetchAllWorkspaceNodes, toNodeSummaries } from "../services/cache/snapshots.js";
 import {
   PaginationParams,
+  WorkspaceNodeBodySchema,
   buildJsonToolResponse,
   READ_ONLY_ANNOTATIONS,
   WRITE_ANNOTATIONS,
@@ -165,9 +166,9 @@ export function registerNodeTools(
     {
       workspaceID: z.string().describe("The workspace ID"),
       nodeID: z.string().describe("The node ID"),
-      body: z
-        .record(z.unknown())
-        .describe("Complete node data to set. Do not include overrideSQL — it is auto-preserved."),
+      body: WorkspaceNodeBodySchema.describe(
+        "Complete node data to set. Known structural fields (name, description, nodeType, database, schema, locationName, storageLocations, config, metadata) are validated; node-type-specific fields are passed through. Do not include overrideSQL — it is auto-preserved."
+      ),
     },
     IDEMPOTENT_WRITE_ANNOTATIONS,
     async (params) => {

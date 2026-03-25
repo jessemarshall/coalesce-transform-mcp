@@ -10,6 +10,27 @@ import { z } from "zod";
 
 const SESSION_START_TIME = new Date();
 
+// Workspace node body schema — validates known structural fields while allowing
+// node-type-specific extras through. Used by set-workspace-node.
+export const WorkspaceNodeBodySchema = z
+  .object({
+    name: z.string().optional(),
+    description: z.string().optional(),
+    nodeType: z.string().optional(),
+    database: z.string().optional(),
+    schema: z.string().optional(),
+    locationName: z.string().optional(),
+    storageLocations: z.array(z.unknown()).optional(),
+    config: z.record(z.unknown()).optional(),
+    metadata: z
+      .object({
+        columns: z.array(z.unknown()).optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
 // Pagination params — only used by endpoints that support it
 export const PaginationParams = z.object({
   limit: z.number().optional().describe("Number of results to return"),
