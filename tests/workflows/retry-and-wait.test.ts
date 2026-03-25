@@ -54,6 +54,104 @@ describe("retry-and-wait workflow", () => {
     expect(true).toBe(true);
   });
 
+  it("sends MCP progress notifications while waiting for the retry run", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "tool");
+    const client = createMockClient();
+
+    client.get.mockImplementation((path: string) => {
+      if (path === "/scheduler/runStatus") {
+        return Promise.resolve({
+          ...POSTMAN_RUN_STATUS_RESPONSE,
+          runStatus: "completed",
+        });
+      }
+      if (path === "/api/v1/runs/0/results") {
+        return Promise.resolve({ results: [] });
+      }
+      return Promise.resolve({});
+    });
+
+    registerRetryAndWait(server, client as any);
+
+    const toolCall = toolSpy.mock.calls.find((call) => call[0] === "retry-and-wait");
+    const handler = toolCall?.[4] as
+      | ((params: {
+          runDetails: { runID: string };
+          pollInterval?: number;
+        }, extra?: {
+          signal?: AbortSignal;
+          _meta?: { progressToken?: string | number };
+          sendNotification?: (notification: {
+            method: "notifications/progress";
+            params: {
+              progressToken: string | number;
+              progress: number;
+              total?: number;
+              message?: string;
+            };
+          }) => Promise<void>;
+        }) => Promise<unknown>)
+      | undefined;
+
+    expect(typeof handler).toBe("function");
+
+    const sendNotification = vi.fn().mockResolvedValue(undefined);
+    const promise = handler!(
+      {
+        runDetails: { runID: "0" },
+        pollInterval: 5,
+      },
+      {
+        signal: new AbortController().signal,
+        _meta: { progressToken: "progress-1" },
+        sendNotification,
+      }
+    );
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await promise;
+
+    const notifications = sendNotification.mock.calls.map(
+      ([notification]) => notification
+    );
+
+    expect(notifications).toEqual([
+      expect.objectContaining({
+        method: "notifications/progress",
+        params: expect.objectContaining({
+          progressToken: "progress-1",
+          progress: 1,
+          message: expect.stringContaining("Started retry run 0"),
+        }),
+      }),
+      expect.objectContaining({
+        method: "notifications/progress",
+        params: expect.objectContaining({
+          progressToken: "progress-1",
+          progress: 2,
+          message: expect.stringContaining("Status check 1 for retry run 0: completed"),
+        }),
+      }),
+      expect.objectContaining({
+        method: "notifications/progress",
+        params: expect.objectContaining({
+          progressToken: "progress-1",
+          progress: 3,
+          message: expect.stringContaining("Retry run 0 reached terminal status completed"),
+        }),
+      }),
+      expect.objectContaining({
+        method: "notifications/progress",
+        params: expect.objectContaining({
+          progressToken: "progress-1",
+          progress: 4,
+          message: expect.stringContaining("Fetched results for retry run 0"),
+        }),
+      }),
+    ]);
+  });
+
   it("calls POST /scheduler/rerun with credentials then polls GET /scheduler/runStatus", async () => {
     const client = createMockClient();
 
