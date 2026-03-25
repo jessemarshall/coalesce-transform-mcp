@@ -253,7 +253,7 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 Large JSON tool and workflow responses are auto-cached to `coalesce_transform_mcp_data_cache/auto-cache/`.
 
 - If the pretty-printed JSON response is at or below the inline threshold, the full payload is returned inline.
-- If it exceeds the threshold, the server writes the full JSON response to `coalesce_transform_mcp_data_cache/auto-cache/` and returns compact metadata with the saved file path.
+- If it exceeds the threshold, the server writes the full JSON response to `coalesce_transform_mcp_data_cache/auto-cache/` and returns compact metadata with an MCP `resourceUri` plus a `resource_link` you can read through the client.
 - The default threshold is `32768` bytes and can be overridden with `COALESCE_MCP_AUTO_CACHE_MAX_BYTES`.
 - Explicit cache tools such as `cache-workspace-nodes` are still the better choice when you already know you want a reusable snapshot under `coalesce_transform_mcp_data_cache/`.
 
@@ -277,7 +277,7 @@ When a list response would be too large for chat context, or you want a reusable
    - `cache-environment-nodes`
    - `cache-runs`
    - `cache-org-users`
-2. Read the returned `filePath` and work from the saved data under `coalesce_transform_mcp_data_cache/`.
+2. Read the returned `fileUri` or `metaUri` resource through MCP, or follow the returned `resource_link` content blocks.
 3. Use inline list tools for smaller exploratory reads and targeted follow-up calls.
 
 ## Operational Guardrails

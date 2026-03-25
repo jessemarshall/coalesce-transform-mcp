@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { resolveCacheResourceUri } from "../../src/cache-dir.js";
 import {
   listEnvironmentNodes,
   listWorkspaceNodes,
@@ -152,10 +153,13 @@ describe("Node Tools", () => {
       expect(metadata).toMatchObject({
         autoCached: true,
         toolName: "list-workspace-nodes",
-        filePath: expect.stringContaining(join(tempDir, "coalesce_transform_mcp_data_cache", "auto-cache")),
+        resourceUri: expect.stringContaining("coalesce://cache/"),
       });
 
-      const cached = JSON.parse(readFileSync(metadata.filePath, "utf8"));
+      const resolved = resolveCacheResourceUri(metadata.resourceUri, tempDir);
+      expect(resolved).not.toBeNull();
+
+      const cached = JSON.parse(readFileSync(resolved!.filePath, "utf8"));
       expect(cached).toEqual({
         data: [
           {
@@ -165,6 +169,10 @@ describe("Node Tools", () => {
             description: "x".repeat(1024),
           },
         ],
+      });
+      expect(result.content[1]).toMatchObject({
+        type: "resource_link",
+        uri: metadata.resourceUri,
       });
     } finally {
       if (originalMaxBytes === undefined) {

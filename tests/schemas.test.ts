@@ -11,6 +11,7 @@ import {
   validatePathSegment,
   handleToolError,
 } from "../src/coalesce/types.js";
+import { resolveCacheResourceUri } from "../src/cache-dir.js";
 import { CoalesceApiError } from "../src/client.js";
 
 const tempDirs: string[] = [];
@@ -236,7 +237,42 @@ describe("buildJsonToolResponse", () => {
           text: JSON.stringify({ data: [{ id: "env-1" }] }, null, 2),
         },
       ],
+      structuredContent: { data: [{ id: "env-1" }] },
     });
+  });
+
+  it("replaces cache file paths with MCP resource URIs in inline payloads", () => {
+    const baseDir = mkdtempSync(join(tmpdir(), "coalesce-inline-cache-schema-"));
+    tempDirs.push(baseDir);
+
+    const payload = {
+      filePath: join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "workspace-ws-1-nodes.ndjson"),
+      metaPath: join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "workspace-ws-1-nodes.meta.json"),
+      totalNodes: 2,
+    };
+
+    const result = buildJsonToolResponse("cache-workspace-nodes", payload, {
+      baseDir,
+      maxInlineBytes: 4096,
+    });
+
+    const parsed = JSON.parse(result.content[0]!.text);
+    expect(parsed).toMatchObject({
+      fileUri: expect.stringContaining("coalesce://cache/"),
+      metaUri: expect.stringContaining("coalesce://cache/"),
+      totalNodes: 2,
+    });
+    expect(parsed).not.toHaveProperty("filePath");
+    expect(parsed).not.toHaveProperty("metaPath");
+    expect(result.content[1]).toMatchObject({
+      type: "resource_link",
+      uri: parsed.fileUri,
+    });
+    expect(result.content[2]).toMatchObject({
+      type: "resource_link",
+      uri: parsed.metaUri,
+    });
+    expect(result.structuredContent).toMatchObject(parsed);
   });
 
   it("auto-caches large payloads to disk and returns metadata", () => {
@@ -263,11 +299,19 @@ describe("buildJsonToolResponse", () => {
     expect(metadata).toMatchObject({
       autoCached: true,
       toolName: "list-workspace-nodes",
-      filePath: expect.stringContaining(join(baseDir, "coalesce_transform_mcp_data_cache", "auto-cache")),
+      resourceUri: expect.stringContaining("coalesce://cache/"),
       maxInlineBytes: 128,
     });
 
-    const cached = JSON.parse(readFileSync(metadata.filePath, "utf8"));
+    const resolved = resolveCacheResourceUri(metadata.resourceUri, baseDir);
+    expect(resolved).not.toBeNull();
+
+    const cached = JSON.parse(readFileSync(resolved!.filePath, "utf8"));
     expect(cached).toEqual(payload);
+    expect(result.content[1]).toMatchObject({
+      type: "resource_link",
+      uri: metadata.resourceUri,
+    });
+    expect(result.structuredContent).toMatchObject(metadata);
   });
 });

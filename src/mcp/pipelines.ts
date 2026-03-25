@@ -241,11 +241,11 @@ export function registerPipelineTools(
                 nodeTypeInstruction: `Use nodeType "${selectedNodeType}" when calling create-workspace-node-from-predecessor or create-workspace-node-from-scratch. Do NOT use "Source" or any other type unless the plan explicitly recommends it.`,
               } : {}),
               ...result,
-              planSummaryPath: summaryPath,
+              planSummaryUri: summaryPath,
               planCached: !!cached,
               instruction: cached
-                ? `Cached node type rankings found at planSummaryPath (fingerprint unchanged). Reference this file for all subsequent node creations — no need to call plan-pipeline again unless you install new packages or commit new node type definitions.`
-                : `Node type rankings saved to planSummaryPath. Reference this file for all subsequent node creations in this pipeline. The cache auto-invalidates when repo or workspace node types change.`,
+                ? `Cached node type rankings found at planSummaryUri (fingerprint unchanged). Reference this resource for all subsequent node creations — no need to call plan-pipeline again unless you install new packages or commit new node type definitions.`
+                : `Node type rankings saved to planSummaryUri. Reference this resource for all subsequent node creations in this pipeline. The cache auto-invalidates when repo or workspace node types change.`,
             }
           : {
               ...(selectedNodeType ? {

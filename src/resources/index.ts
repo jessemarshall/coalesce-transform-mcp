@@ -1,7 +1,13 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { readFileSync } from "fs";
-import { join, dirname } from "path";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Dirent, existsSync, readFileSync, readdirSync } from "fs";
+import { basename, join, dirname } from "path";
 import { fileURLToPath } from "url";
+import {
+  buildCacheResourceUri,
+  getCacheDir,
+  getCacheResourceMimeType,
+  resolveCacheResourceUri,
+} from "../cache-dir.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -187,6 +193,50 @@ function readResourceContent(relativePath: string): string {
   return readFileSync(fullPath, "utf-8");
 }
 
+function listCacheFilePaths(directory: string): string[] {
+  if (!existsSync(directory)) {
+    return [];
+  }
+
+  const entries: Dirent[] = readdirSync(directory, { withFileTypes: true });
+  const filePaths: string[] = [];
+  for (const entry of entries) {
+    const entryPath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      filePaths.push(...listCacheFilePaths(entryPath));
+      continue;
+    }
+    if (entry.isFile()) {
+      filePaths.push(entryPath);
+    }
+  }
+  return filePaths.sort();
+}
+
+function listCacheResources(baseDir?: string): {
+  uri: string;
+  name: string;
+  description: string;
+  mimeType: string;
+}[] {
+  const cacheDir = getCacheDir(baseDir);
+  return listCacheFilePaths(cacheDir).flatMap((filePath) => {
+    const uri = buildCacheResourceUri(filePath, baseDir);
+    if (!uri) {
+      return [];
+    }
+
+    return [
+      {
+        uri,
+        name: basename(filePath),
+        description: "Cached Coalesce MCP artifact stored on disk and exposed through MCP resources.",
+        mimeType: getCacheResourceMimeType(filePath),
+      },
+    ];
+  });
+}
+
 /**
  * Register all Coalesce context resources with the MCP server
  */
@@ -224,4 +274,46 @@ export function registerResources(server: McpServer): void {
       }
     );
   }
+
+  server.resource(
+    "Coalesce Cache Artifact",
+    new ResourceTemplate("coalesce://cache/{cacheKey}", {
+      list: async () => ({
+        resources: listCacheResources(),
+      }),
+      complete: {
+        cacheKey: async (value) =>
+          listCacheResources()
+            .map((resource) => resource.uri.split("/").pop() ?? "")
+            .filter((cacheKey) => cacheKey.startsWith(value))
+            .slice(0, 50),
+      },
+    }),
+    {
+      description:
+        "Dynamic resources for cached tool responses, cache snapshots, and pipeline summaries.",
+    },
+    async (resourceUri) => {
+      const resolved = resolveCacheResourceUri(resourceUri.toString());
+      if (!resolved) {
+        throw new Error(`Unknown cache resource: ${resourceUri.toString()}`);
+      }
+
+      try {
+        return {
+          contents: [
+            {
+              uri: resourceUri.toString(),
+              mimeType: getCacheResourceMimeType(resolved.filePath),
+              text: readFileSync(resolved.filePath, "utf8"),
+            },
+          ],
+        };
+      } catch (error) {
+        throw new Error(
+          `Failed to read cache resource ${resourceUri.toString()}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+  );
 }
