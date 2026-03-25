@@ -8,6 +8,7 @@ import {
 } from "../../coalesce/api/nodes.js";
 import { listWorkspaceNodeTypes } from "../workspace/mutations.js";
 import { isPlainObject } from "../../utils.js";
+import { NodeConfigInputSchema } from "../../schemas/node-payloads.js";
 import {
   selectPipelineNodeType,
   type PipelineNodeTypeFamily,
@@ -143,7 +144,7 @@ const PlannedPipelineNodeSchema = z
     sql: z.string().nullable(),
     selectItems: z.array(PlannedSelectItemSchema),
     outputColumnNames: z.array(z.string()),
-    configOverrides: z.record(z.unknown()),
+    configOverrides: NodeConfigInputSchema,
     sourceRefs: z.array(
       z
         .object({
@@ -166,7 +167,7 @@ const PlannedPipelineNodeSchema = z
     templateDefaults: z
       .object({
         inferredTopLevelFields: z.record(z.unknown()),
-        inferredConfig: z.record(z.unknown()),
+        inferredConfig: NodeConfigInputSchema,
       })
       .strict()
       .optional(),

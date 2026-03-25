@@ -5,11 +5,15 @@ import { join } from "node:path";
 import { CACHE_DIR_NAME } from "../cache-dir.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
-import { planPipeline } from "../services/pipelines/planning.js";
+import {
+  PipelinePlanSchema,
+  planPipeline,
+} from "../services/pipelines/planning.js";
 import {
   createPipelineFromPlan,
   createPipelineFromSql,
 } from "../services/pipelines/execution.js";
+import { NodeConfigInputSchema } from "../schemas/node-payloads.js";
 import {
   buildJsonToolResponse,
   handleToolError,
@@ -212,8 +216,7 @@ export function registerPipelineTools(
         .optional()
         .describe("Optional node type override. When omitted, the planner ranks repo-backed and observed workspace node types for the use case."),
       description: z.string().optional().describe("Optional node description"),
-      configOverrides: z
-        .record(z.unknown())
+      configOverrides: NodeConfigInputSchema
         .optional()
         .describe("Optional config overrides to merge into the planned node body."),
       locationName: z.string().optional().describe("Optional target locationName"),
@@ -300,9 +303,7 @@ export function registerPipelineTools(
     "Create a Coalesce pipeline from a previously approved plan. Projection-capable node types execute by creating predecessor-based nodes first and then persisting the final full node body with set-workspace-node.",
     {
       workspaceID: z.string().describe("The workspace ID"),
-      plan: z
-        .record(z.unknown())
-        .describe("The plan object returned by plan-pipeline."),
+      plan: PipelinePlanSchema.describe("The plan object returned by plan-pipeline."),
       dryRun: z
         .boolean()
         .optional()
@@ -374,8 +375,7 @@ export function registerPipelineTools(
         .optional()
         .describe("Optional node type override. When omitted, the planner ranks repo-backed and observed workspace node types for the use case."),
       description: z.string().optional().describe("Optional node description"),
-      configOverrides: z
-        .record(z.unknown())
+      configOverrides: NodeConfigInputSchema
         .optional()
         .describe("Optional config overrides to merge into the final node body."),
       locationName: z.string().optional().describe("Optional target locationName"),
