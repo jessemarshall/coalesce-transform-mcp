@@ -43,27 +43,34 @@ function validateRepoPath(rawPath: string): string {
   return resolvedPath;
 }
 
-export function resolveOptionalRepoPathInput(repoPath?: string): string | undefined {
+function getConfiguredRepoPathInput(repoPath?: string): string | undefined {
   const explicitRepoPath =
     typeof repoPath === "string" && repoPath.trim().length > 0
       ? repoPath
       : undefined;
   if (explicitRepoPath) {
-    return validateRepoPath(explicitRepoPath);
+    return explicitRepoPath;
   }
 
   const envRepoPath = process.env.COALESCE_REPO_PATH;
   if (typeof envRepoPath === "string" && envRepoPath.trim().length > 0) {
-    return validateRepoPath(envRepoPath);
+    return envRepoPath;
   }
 
   return undefined;
 }
 
+export function resolveOptionalRepoPathInput(repoPath?: string): string | undefined {
+  // Optional callers handle repo parse failures themselves and should degrade
+  // gracefully to corpus- or warning-based behavior when the configured path
+  // is stale or invalid.
+  return getConfiguredRepoPathInput(repoPath);
+}
+
 export function resolveRepoPathInput(repoPath?: string): string {
-  const resolved = resolveOptionalRepoPathInput(repoPath);
-  if (resolved) {
-    return resolved;
+  const configuredRepoPath = getConfiguredRepoPathInput(repoPath);
+  if (configuredRepoPath) {
+    return validateRepoPath(configuredRepoPath);
   }
 
   throw new Error(

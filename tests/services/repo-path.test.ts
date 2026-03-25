@@ -83,12 +83,10 @@ describe("resolveRepoPathInput validation", () => {
     }
   });
 
-  it("validates env var path through COALESCE_REPO_PATH", () => {
+  it("returns the configured env var path in optional mode without validating it", () => {
     const dir = createTempDir();
     process.env = { ...originalEnv, COALESCE_REPO_PATH: dir };
-    expect(() => resolveOptionalRepoPathInput()).toThrow(
-      "missing nodeTypes/ subdirectory"
-    );
+    expect(resolveOptionalRepoPathInput()).toBe(dir);
   });
 
   it("validates env var path that is a valid repo", () => {

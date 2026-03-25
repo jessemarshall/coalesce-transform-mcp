@@ -6,11 +6,15 @@ import * as corpusLoader from "../../../src/services/corpus/loader.js";
 const fixtureRepoPath = resolve("tests/fixtures/repo-backed-coalesce");
 
 describe("resolveNodeTypeSchema", () => {
+  const originalEnv = process.env;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env = { ...originalEnv };
   });
 
   afterEach(() => {
+    process.env = originalEnv;
     vi.restoreAllMocks();
   });
 
@@ -76,6 +80,67 @@ describe("resolveNodeTypeSchema", () => {
             items: [
               { type: "materializationSelector", default: "table" },
               { attributeName: "selectDistinct", type: "toggleButton", default: false },
+            ],
+          }],
+        },
+        parseError: null,
+      }],
+    });
+
+    const result = await resolveNodeTypeSchema("work");
+
+    expect(result.source).toBe("corpus");
+    expect(result.schema.config).toBeDefined();
+  });
+
+  it("falls back to corpus when COALESCE_REPO_PATH is stale", async () => {
+    process.env.COALESCE_REPO_PATH = "/nonexistent/path";
+
+    vi.spyOn(corpusLoader, "loadNodeTypeCorpusSnapshot").mockReturnValue({
+      generatedAt: "2024-01-01",
+      sourceRoot: "/mock",
+      packageCount: 1,
+      definitionCount: 1,
+      uniqueVariantCount: 1,
+      uniqueNormalizedFamilyCount: 1,
+      supportedVariantCount: 1,
+      partialVariantCount: 0,
+      parseErrorVariantCount: 0,
+      variants: [{
+        variantKey: "work-v1",
+        normalizedFamily: "work",
+        packageNames: ["test-package"],
+        occurrenceCount: 1,
+        occurrences: [],
+        definitionHash: "hash1",
+        createHash: "hash2",
+        runHash: "hash3",
+        primitiveSignature: [],
+        controlSignature: [],
+        unsupportedPrimitives: [],
+        supportStatus: "supported",
+        definitionSummary: {
+          capitalized: "Work",
+          short: "WRK",
+          plural: "Works",
+          tagColor: "#2EB67D",
+          deployStrategy: null,
+          configGroupCount: 1,
+          configItemCount: 1,
+        },
+        outerDefinition: {
+          fileVersion: 1,
+          id: "Work",
+          isDisabled: false,
+          name: "Work",
+          type: "Work",
+        },
+        nodeMetadataSpec: "",
+        nodeDefinition: {
+          config: [{
+            groupName: "Options",
+            items: [
+              { type: "materializationSelector", default: "table" },
             ],
           }],
         },
