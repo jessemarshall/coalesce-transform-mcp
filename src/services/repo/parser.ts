@@ -124,19 +124,24 @@ function listYamlFiles(dirPath: string): string[] {
 function normalizeRepoPath(repoPath: string): string {
   const absolutePath = resolve(repoPath);
   if (!existsSync(absolutePath)) {
-    throw new Error(`Repo path does not exist: ${absolutePath}`);
+    throw new Error(
+      "Repo path does not exist. Check the provided path or COALESCE_REPO_PATH environment variable."
+    );
   }
 
   const stats = statSync(absolutePath);
   if (!stats.isDirectory()) {
-    throw new Error(`Repo path is not a directory: ${absolutePath}`);
+    throw new Error(
+      "Repo path is not a directory. Expected a Coalesce repo directory containing a nodeTypes/ subdirectory."
+    );
   }
 
   const resolvedRepoPath = realpathSync(absolutePath);
   const nodeTypesDir = join(resolvedRepoPath, "nodeTypes");
   if (!existsSync(nodeTypesDir) || !statSync(nodeTypesDir).isDirectory()) {
     throw new Error(
-      `Invalid repo path ${resolvedRepoPath}: expected a readable nodeTypes/ directory.`
+      "Invalid repo path: missing nodeTypes/ subdirectory. " +
+      "Expected a Coalesce repo directory containing nodeTypes/."
     );
   }
 

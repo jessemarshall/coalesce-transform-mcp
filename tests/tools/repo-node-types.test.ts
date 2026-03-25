@@ -112,7 +112,7 @@ describe("repo-parser", () => {
       expect.stringContaining("missing nodes/")
     );
     expect(() => parseRepo(missingNodeTypesRepo)).toThrow(
-      /expected a readable nodeTypes\/ directory/u
+      /missing nodeTypes\/ subdirectory/u
     );
 
     rmSync(missingPackagesRepo, { recursive: true, force: true });
