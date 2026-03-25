@@ -97,7 +97,8 @@ The `${VAR}` syntax pulls values from your shell environment, keeping credential
 |----------|---------|-------------|
 | `COALESCE_ORG_ID` | `cancel-run` | Optional fallback Org ID when `orgID` is not passed to the tool |
 | `COALESCE_REPO_PATH` | Repo-backed node-type tools, `plan-pipeline`, `create-pipeline-from-sql` | Optional fallback local repo path when `repoPath` is not passed explicitly. Point this at the repo root that contains `nodeTypes/`, `nodes/`, and usually `packages/`. |
-| `COALESCE_MCP_AUTO_CACHE_MAX_BYTES` | All JSON-returning tools/workflows | Pretty-printed JSON size threshold in bytes before the full response is automatically written to `data/auto-cache/` and only cache metadata is returned inline. Defaults to `32768`. |
+| `COALESCE_MCP_AUTO_CACHE_MAX_BYTES` | All JSON-returning tools/workflows | Pretty-printed JSON size threshold in bytes before the full response is automatically written to disk and only cache metadata is returned inline. Defaults to `32768`. |
+| `COALESCE_MCP_MAX_REQUEST_BODY_BYTES` | All API-calling tools | Maximum serialized JSON body size in bytes for outbound API requests. Rejects oversized payloads before they leave the process. Defaults to `524288` (512 KB). |
 
 ### Snowflake (required for run tools: `start-run`, `retry-run`, `run-and-wait`, `retry-and-wait`)
 

@@ -9,6 +9,15 @@ export interface RequestOptions {
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_REQUEST_BODY_BYTES = 512 * 1024; // 512 KB
+
+function getMaxRequestBodyBytes(): number {
+  const raw = process.env.COALESCE_MCP_MAX_REQUEST_BODY_BYTES;
+  if (!raw) return DEFAULT_MAX_REQUEST_BODY_BYTES;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_MAX_REQUEST_BODY_BYTES;
+  return parsed;
+}
 
 export function validateConfig(): ClientConfig {
   const accessToken = process.env.COALESCE_ACCESS_TOKEN;
@@ -146,6 +155,24 @@ export function createClient(config: ClientConfig) {
     options?: RequestOptions
   ): Promise<unknown> {
     const timeoutMs = effectiveTimeoutMs(options);
+    const serializedBody = body !== undefined ? JSON.stringify(body) : undefined;
+
+    if (serializedBody !== undefined) {
+      const maxBytes = getMaxRequestBodyBytes();
+      const bodyBytes = Buffer.byteLength(serializedBody, "utf8");
+      if (bodyBytes > maxBytes) {
+        const sizeMB = (bodyBytes / (1024 * 1024)).toFixed(2);
+        const limitKB = Math.round(maxBytes / 1024);
+        throw new CoalesceApiError(
+          `Request body exceeds ${limitKB} KB limit (got ${sizeMB} MB). ` +
+          `This usually means a large cached response was accidentally passed as tool input. ` +
+          `Override with COALESCE_MCP_MAX_REQUEST_BODY_BYTES if this payload is intentional.`,
+          413,
+          { bodyBytes, maxBytes, method, path }
+        );
+      }
+    }
+
     const controller = new AbortController();
     const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
     timeoutHandle.unref?.();
@@ -154,7 +181,7 @@ export function createClient(config: ClientConfig) {
       const response = await fetch(buildUrl(path, params), {
         method,
         headers: headers(method),
-        body: body !== undefined ? JSON.stringify(body) : undefined,
+        body: serializedBody,
         signal: controller.signal,
       });
       return await handleResponse(response);

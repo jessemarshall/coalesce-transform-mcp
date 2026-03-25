@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { validateConfig, createClient } from "./client.js";
@@ -20,12 +21,15 @@ import { registerGetRunDetails } from "./workflows/get-run-details.js";
 import { registerGetEnvironmentOverview } from "./workflows/get-environment-overview.js";
 import { registerResources } from "./resources/index.js";
 
+const require = createRequire(import.meta.url);
+const { version } = require("../package.json") as { version: string };
+
 const config = validateConfig();
 const client = createClient(config);
 
 const server = new McpServer({
   name: "coalesce-transform-mcp",
-  version: "0.1.0",
+  version,
 });
 
 // Register all tools
