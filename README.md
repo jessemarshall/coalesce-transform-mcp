@@ -149,6 +149,7 @@ Coalesce Platform Tools: manage workspaces, environments, projects, runs, and ot
 
 #### Jobs
 
+- `list-jobs` - List all jobs for an environment
 - `create-workspace-job` - Create a job in a workspace with node include/exclude selectors
 - `get-job` - Get details of a specific job (via environment)
 - `update-workspace-job` - Update a job's name and node selectors
