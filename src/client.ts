@@ -22,6 +22,7 @@ function getMaxRequestBodyBytes(): number {
 const MAX_RETRY_ATTEMPTS = 5;
 const RETRY_BASE_DELAY_MS = 1_000;
 const RETRY_MAX_DELAY_MS = 30_000;
+const RETRYABLE_RATE_LIMIT_METHODS = new Set(["GET"]);
 
 export function validateConfig(): ClientConfig {
   const accessToken = process.env.COALESCE_ACCESS_TOKEN;
@@ -77,6 +78,10 @@ function retryDelayMs(attempt: number, retryAfterMs?: number): number {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function shouldRetryRateLimit(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"): boolean {
+  return RETRYABLE_RATE_LIMIT_METHODS.has(method);
 }
 
 async function handleResponse(response: Response): Promise<unknown> {
@@ -255,6 +260,7 @@ export function createClient(config: ClientConfig) {
         if (
           error instanceof CoalesceApiError &&
           error.status === 429 &&
+          shouldRetryRateLimit(method) &&
           attempt < MAX_RETRY_ATTEMPTS - 1
         ) {
           const detail = error.detail as Record<string, unknown> | undefined;
