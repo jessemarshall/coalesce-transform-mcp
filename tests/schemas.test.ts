@@ -6,6 +6,7 @@ import {
   RunDetailsSchema,
   UserCredentialsSchema,
   StartRunParams,
+  WorkspaceNodeBodySchema,
   buildJsonToolResponse,
   sanitizeResponse,
   validatePathSegment,
@@ -313,5 +314,65 @@ describe("buildJsonToolResponse", () => {
       uri: metadata.resourceUri,
     });
     expect(result.structuredContent).toMatchObject(metadata);
+  });
+});
+
+describe("WorkspaceNodeBodySchema", () => {
+  it("accepts an empty object", () => {
+    expect(WorkspaceNodeBodySchema.safeParse({}).success).toBe(true);
+  });
+
+  it("accepts a complete valid body", () => {
+    const result = WorkspaceNodeBodySchema.safeParse({
+      name: "STG_ORDERS",
+      description: "Staging orders node",
+      nodeType: "base-nodes:::Stage",
+      database: "ANALYTICS",
+      schema: "PUBLIC",
+      locationName: "ETL_STAGE",
+      storageLocations: [{ name: "default", locationName: "ETL_STAGE" }],
+      config: { insertStrategy: "MERGE" },
+      metadata: { columns: [{ name: "ORDER_ID", dataType: "NUMBER" }] },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("passes through unknown node-type-specific fields", () => {
+    const body = { name: "MY_NODE", customField: "allowed", nested: { extra: true } };
+    const result = WorkspaceNodeBodySchema.safeParse(body);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toMatchObject({ customField: "allowed", nested: { extra: true } });
+    }
+  });
+
+  it("rejects name as a non-string", () => {
+    expect(WorkspaceNodeBodySchema.safeParse({ name: 42 }).success).toBe(false);
+  });
+
+  it("rejects storageLocations as a non-array", () => {
+    expect(WorkspaceNodeBodySchema.safeParse({ storageLocations: { name: "bad" } }).success).toBe(false);
+  });
+
+  it("rejects config as a non-object", () => {
+    expect(WorkspaceNodeBodySchema.safeParse({ config: "bad" }).success).toBe(false);
+  });
+
+  it("rejects metadata as a non-object", () => {
+    expect(WorkspaceNodeBodySchema.safeParse({ metadata: "bad" }).success).toBe(false);
+  });
+
+  it("rejects metadata.columns as a non-array", () => {
+    expect(WorkspaceNodeBodySchema.safeParse({ metadata: { columns: "bad" } }).success).toBe(false);
+  });
+
+  it("passes through unknown fields inside metadata", () => {
+    const result = WorkspaceNodeBodySchema.safeParse({
+      metadata: { columns: [], sourceMapping: { refs: [] } },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect((result.data.metadata as Record<string, unknown>)?.sourceMapping).toEqual({ refs: [] });
+    }
   });
 });
