@@ -82,7 +82,8 @@ describe("Tool Registration", () => {
       (call: unknown[]) => call[0] as string
     );
 
-    expect(toolSpy).toHaveBeenCalledTimes(70); // Removed deprecated create-workspace-node
+    expect(toolSpy).toHaveBeenCalledTimes(72); // Removed deprecated create-workspace-node
+    expect(toolNames).toContain("list-jobs");
     expect(toolNames).toContain("list-environments");
     expect(toolNames).toContain("get-environment");
     expect(toolNames).toContain("list-environment-nodes");
@@ -109,8 +110,19 @@ describe("Tool Registration", () => {
     expect(toolNames).toContain("cache-environment-nodes");
     expect(toolNames).toContain("cache-runs");
     expect(toolNames).toContain("cache-org-users");
+    expect(toolNames).toContain("clear_coalesce_transform_mcp_data_cache");
     expect(toolNames).toContain("analyze-workspace-patterns");
     expect(toolNames).toContain("list-workspace-node-types");
     expect(toolNames).toContain("complete-node-configuration");
+
+    const clearCacheCall = toolSpy.mock.calls.find(
+      (call: unknown[]) => call[0] === "clear_coalesce_transform_mcp_data_cache"
+    );
+    expect(clearCacheCall).toBeDefined();
+    expect(clearCacheCall?.[3]).toMatchObject({
+      readOnlyHint: false,
+      idempotentHint: false,
+      destructiveHint: true,
+    });
   });
 });

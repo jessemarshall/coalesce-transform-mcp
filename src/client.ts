@@ -9,6 +9,20 @@ export interface RequestOptions {
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_REQUEST_BODY_BYTES = 512 * 1024; // 512 KB
+
+function getMaxRequestBodyBytes(): number {
+  const raw = process.env.COALESCE_MCP_MAX_REQUEST_BODY_BYTES;
+  if (!raw) return DEFAULT_MAX_REQUEST_BODY_BYTES;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_MAX_REQUEST_BODY_BYTES;
+  return parsed;
+}
+
+const MAX_RETRY_ATTEMPTS = 5;
+const RETRY_BASE_DELAY_MS = 1_000;
+const RETRY_MAX_DELAY_MS = 30_000;
+const RETRYABLE_RATE_LIMIT_METHODS = new Set(["GET"]);
 
 export function validateConfig(): ClientConfig {
   const accessToken = process.env.COALESCE_ACCESS_TOKEN;
@@ -42,6 +56,32 @@ export class CoalesceApiError extends Error {
     super(message);
     this.name = "CoalesceApiError";
   }
+}
+
+function parseRetryAfterMs(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.ceil(seconds * 1000);
+  }
+  // Retry-After can also be an HTTP-date; fall back to undefined
+  return undefined;
+}
+
+function retryDelayMs(attempt: number, retryAfterMs?: number): number {
+  if (retryAfterMs !== undefined && retryAfterMs > 0) {
+    return Math.min(retryAfterMs, RETRY_MAX_DELAY_MS);
+  }
+  // Exponential backoff: 1s, 2s, 4s, 8s, ...
+  return Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt), RETRY_MAX_DELAY_MS);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function shouldRetryRateLimit(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"): boolean {
+  return RETRYABLE_RATE_LIMIT_METHODS.has(method);
 }
 
 async function handleResponse(response: Response): Promise<unknown> {
@@ -83,6 +123,15 @@ async function handleResponse(response: Response): Promise<unknown> {
         );
       case 404:
         throw new CoalesceApiError("Resource not found", 404, detail);
+      case 429: {
+        const retryAfterHeader = response.headers.get("Retry-After");
+        const retryAfterMs = parseRetryAfterMs(retryAfterHeader);
+        throw new CoalesceApiError(
+          "Coalesce API rate limit exceeded",
+          429,
+          { ...(retryAfterMs !== undefined ? { retryAfterMs } : {}), ...( detail && typeof detail === "object" ? detail : {}) }
+        );
+      }
       default:
         throw new CoalesceApiError(
           `Coalesce API unavailable (HTTP ${response.status})`,
@@ -138,7 +187,7 @@ export function createClient(config: ClientConfig) {
     );
   }
 
-  async function request(
+  async function requestOnce(
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
     params?: QueryParams,
@@ -146,6 +195,24 @@ export function createClient(config: ClientConfig) {
     options?: RequestOptions
   ): Promise<unknown> {
     const timeoutMs = effectiveTimeoutMs(options);
+    const serializedBody = body !== undefined ? JSON.stringify(body) : undefined;
+
+    if (serializedBody !== undefined) {
+      const maxBytes = getMaxRequestBodyBytes();
+      const bodyBytes = Buffer.byteLength(serializedBody, "utf8");
+      if (bodyBytes > maxBytes) {
+        const sizeMB = (bodyBytes / (1024 * 1024)).toFixed(2);
+        const limitKB = Math.round(maxBytes / 1024);
+        throw new CoalesceApiError(
+          `Request body exceeds ${limitKB} KB limit (got ${sizeMB} MB). ` +
+          `This usually means a large cached response was accidentally passed as tool input. ` +
+          `Override with COALESCE_MCP_MAX_REQUEST_BODY_BYTES if this payload is intentional.`,
+          413,
+          { bodyBytes, maxBytes, method, path }
+        );
+      }
+    }
+
     const controller = new AbortController();
     const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
     timeoutHandle.unref?.();
@@ -154,7 +221,7 @@ export function createClient(config: ClientConfig) {
       const response = await fetch(buildUrl(path, params), {
         method,
         headers: headers(method),
-        body: body !== undefined ? JSON.stringify(body) : undefined,
+        body: serializedBody,
         signal: controller.signal,
       });
       return await handleResponse(response);
@@ -177,6 +244,37 @@ export function createClient(config: ClientConfig) {
     } finally {
       clearTimeout(timeoutHandle);
     }
+  }
+
+  async function request(
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+    path: string,
+    params?: QueryParams,
+    body?: unknown,
+    options?: RequestOptions
+  ): Promise<unknown> {
+    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+      try {
+        return await requestOnce(method, path, params, body, options);
+      } catch (error) {
+        if (
+          error instanceof CoalesceApiError &&
+          error.status === 429 &&
+          shouldRetryRateLimit(method) &&
+          attempt < MAX_RETRY_ATTEMPTS - 1
+        ) {
+          const detail = error.detail as Record<string, unknown> | undefined;
+          const retryAfterMs = typeof detail?.retryAfterMs === "number"
+            ? detail.retryAfterMs
+            : undefined;
+          await sleep(retryDelayMs(attempt, retryAfterMs));
+          continue;
+        }
+        throw error;
+      }
+    }
+    // Unreachable, but satisfies TypeScript
+    throw new CoalesceApiError("Unexpected retry loop exit", 500);
   }
 
   return {

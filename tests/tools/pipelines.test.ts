@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { planPipeline } from "../../src/services/pipelines/planning.js";
@@ -27,6 +27,11 @@ vi.mock("../../src/services/config/intelligent.js", () => ({
 }));
 
 const fixtureRepoPath = resolve("tests/fixtures/repo-backed-coalesce");
+const originalEnv = process.env;
+
+afterEach(() => {
+  process.env = originalEnv;
+});
 
 function createMockClient() {
   return {
@@ -164,6 +169,82 @@ describe("Pipeline Tools", () => {
     const client = createMockClient();
     registerPipelineTools(server, client as any);
     expect(true).toBe(true);
+  });
+
+  it("plan-pipeline returns an MCP error when sql contains rewritten ref() syntax", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "tool");
+    const client = createMockClient();
+
+    registerPipelineTools(server, client as any);
+
+    const planToolCall = toolSpy.mock.calls.find(
+      (call) => call[0] === "plan-pipeline"
+    );
+    const handler = planToolCall?.[4] as
+      | ((params: { workspaceID: string; sql: string }) => Promise<{
+          isError?: boolean;
+          content: { type: "text"; text: string }[];
+        }>)
+      | undefined;
+
+    expect(typeof handler).toBe("function");
+
+    const result = await handler!({
+      workspaceID: "ws-1",
+      sql: "SELECT * FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
+    });
+
+    expect(result).toEqual({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: expect.stringContaining("The sql parameter contains {{ ref() }} syntax"),
+        },
+      ],
+    });
+    expect(client.get).not.toHaveBeenCalled();
+    expect(client.post).not.toHaveBeenCalled();
+    expect(client.put).not.toHaveBeenCalled();
+  });
+
+  it("create-pipeline-from-sql returns an MCP error when sql contains rewritten ref() syntax", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "tool");
+    const client = createMockClient();
+
+    registerPipelineTools(server, client as any);
+
+    const createToolCall = toolSpy.mock.calls.find(
+      (call) => call[0] === "create-pipeline-from-sql"
+    );
+    const handler = createToolCall?.[4] as
+      | ((params: { workspaceID: string; sql: string }) => Promise<{
+          isError?: boolean;
+          content: { type: "text"; text: string }[];
+        }>)
+      | undefined;
+
+    expect(typeof handler).toBe("function");
+
+    const result = await handler!({
+      workspaceID: "ws-1",
+      sql: "SELECT * FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
+    });
+
+    expect(result).toEqual({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: expect.stringContaining("The sql parameter contains {{ ref() }} syntax"),
+        },
+      ],
+    });
+    expect(client.get).not.toHaveBeenCalled();
+    expect(client.post).not.toHaveBeenCalled();
+    expect(client.put).not.toHaveBeenCalled();
   });
 
   it("planPipeline builds a ready Stage plan from ref-based SQL", async () => {
@@ -410,6 +491,23 @@ describe("Pipeline Tools", () => {
     expect(result.warnings).toContain(
       "Observed workspace node types could not be fetched for workspace ws-1. Use list-workspace-node-types or cache-workspace-nodes to inspect current workspace usage and confirm installation before execution."
     );
+  });
+
+  it("planPipeline warns but still returns a plan when COALESCE_REPO_PATH is stale", async () => {
+    process.env = { ...originalEnv, COALESCE_REPO_PATH: "/nonexistent/path" };
+
+    const client = createMockClient();
+    client.get.mockResolvedValue({ data: [{ nodeType: "Stage" }] });
+
+    const result = await planPipeline(client as any, {
+      workspaceID: "ws-1",
+      goal: "Build a customer staging layer",
+    });
+
+    expect(result.warnings).toContain(
+      "Repo path does not exist. Check the provided path or COALESCE_REPO_PATH environment variable."
+    );
+    expect(result.status).toBe("needs_clarification");
   });
 
   it("createPipelineFromPlan creates a Stage node and persists the SQL-derived source mapping", async () => {

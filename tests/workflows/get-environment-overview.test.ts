@@ -139,7 +139,7 @@ describe("get-environment-overview workflow", () => {
     ).rejects.toThrow("Pagination repeated cursor cursor-page-2");
   });
 
-  it("throws when node count exceeds the in-memory safety cap", async () => {
+  it("returns all nodes when the environment spans more than one default page", async () => {
     const client = createMockClient();
     const envData = { id: "env-1", name: "Huge" };
     const hugeNodeList = Array.from({ length: 251 }, (_, i) => ({
@@ -155,8 +155,11 @@ describe("get-environment-overview workflow", () => {
       return Promise.resolve({});
     });
 
-    await expect(
-      getEnvironmentOverview(client as any, { environmentID: "env-1" })
-    ).rejects.toThrow(/exceeded 250 item safety limit/);
+    const result = await getEnvironmentOverview(client as any, { environmentID: "env-1" });
+
+    expect(result.environment).toEqual(envData);
+    expect(result.nodes).toHaveLength(251);
+    expect(result.nodes[0]).toEqual({ id: "node-0", name: "NODE_0" });
+    expect(result.nodes[250]).toEqual({ id: "node-250", name: "NODE_250" });
   });
 });

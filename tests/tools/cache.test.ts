@@ -58,8 +58,8 @@ describe("cache snapshot tools", () => {
 
     const result = await cacheWorkspaceNodes(client as any, { workspaceID: "ws-1" }, { baseDir });
 
-    expect(result.filePath).toBe(join(baseDir, "data", "nodes", "workspace-ws-1-nodes.ndjson"));
-    expect(result.metaPath).toBe(join(baseDir, "data", "nodes", "workspace-ws-1-nodes.meta.json"));
+    expect(result.filePath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "workspace-ws-1-nodes.ndjson"));
+    expect(result.metaPath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "workspace-ws-1-nodes.meta.json"));
     expect(result.totalNodes).toBe(2);
     expect(client.get).toHaveBeenNthCalledWith(
       1,
@@ -98,10 +98,10 @@ describe("cache snapshot tools", () => {
     );
 
     expect(result.filePath).toBe(
-      join(baseDir, "data", "nodes", "environment-env-1-nodes-summary.ndjson")
+      join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "environment-env-1-nodes-summary.ndjson")
     );
     expect(result.metaPath).toBe(
-      join(baseDir, "data", "nodes", "environment-env-1-nodes-summary.meta.json")
+      join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "environment-env-1-nodes-summary.meta.json")
     );
     expect(result.detail).toBe(false);
     expect(client.get).toHaveBeenCalledWith("/api/v1/environments/env-1/nodes", {
@@ -138,8 +138,8 @@ describe("cache snapshot tools", () => {
       { baseDir }
     );
 
-    expect(result.filePath).toBe(join(baseDir, "data", "runs", "runs-failed-detail.ndjson"));
-    expect(result.metaPath).toBe(join(baseDir, "data", "runs", "runs-failed-detail.meta.json"));
+    expect(result.filePath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "runs", "runs-failed-detail.ndjson"));
+    expect(result.metaPath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "runs", "runs-failed-detail.meta.json"));
 
     const lines = readFileSync(result.filePath, "utf8").trimEnd().split("\n");
     expect(lines).toHaveLength(1);
@@ -161,8 +161,8 @@ describe("cache snapshot tools", () => {
 
     const result = await cacheOrgUsers(client as any, {}, { baseDir });
 
-    expect(result.filePath).toBe(join(baseDir, "data", "users", "org-users.ndjson"));
-    expect(result.metaPath).toBe(join(baseDir, "data", "users", "org-users.meta.json"));
+    expect(result.filePath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "users", "org-users.ndjson"));
+    expect(result.metaPath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "users", "org-users.meta.json"));
     expect(result.totalUsers).toBe(2);
 
     const lines = readFileSync(result.filePath, "utf8").trimEnd().split("\n");

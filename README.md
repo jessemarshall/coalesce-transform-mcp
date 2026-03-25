@@ -97,7 +97,8 @@ The `${VAR}` syntax pulls values from your shell environment, keeping credential
 |----------|---------|-------------|
 | `COALESCE_ORG_ID` | `cancel-run` | Optional fallback Org ID when `orgID` is not passed to the tool |
 | `COALESCE_REPO_PATH` | Repo-backed node-type tools, `plan-pipeline`, `create-pipeline-from-sql` | Optional fallback local repo path when `repoPath` is not passed explicitly. Point this at the repo root that contains `nodeTypes/`, `nodes/`, and usually `packages/`. |
-| `COALESCE_MCP_AUTO_CACHE_MAX_BYTES` | All JSON-returning tools/workflows | Pretty-printed JSON size threshold in bytes before the full response is automatically written to `data/auto-cache/` and only cache metadata is returned inline. Defaults to `32768`. |
+| `COALESCE_MCP_AUTO_CACHE_MAX_BYTES` | All JSON-returning tools/workflows | Pretty-printed JSON size threshold in bytes before the full response is automatically written to disk and only cache metadata is returned inline. Defaults to `32768`. |
+| `COALESCE_MCP_MAX_REQUEST_BODY_BYTES` | All API-calling tools | Maximum serialized JSON body size in bytes for outbound API requests. Rejects oversized payloads before they leave the process. Defaults to `524288` (512 KB). |
 
 ### Snowflake (required for run tools: `start-run`, `retry-run`, `run-and-wait`, `retry-and-wait`)
 
@@ -148,6 +149,7 @@ Coalesce Platform Tools: manage workspaces, environments, projects, runs, and ot
 
 #### Jobs
 
+- `list-jobs` - List all jobs for an environment
 - `create-workspace-job` - Create a job in a workspace with node include/exclude selectors
 - `get-job` - Get details of a specific job (via environment)
 - `update-workspace-job` - Update a job's name and node selectors
@@ -233,10 +235,11 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 
 #### Cache and Snapshots
 
-- `cache-workspace-nodes` - Fetch every page of workspace nodes, write the full snapshot to `data/nodes`, and return only cache metadata
-- `cache-environment-nodes` - Fetch every page of environment nodes, write the full snapshot to `data/nodes`, and return only cache metadata
-- `cache-runs` - Fetch every page of run results, write the full snapshot to `data/runs`, and return only cache metadata
-- `cache-org-users` - Fetch every page of organization users, write the full snapshot to `data/users`, and return only cache metadata
+- `cache-workspace-nodes` - Fetch every page of workspace nodes, write the full snapshot to `coalesce_transform_mcp_data_cache/nodes/`, and return only cache metadata
+- `cache-environment-nodes` - Fetch every page of environment nodes, write the full snapshot to `coalesce_transform_mcp_data_cache/nodes/`, and return only cache metadata
+- `cache-runs` - Fetch every page of run results, write the full snapshot to `coalesce_transform_mcp_data_cache/runs/`, and return only cache metadata
+- `cache-org-users` - Fetch every page of organization users, write the full snapshot to `coalesce_transform_mcp_data_cache/users/`, and return only cache metadata
+- `clear_coalesce_transform_mcp_data_cache` - Delete all cached snapshots, auto-cached responses, and plan summaries under `coalesce_transform_mcp_data_cache/` ⚠️
 
 #### Workflows
 
@@ -247,12 +250,12 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 
 ## Automatic Large-Response Caching
 
-Large JSON tool and workflow responses are auto-cached to `data/auto-cache/`.
+Large JSON tool and workflow responses are auto-cached to `coalesce_transform_mcp_data_cache/auto-cache/`.
 
 - If the pretty-printed JSON response is at or below the inline threshold, the full payload is returned inline.
-- If it exceeds the threshold, the server writes the full JSON response to `data/auto-cache/` and returns compact metadata with the saved file path.
+- If it exceeds the threshold, the server writes the full JSON response to `coalesce_transform_mcp_data_cache/auto-cache/` and returns compact metadata with an MCP `resourceUri` plus a `resource_link` you can read through the client.
 - The default threshold is `32768` bytes and can be overridden with `COALESCE_MCP_AUTO_CACHE_MAX_BYTES`.
-- Explicit cache tools such as `cache-workspace-nodes` are still the better choice when you already know you want a reusable snapshot in `data/`.
+- Explicit cache tools such as `cache-workspace-nodes` are still the better choice when you already know you want a reusable snapshot under `coalesce_transform_mcp_data_cache/`.
 
 ## Repo-Backed Workflow
 
@@ -274,7 +277,7 @@ When a list response would be too large for chat context, or you want a reusable
    - `cache-environment-nodes`
    - `cache-runs`
    - `cache-org-users`
-2. Read the returned `filePath` and work from the saved JSON under `data/`.
+2. Read the returned `fileUri` or `metaUri` resource through MCP, or follow the returned `resource_link` content blocks.
 3. Use inline list tools for smaller exploratory reads and targeted follow-up calls.
 
 ## Operational Guardrails

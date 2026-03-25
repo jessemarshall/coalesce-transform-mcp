@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { CACHE_DIR_NAME } from "../cache-dir.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
 import { planPipeline } from "../services/pipelines/planning.js";
@@ -18,6 +19,11 @@ import {
 } from "../coalesce/types.js";
 import { isPlainObject } from "../utils.js";
 
+const REWRITTEN_SQL_ERROR_MESSAGE =
+  "The sql parameter contains {{ ref() }} syntax, which means you rewrote the user's SQL. " +
+  "Pass the user's EXACT SQL unchanged — the planner resolves source references automatically. " +
+  "Do NOT replace table names with {{ ref() }}.";
+
 function buildPlanFingerprint(
   workspaceID: string,
   repoPath: string | null,
@@ -32,7 +38,7 @@ function buildPlanFingerprint(
 }
 
 function getPlanSummaryDir(): string {
-  return join(process.cwd(), "data", "plans");
+  return join(process.cwd(), CACHE_DIR_NAME, "plans");
 }
 
 function findCachedPlanSummary(
@@ -152,6 +158,43 @@ function cleanupOldPlanFiles(dir: string, workspaceID: string, maxToKeep: number
   }
 }
 
+function buildPlanSummaryForElicitation(plan: unknown): string {
+  const lines: string[] = ["Pipeline plan ready. Review the nodes to be created:"];
+  lines.push("");
+
+  if (isPlainObject(plan)) {
+    // cteNodeSummary is populated for SQL-sourced plans; nodes for goal-based plans
+    const cteNodes = Array.isArray(plan.cteNodeSummary) ? plan.cteNodeSummary.filter(isPlainObject) : [];
+    const planNodes = Array.isArray(plan.nodes) ? plan.nodes.filter(isPlainObject) : [];
+    const nodesToShow = cteNodes.length > 0 ? cteNodes : planNodes;
+
+    if (nodesToShow.length === 0) {
+      lines.push("  (No node details available in plan)");
+    } else {
+      for (const node of nodesToShow) {
+        const name = typeof node.name === "string" ? node.name : "(unnamed)";
+        const nodeType = typeof node.nodeType === "string" ? node.nodeType : "(unknown type)";
+        lines.push(`  • ${name}  [${nodeType}]`);
+      }
+    }
+
+    const warnings = Array.isArray(plan.warnings)
+      ? plan.warnings.filter((w): w is string => typeof w === "string")
+      : [];
+    if (warnings.length > 0) {
+      lines.push("");
+      lines.push("Warnings:");
+      for (const w of warnings) {
+        lines.push(`  ⚠  ${w}`);
+      }
+    }
+  }
+
+  lines.push("");
+  lines.push("Confirm to proceed with node creation, or cancel to abort.");
+  return lines.join("\n");
+}
+
 export function registerPipelineTools(
   server: McpServer,
   client: CoalesceClient
@@ -190,16 +233,7 @@ export function registerPipelineTools(
       try {
         // Reject SQL that the agent rewrote with {{ ref() }}
         if (params.sql && /\{\{\s*ref\s*\(/.test(params.sql)) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify({
-                  error: "The sql parameter contains {{ ref() }} syntax, which means you rewrote the user's SQL. Pass the user's EXACT SQL unchanged — the planner resolves source references automatically. Do NOT replace table names with {{ ref() }}.",
-                }),
-              },
-            ],
-          };
+          return handleToolError(new Error(REWRITTEN_SQL_ERROR_MESSAGE));
         }
 
         const result = await planPipeline(client, params);
@@ -240,11 +274,11 @@ export function registerPipelineTools(
                 nodeTypeInstruction: `Use nodeType "${selectedNodeType}" when calling create-workspace-node-from-predecessor or create-workspace-node-from-scratch. Do NOT use "Source" or any other type unless the plan explicitly recommends it.`,
               } : {}),
               ...result,
-              planSummaryPath: summaryPath,
+              planSummaryUri: summaryPath,
               planCached: !!cached,
               instruction: cached
-                ? `Cached node type rankings found at planSummaryPath (fingerprint unchanged). Reference this file for all subsequent node creations — no need to call plan-pipeline again unless you install new packages or commit new node type definitions.`
-                : `Node type rankings saved to planSummaryPath. Reference this file for all subsequent node creations in this pipeline. The cache auto-invalidates when repo or workspace node types change.`,
+                ? `Cached node type rankings found at planSummaryUri (fingerprint unchanged). Reference this resource for all subsequent node creations — no need to call plan-pipeline again unless you install new packages or commit new node type definitions.`
+                : `Node type rankings saved to planSummaryUri. Reference this resource for all subsequent node creations in this pipeline. The cache auto-invalidates when repo or workspace node types change.`,
             }
           : {
               ...(selectedNodeType ? {
@@ -277,6 +311,48 @@ export function registerPipelineTools(
     WRITE_ANNOTATIONS,
     async (params) => {
       try {
+        if (!params.dryRun) {
+          const planSummary = buildPlanSummaryForElicitation(params.plan);
+          try {
+            const elicitation = await server.server.elicitInput({
+              message: planSummary,
+              requestedSchema: {
+                type: "object",
+                properties: {
+                  confirmed: {
+                    type: "boolean",
+                    title: "Create these pipeline nodes?",
+                    description: "Select true to proceed with node creation, false to cancel.",
+                  },
+                },
+                required: ["confirmed"],
+              },
+            });
+
+            if (elicitation.action !== "accept" || elicitation.content?.confirmed !== true) {
+              return buildJsonToolResponse("create-pipeline-from-plan", {
+                created: false,
+                cancelled: true,
+                reason:
+                  elicitation.action === "accept"
+                    ? "User declined pipeline creation."
+                    : `Pipeline creation ${elicitation.action}d by user.`,
+              });
+            }
+          } catch (elicitError) {
+            // Client does not support elicitation — fall back to STOP_AND_CONFIRM convention
+            if (elicitError instanceof Error && elicitError.message.includes("does not support")) {
+              return buildJsonToolResponse("create-pipeline-from-plan", {
+                created: false,
+                STOP_AND_CONFIRM:
+                  "STOP. Present the pipeline plan to the user in a table showing each node name and nodeType. Ask for explicit approval BEFORE creating any nodes. Once the user approves, call create-pipeline-from-plan again.",
+                plan: params.plan,
+              });
+            }
+            throw elicitError;
+          }
+        }
+
         const result = await createPipelineFromPlan(client, params);
         return buildJsonToolResponse("create-pipeline-from-plan", result);
       } catch (error) {
@@ -319,16 +395,7 @@ export function registerPipelineTools(
       try {
         // Reject SQL that the agent rewrote with {{ ref() }} — the user's original SQL won't contain these
         if (/\{\{\s*ref\s*\(/.test(params.sql)) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify({
-                  error: "The sql parameter contains {{ ref() }} syntax, which means you rewrote the user's SQL. Pass the user's EXACT SQL unchanged — the planner resolves source references automatically. Do NOT replace table names with {{ ref() }}.",
-                }),
-              },
-            ],
-          };
+          return handleToolError(new Error(REWRITTEN_SQL_ERROR_MESSAGE));
         }
         const result = await createPipelineFromSql(client, params);
         return buildJsonToolResponse("create-pipeline-from-sql", result);

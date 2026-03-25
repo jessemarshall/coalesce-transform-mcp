@@ -1,7 +1,35 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import {
+  buildCacheResourceLink,
+  CACHE_DIR_NAME,
+  type CacheResourceLink,
+} from "../cache-dir.js";
 import { z } from "zod";
+
+const SESSION_START_TIME = new Date();
+
+// Workspace node body schema — validates known structural fields while allowing
+// node-type-specific extras through. Used by set-workspace-node.
+export const WorkspaceNodeBodySchema = z
+  .object({
+    name: z.string().optional(),
+    description: z.string().optional(),
+    nodeType: z.string().optional(),
+    database: z.string().optional(),
+    schema: z.string().optional(),
+    locationName: z.string().optional(),
+    storageLocations: z.array(z.unknown()).optional(),
+    config: z.record(z.unknown()).optional(),
+    metadata: z
+      .object({
+        columns: z.array(z.unknown()).optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
 
 // Pagination params — only used by endpoints that support it
 export const PaginationParams = z.object({
@@ -47,8 +75,11 @@ export const DESTRUCTIVE_ANNOTATIONS = {
 
 const DEFAULT_AUTO_CACHE_MAX_BYTES = 32 * 1024;
 
+type TextContent = { type: "text"; text: string };
+
 export type JsonToolResponse = {
-  content: { type: "text"; text: string }[];
+  content: Array<TextContent | CacheResourceLink>;
+  structuredContent?: Record<string, unknown>;
 };
 
 type JsonToolResponseOptions = {
@@ -147,16 +178,27 @@ export function buildRerunBody(params: RerunInput) {
   };
 }
 
+const ALLOWED_PEM_HEADERS = [
+  "-----BEGIN PRIVATE KEY-----",
+  "-----BEGIN RSA PRIVATE KEY-----",
+  "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+] as const;
+
 function readKeyPairFile(filePath: string): string {
   if (!existsSync(filePath)) {
     throw new Error(
-      `SNOWFLAKE_KEY_PAIR_KEY file not found: ${filePath}`
+      "SNOWFLAKE_KEY_PAIR_KEY file not found at the configured path. " +
+      "Check that the environment variable points to an existing PEM private key file."
     );
   }
   const content = readFileSync(filePath, "utf-8").trim();
-  if (!content.includes("-----BEGIN")) {
+  const hasValidHeader = ALLOWED_PEM_HEADERS.some((header) =>
+    content.includes(header)
+  );
+  if (!hasValidHeader) {
     throw new Error(
-      `SNOWFLAKE_KEY_PAIR_KEY file does not contain a valid PEM key: ${filePath}`
+      "SNOWFLAKE_KEY_PAIR_KEY file is not a valid PEM private key. " +
+      "Expected a file containing one of: PRIVATE KEY, RSA PRIVATE KEY, or ENCRYPTED PRIVATE KEY."
     );
   }
   return content;
@@ -246,16 +288,111 @@ function getAutoCacheMaxBytes(): number {
   return parsed;
 }
 
+function cleanupStaleAutoCacheFiles(autoCacheDir: string): void {
+  try {
+    const sessionTimestamp = SESSION_START_TIME.toISOString().replace(/[:.]/g, "-");
+    const files = readdirSync(autoCacheDir)
+      .filter((f) => f.endsWith(".json"))
+      .sort();
+
+    for (const file of files) {
+      // Filenames are: {ISO_timestamp}-{tool-name}-{uuid}.json
+      // Compare the timestamp prefix against session start
+      if (file < sessionTimestamp) {
+        try {
+          unlinkSync(join(autoCacheDir, file));
+        } catch {
+          // Best-effort — skip files that can't be deleted
+        }
+      }
+    }
+  } catch {
+    // Best-effort cleanup — don't fail the write
+  }
+}
+
 function buildAutoCacheFilePath(
   toolName: string,
   cachedAt: string,
   baseDir: string
 ): string {
-  const directory = join(baseDir, "data", "auto-cache");
+  const directory = join(baseDir, CACHE_DIR_NAME, "auto-cache");
   mkdirSync(directory, { recursive: true });
   const timestamp = cachedAt.replace(/[:.]/g, "-");
   const safeToolName = slugifyFileComponent(toolName) || "tool-response";
   return join(directory, `${timestamp}-${safeToolName}-${randomUUID()}.json`);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function humanizeFieldName(fieldName: string): string {
+  const stripped = fieldName.replace(/(Path|Uri)$/, "");
+  const humanized = stripped
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim();
+  return humanized.length > 0
+    ? humanized.charAt(0).toUpperCase() + humanized.slice(1)
+    : "Cached artifact";
+}
+
+function buildCacheLinkForField(
+  fieldName: string,
+  filePath: string,
+  baseDir: string
+): CacheResourceLink | null {
+  return buildCacheResourceLink(filePath, {
+    baseDir,
+    name: humanizeFieldName(fieldName),
+    description: "Read this cached artifact through the MCP resource URI.",
+  });
+}
+
+function externalizeCachePaths(
+  value: unknown,
+  baseDir: string,
+  resourceLinks: Map<string, CacheResourceLink>
+): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => externalizeCachePaths(item, baseDir, resourceLinks));
+  }
+
+  if (!isPlainRecord(value)) {
+    return value;
+  }
+
+  const output: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (typeof child === "string") {
+      const link = buildCacheLinkForField(key, child, baseDir);
+      if (link) {
+        const renamedKey =
+          key.endsWith("Path") && !Object.prototype.hasOwnProperty.call(value, `${key.slice(0, -4)}Uri`)
+            ? `${key.slice(0, -4)}Uri`
+            : key;
+        output[renamedKey] = link.uri;
+        resourceLinks.set(link.uri, link);
+        continue;
+      }
+    }
+
+    output[key] = externalizeCachePaths(child, baseDir, resourceLinks);
+  }
+
+  return output;
+}
+
+function buildInlineJsonResponse(
+  result: unknown,
+  resourceLinks: CacheResourceLink[]
+): JsonToolResponse {
+  const text = JSON.stringify(result, null, 2);
+  return {
+    content: [{ type: "text", text }, ...resourceLinks],
+    ...(isPlainRecord(result) ? { structuredContent: result } : {}),
+  };
 }
 
 export function buildJsonToolResponse(
@@ -263,47 +400,60 @@ export function buildJsonToolResponse(
   result: unknown,
   options: JsonToolResponseOptions = {}
 ): JsonToolResponse {
-  const text = JSON.stringify(result, null, 2);
+  const baseDir = options.baseDir ?? process.cwd();
+  const resourceLinks = new Map<string, CacheResourceLink>();
+  const externalizedResult = externalizeCachePaths(result, baseDir, resourceLinks);
+  const text = JSON.stringify(externalizedResult, null, 2);
   const maxInlineBytes = options.maxInlineBytes ?? getAutoCacheMaxBytes();
   const sizeBytes = Buffer.byteLength(text, "utf8");
 
   if (sizeBytes <= maxInlineBytes) {
-    return {
-      content: [{ type: "text", text }],
-    };
+    return buildInlineJsonResponse(
+      externalizedResult,
+      [...resourceLinks.values()]
+    );
   }
 
   const cachedAt = new Date().toISOString();
-  const baseDir = options.baseDir ?? process.cwd();
   const filePath = buildAutoCacheFilePath(toolName, cachedAt, baseDir);
   try {
     writeFileSync(filePath, `${text}\n`, "utf8");
+    cleanupStaleAutoCacheFiles(dirname(filePath));
   } catch {
-    return {
-      content: [{ type: "text", text }],
-    };
+    return buildInlineJsonResponse(
+      externalizedResult,
+      [...resourceLinks.values()]
+    );
   }
+
+  const cacheLink =
+    buildCacheResourceLink(filePath, {
+      baseDir,
+      name: `${toolName} cached response`,
+      description:
+        "Full tool response cached on the MCP server because it exceeded the inline response threshold.",
+    }) ?? null;
+
+  const metadata: Record<string, unknown> = {
+    autoCached: true,
+    toolName,
+    cachedAt,
+    sizeBytes,
+    maxInlineBytes,
+    ...(cacheLink ? { resourceUri: cacheLink.uri } : {}),
+    message:
+      "Full response was automatically cached to disk because it exceeded the inline response threshold.",
+  };
 
   return {
     content: [
       {
         type: "text",
-        text: JSON.stringify(
-          {
-            autoCached: true,
-            toolName,
-            cachedAt,
-            filePath,
-            sizeBytes,
-            maxInlineBytes,
-            message:
-              "Full response was automatically cached to disk because it exceeded the inline response threshold.",
-          },
-          null,
-          2
-        ),
+        text: JSON.stringify(metadata, null, 2),
       },
+      ...(cacheLink ? [cacheLink] : []),
     ],
+    structuredContent: metadata,
   };
 }
 

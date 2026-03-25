@@ -198,6 +198,281 @@ describe("CoalesceClient", () => {
       );
     });
 
+    it("rejects request body exceeding size limit", async () => {
+      const mockFetch = vi.fn();
+      vi.stubGlobal("fetch", mockFetch);
+
+      // Set a very low limit for testing
+      process.env.COALESCE_MCP_MAX_REQUEST_BODY_BYTES = "100";
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+
+      const largeBody = { data: "x".repeat(200) };
+      await expect(client.post("/scheduler/startRun", largeBody)).rejects.toMatchObject({
+        message: expect.stringContaining("exceeds"),
+        status: 413,
+      });
+
+      // Should never have called fetch
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("allows request body within size limit", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ok: true }),
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      process.env.COALESCE_MCP_MAX_REQUEST_BODY_BYTES = "10000";
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+
+      const smallBody = { data: "hello" };
+      const result = await client.post("/scheduler/startRun", smallBody);
+      expect(result).toEqual({ ok: true });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("uses default 512KB limit when env var is not set", async () => {
+      const mockFetch = vi.fn();
+      vi.stubGlobal("fetch", mockFetch);
+
+      delete process.env.COALESCE_MCP_MAX_REQUEST_BODY_BYTES;
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+
+      // 100KB body should be fine under 512KB default
+      const body = { data: "x".repeat(100_000) };
+      const mockResponse = {
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ok: true }),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
+      const result = await client.post("/api/v1/test", body);
+      expect(result).toEqual({ ok: true });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("includes override hint in body size error message", async () => {
+      vi.stubGlobal("fetch", vi.fn());
+      process.env.COALESCE_MCP_MAX_REQUEST_BODY_BYTES = "10";
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+
+      await expect(client.post("/test", { big: "data" })).rejects.toThrow(
+        "COALESCE_MCP_MAX_REQUEST_BODY_BYTES"
+      );
+    });
+
+    it("retries on 429 and succeeds on subsequent attempt", async () => {
+      vi.useFakeTimers();
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: new Headers({ "Retry-After": "1" }),
+          json: () => Promise.resolve({}),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: "ok" }),
+        });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+      const promise = client.get("/api/v1/environments");
+
+      // Advance past the Retry-After delay
+      await vi.advanceTimersByTimeAsync(1_000);
+      const result = await promise;
+
+      expect(result).toEqual({ data: "ok" });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("throws after exhausting all 5 retry attempts on 429", async () => {
+      vi.useFakeTimers();
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Headers(),
+        json: () => Promise.resolve({}),
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+      const promise = expect(client.get("/api/v1/environments")).rejects.toMatchObject({
+        message: "Coalesce API rate limit exceeded",
+        status: 429,
+      });
+
+      // Advance through all 4 retry delays: 1s + 2s + 4s + 8s = 15s
+      await vi.advanceTimersByTimeAsync(15_000);
+      await promise;
+
+      expect(mockFetch).toHaveBeenCalledTimes(5);
+    });
+
+    it("uses exponential backoff when no Retry-After header", async () => {
+      vi.useFakeTimers();
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: new Headers(),
+          json: () => Promise.resolve({}),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: new Headers(),
+          json: () => Promise.resolve({}),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: "ok" }),
+        });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+      const promise = client.get("/api/v1/environments");
+
+      // First retry: 1s backoff (attempt 0)
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+
+      // Second retry: 2s backoff (attempt 1)
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+
+      const result = await promise;
+      expect(result).toEqual({ data: "ok" });
+    });
+
+    it("respects Retry-After header over exponential backoff", async () => {
+      vi.useFakeTimers();
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: new Headers({ "Retry-After": "5" }),
+          json: () => Promise.resolve({}),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: "ok" }),
+        });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+      const promise = client.get("/api/v1/environments");
+
+      // Should not have retried yet at 1s (exponential would be 1s, but Retry-After says 5)
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      // Should retry after 5s
+      await vi.advanceTimersByTimeAsync(4_000);
+      const result = await promise;
+
+      expect(result).toEqual({ data: "ok" });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not retry non-429 errors", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        headers: new Headers(),
+        json: () => Promise.resolve({}),
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+
+      await expect(client.get("/api/v1/environments")).rejects.toMatchObject({
+        status: 500,
+      });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not retry write requests on 429", async () => {
+      const verbs = [
+        {
+          label: "POST",
+          invoke: (client: ReturnType<typeof createClient>) => client.post("/api/v1/projects", { name: "Test" }),
+        },
+        {
+          label: "PUT",
+          invoke: (client: ReturnType<typeof createClient>) => client.put("/api/v1/projects/1", { name: "Test" }),
+        },
+        {
+          label: "PATCH",
+          invoke: (client: ReturnType<typeof createClient>) => client.patch("/api/v1/projects/1", undefined, { name: "Test" }),
+        },
+        {
+          label: "DELETE",
+          invoke: (client: ReturnType<typeof createClient>) => client.delete("/api/v1/projects/1"),
+        },
+      ] as const;
+
+      for (const { label, invoke } of verbs) {
+        const mockFetch = vi.fn().mockResolvedValue({
+          ok: false,
+          status: 429,
+          headers: new Headers({ "Retry-After": "1" }),
+          json: () => Promise.resolve({}),
+        });
+        vi.stubGlobal("fetch", mockFetch);
+
+        const client = createClient({
+          accessToken: "test-token",
+          baseUrl: "https://app.coalescesoftware.io",
+        });
+
+        await expect(invoke(client)).rejects.toMatchObject({
+          message: "Coalesce API rate limit exceeded",
+          status: 429,
+        });
+        expect(mockFetch, `${label} should not be retried`).toHaveBeenCalledTimes(1);
+      }
+    });
+
+
     it("handles 204 no-content response", async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,

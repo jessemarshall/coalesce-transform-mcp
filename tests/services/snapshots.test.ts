@@ -17,8 +17,8 @@ function createMockClient() {
   };
 }
 
-describe("fetchAllPaginatedToMemory safety cap", () => {
-  it("throws when item count exceeds 250", async () => {
+describe("fetchAllPaginatedToMemory", () => {
+  it("collects multiple pages even when total item count exceeds 250", async () => {
     const client = createMockClient();
     const page1Items = Array.from({ length: 200 }, (_, i) => ({
       id: `node-${i}`,
@@ -38,11 +38,15 @@ describe("fetchAllPaginatedToMemory safety cap", () => {
       return Promise.resolve({ data: page2Items });
     });
 
-    await expect(
-      fetchAllWorkspaceNodes(client as any, { workspaceID: "ws-1", detail: false })
-    ).rejects.toThrow(
-      /exceeded 250 item safety limit/
-    );
+    const result = await fetchAllWorkspaceNodes(client as any, {
+      workspaceID: "ws-1",
+      detail: false,
+    });
+
+    expect(result.items).toHaveLength(300);
+    expect(result.pageCount).toBe(2);
+    expect(result.pageSize).toBe(250);
+    expect(result.orderBy).toBe("id");
   });
 
   it("succeeds when item count is within 250", async () => {

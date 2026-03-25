@@ -1,5 +1,16 @@
-import type { CoalesceClient } from "../../client.js";
+import type { CoalesceClient, QueryParams } from "../../client.js";
 import { validatePathSegment } from "../types.js";
+
+export async function listEnvironmentJobs(
+  client: CoalesceClient,
+  params: { environmentID: string } & QueryParams
+): Promise<unknown> {
+  const { environmentID, ...query } = params;
+  return client.get(
+    `/api/v1/environments/${validatePathSegment(environmentID, "environmentID")}/jobs`,
+    query
+  );
+}
 
 export async function createWorkspaceJob(
   client: CoalesceClient,

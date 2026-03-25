@@ -6,11 +6,13 @@ import {
   RunDetailsSchema,
   UserCredentialsSchema,
   StartRunParams,
+  WorkspaceNodeBodySchema,
   buildJsonToolResponse,
   sanitizeResponse,
   validatePathSegment,
   handleToolError,
 } from "../src/coalesce/types.js";
+import { resolveCacheResourceUri } from "../src/cache-dir.js";
 import { CoalesceApiError } from "../src/client.js";
 
 const tempDirs: string[] = [];
@@ -236,7 +238,42 @@ describe("buildJsonToolResponse", () => {
           text: JSON.stringify({ data: [{ id: "env-1" }] }, null, 2),
         },
       ],
+      structuredContent: { data: [{ id: "env-1" }] },
     });
+  });
+
+  it("replaces cache file paths with MCP resource URIs in inline payloads", () => {
+    const baseDir = mkdtempSync(join(tmpdir(), "coalesce-inline-cache-schema-"));
+    tempDirs.push(baseDir);
+
+    const payload = {
+      filePath: join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "workspace-ws-1-nodes.ndjson"),
+      metaPath: join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "workspace-ws-1-nodes.meta.json"),
+      totalNodes: 2,
+    };
+
+    const result = buildJsonToolResponse("cache-workspace-nodes", payload, {
+      baseDir,
+      maxInlineBytes: 4096,
+    });
+
+    const parsed = JSON.parse(result.content[0]!.text);
+    expect(parsed).toMatchObject({
+      fileUri: expect.stringContaining("coalesce://cache/"),
+      metaUri: expect.stringContaining("coalesce://cache/"),
+      totalNodes: 2,
+    });
+    expect(parsed).not.toHaveProperty("filePath");
+    expect(parsed).not.toHaveProperty("metaPath");
+    expect(result.content[1]).toMatchObject({
+      type: "resource_link",
+      uri: parsed.fileUri,
+    });
+    expect(result.content[2]).toMatchObject({
+      type: "resource_link",
+      uri: parsed.metaUri,
+    });
+    expect(result.structuredContent).toMatchObject(parsed);
   });
 
   it("auto-caches large payloads to disk and returns metadata", () => {
@@ -263,11 +300,79 @@ describe("buildJsonToolResponse", () => {
     expect(metadata).toMatchObject({
       autoCached: true,
       toolName: "list-workspace-nodes",
-      filePath: expect.stringContaining(join(baseDir, "data", "auto-cache")),
+      resourceUri: expect.stringContaining("coalesce://cache/"),
       maxInlineBytes: 128,
     });
 
-    const cached = JSON.parse(readFileSync(metadata.filePath, "utf8"));
+    const resolved = resolveCacheResourceUri(metadata.resourceUri, baseDir);
+    expect(resolved).not.toBeNull();
+
+    const cached = JSON.parse(readFileSync(resolved!.filePath, "utf8"));
     expect(cached).toEqual(payload);
+    expect(result.content[1]).toMatchObject({
+      type: "resource_link",
+      uri: metadata.resourceUri,
+    });
+    expect(result.structuredContent).toMatchObject(metadata);
+  });
+});
+
+describe("WorkspaceNodeBodySchema", () => {
+  it("accepts an empty object", () => {
+    expect(WorkspaceNodeBodySchema.safeParse({}).success).toBe(true);
+  });
+
+  it("accepts a complete valid body", () => {
+    const result = WorkspaceNodeBodySchema.safeParse({
+      name: "STG_ORDERS",
+      description: "Staging orders node",
+      nodeType: "base-nodes:::Stage",
+      database: "ANALYTICS",
+      schema: "PUBLIC",
+      locationName: "ETL_STAGE",
+      storageLocations: [{ name: "default", locationName: "ETL_STAGE" }],
+      config: { insertStrategy: "MERGE" },
+      metadata: { columns: [{ name: "ORDER_ID", dataType: "NUMBER" }] },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("passes through unknown node-type-specific fields", () => {
+    const body = { name: "MY_NODE", customField: "allowed", nested: { extra: true } };
+    const result = WorkspaceNodeBodySchema.safeParse(body);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toMatchObject({ customField: "allowed", nested: { extra: true } });
+    }
+  });
+
+  it("rejects name as a non-string", () => {
+    expect(WorkspaceNodeBodySchema.safeParse({ name: 42 }).success).toBe(false);
+  });
+
+  it("rejects storageLocations as a non-array", () => {
+    expect(WorkspaceNodeBodySchema.safeParse({ storageLocations: { name: "bad" } }).success).toBe(false);
+  });
+
+  it("rejects config as a non-object", () => {
+    expect(WorkspaceNodeBodySchema.safeParse({ config: "bad" }).success).toBe(false);
+  });
+
+  it("rejects metadata as a non-object", () => {
+    expect(WorkspaceNodeBodySchema.safeParse({ metadata: "bad" }).success).toBe(false);
+  });
+
+  it("rejects metadata.columns as a non-array", () => {
+    expect(WorkspaceNodeBodySchema.safeParse({ metadata: { columns: "bad" } }).success).toBe(false);
+  });
+
+  it("passes through unknown fields inside metadata", () => {
+    const result = WorkspaceNodeBodySchema.safeParse({
+      metadata: { columns: [], sourceMapping: { refs: [] } },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect((result.data.metadata as Record<string, unknown>)?.sourceMapping).toEqual({ refs: [] });
+    }
   });
 });
