@@ -10,7 +10,7 @@ coverage/
 *.log
 .mcp.json
 .mcp/
-data/
+coalesce_transform_mcp_data_cache/
 *.pem
 .worktrees/
 src/generated/

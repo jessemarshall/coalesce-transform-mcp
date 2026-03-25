@@ -64,7 +64,7 @@ describe("cache snapshot tools", () => {
       { baseDir }
     );
 
-    expect(result.filePath).toBe(join(baseDir, "data", "nodes", "workspace-ws-1-nodes.json"));
+    expect(result.filePath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "workspace-ws-1-nodes.json"));
     expect(result.totalNodes).toBe(2);
     expect(client.get).toHaveBeenNthCalledWith(
       1,
@@ -102,7 +102,7 @@ describe("cache snapshot tools", () => {
     );
 
     expect(result.filePath).toBe(
-      join(baseDir, "data", "nodes", "environment-env-1-nodes-summary.json")
+      join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "environment-env-1-nodes-summary.json")
     );
     expect(result.detail).toBe(false);
     expect(client.get).toHaveBeenCalledWith("/api/v1/environments/env-1/nodes", {
@@ -132,7 +132,7 @@ describe("cache snapshot tools", () => {
       { baseDir }
     );
 
-    expect(result.filePath).toBe(join(baseDir, "data", "runs", "runs-failed-detail.json"));
+    expect(result.filePath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "runs", "runs-failed-detail.json"));
 
     const snapshot = JSON.parse(readFileSync(result.filePath, "utf8"));
     expect(snapshot).toMatchObject({
@@ -156,7 +156,7 @@ describe("cache snapshot tools", () => {
 
     const result = await cacheOrgUsers(client as any, {}, { baseDir });
 
-    expect(result.filePath).toBe(join(baseDir, "data", "users", "org-users.json"));
+    expect(result.filePath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "users", "org-users.json"));
     expect(result.totalUsers).toBe(2);
 
     const snapshot = JSON.parse(readFileSync(result.filePath, "utf8"));

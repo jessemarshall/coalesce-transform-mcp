@@ -7,6 +7,7 @@ import { listOrgUsers } from "../../coalesce/api/users.js";
 import { sanitizeResponse, validatePathSegment } from "../../coalesce/types.js";
 import type { NodeSummary } from "../workspace/analysis.js";
 import { isPlainObject } from "../../utils.js";
+import { CACHE_DIR_NAME } from "../../cache-dir.js";
 
 const DEFAULT_PAGE_SIZE = 250;
 
@@ -110,7 +111,7 @@ function writeSnapshotFile(
   options?: CacheWriteOptions
 ): string {
   const baseDir = options?.baseDir ?? process.cwd();
-  const directory = ensureDirectory(baseDir, "data", ...relativeDirectory);
+  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, ...relativeDirectory);
   const filePath = join(directory, fileName);
   writeFileSync(filePath, `${JSON.stringify(body, null, 2)}\n`, "utf8");
   return filePath;

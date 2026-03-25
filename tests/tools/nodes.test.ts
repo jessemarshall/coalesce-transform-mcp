@@ -152,7 +152,7 @@ describe("Node Tools", () => {
       expect(metadata).toMatchObject({
         autoCached: true,
         toolName: "list-workspace-nodes",
-        filePath: expect.stringContaining(join(tempDir, "data", "auto-cache")),
+        filePath: expect.stringContaining(join(tempDir, "coalesce_transform_mcp_data_cache", "auto-cache")),
       });
 
       const cached = JSON.parse(readFileSync(metadata.filePath, "utf8"));
