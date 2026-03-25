@@ -153,6 +153,43 @@ function cleanupOldPlanFiles(dir: string, workspaceID: string, maxToKeep: number
   }
 }
 
+function buildPlanSummaryForElicitation(plan: unknown): string {
+  const lines: string[] = ["Pipeline plan ready. Review the nodes to be created:"];
+  lines.push("");
+
+  if (isPlainObject(plan)) {
+    // cteNodeSummary is populated for SQL-sourced plans; nodes for goal-based plans
+    const cteNodes = Array.isArray(plan.cteNodeSummary) ? plan.cteNodeSummary.filter(isPlainObject) : [];
+    const planNodes = Array.isArray(plan.nodes) ? plan.nodes.filter(isPlainObject) : [];
+    const nodesToShow = cteNodes.length > 0 ? cteNodes : planNodes;
+
+    if (nodesToShow.length === 0) {
+      lines.push("  (No node details available in plan)");
+    } else {
+      for (const node of nodesToShow) {
+        const name = typeof node.name === "string" ? node.name : "(unnamed)";
+        const nodeType = typeof node.nodeType === "string" ? node.nodeType : "(unknown type)";
+        lines.push(`  • ${name}  [${nodeType}]`);
+      }
+    }
+
+    const warnings = Array.isArray(plan.warnings)
+      ? plan.warnings.filter((w): w is string => typeof w === "string")
+      : [];
+    if (warnings.length > 0) {
+      lines.push("");
+      lines.push("Warnings:");
+      for (const w of warnings) {
+        lines.push(`  ⚠  ${w}`);
+      }
+    }
+  }
+
+  lines.push("");
+  lines.push("Confirm to proceed with node creation, or cancel to abort.");
+  return lines.join("\n");
+}
+
 export function registerPipelineTools(
   server: McpServer,
   client: CoalesceClient
@@ -278,6 +315,48 @@ export function registerPipelineTools(
     WRITE_ANNOTATIONS,
     async (params) => {
       try {
+        if (!params.dryRun) {
+          const planSummary = buildPlanSummaryForElicitation(params.plan);
+          try {
+            const elicitation = await server.server.elicitInput({
+              message: planSummary,
+              requestedSchema: {
+                type: "object",
+                properties: {
+                  confirmed: {
+                    type: "boolean",
+                    title: "Create these pipeline nodes?",
+                    description: "Select true to proceed with node creation, false to cancel.",
+                  },
+                },
+                required: ["confirmed"],
+              },
+            });
+
+            if (elicitation.action !== "accept" || elicitation.content?.confirmed !== true) {
+              return buildJsonToolResponse("create-pipeline-from-plan", {
+                created: false,
+                cancelled: true,
+                reason:
+                  elicitation.action === "accept"
+                    ? "User declined pipeline creation."
+                    : `Pipeline creation ${elicitation.action}d by user.`,
+              });
+            }
+          } catch (elicitError) {
+            // Client does not support elicitation — fall back to STOP_AND_CONFIRM convention
+            if (elicitError instanceof Error && elicitError.message.includes("does not support")) {
+              return buildJsonToolResponse("create-pipeline-from-plan", {
+                created: false,
+                STOP_AND_CONFIRM:
+                  "STOP. Present the pipeline plan to the user in a table showing each node name and nodeType. Ask for explicit approval BEFORE creating any nodes. Once the user approves, call create-pipeline-from-plan again.",
+                plan: params.plan,
+              });
+            }
+            throw elicitError;
+          }
+        }
+
         const result = await createPipelineFromPlan(client, params);
         return buildJsonToolResponse("create-pipeline-from-plan", result);
       } catch (error) {
