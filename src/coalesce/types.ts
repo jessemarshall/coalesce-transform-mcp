@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { CACHE_DIR_NAME } from "../cache-dir.js";
 import { z } from "zod";
+
+const SESSION_START_TIME = new Date();
 
 // Pagination params — only used by endpoints that support it
 export const PaginationParams = z.object({
@@ -147,16 +150,27 @@ export function buildRerunBody(params: RerunInput) {
   };
 }
 
+const ALLOWED_PEM_HEADERS = [
+  "-----BEGIN PRIVATE KEY-----",
+  "-----BEGIN RSA PRIVATE KEY-----",
+  "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+] as const;
+
 function readKeyPairFile(filePath: string): string {
   if (!existsSync(filePath)) {
     throw new Error(
-      `SNOWFLAKE_KEY_PAIR_KEY file not found: ${filePath}`
+      "SNOWFLAKE_KEY_PAIR_KEY file not found at the configured path. " +
+      "Check that the environment variable points to an existing PEM private key file."
     );
   }
   const content = readFileSync(filePath, "utf-8").trim();
-  if (!content.includes("-----BEGIN")) {
+  const hasValidHeader = ALLOWED_PEM_HEADERS.some((header) =>
+    content.includes(header)
+  );
+  if (!hasValidHeader) {
     throw new Error(
-      `SNOWFLAKE_KEY_PAIR_KEY file does not contain a valid PEM key: ${filePath}`
+      "SNOWFLAKE_KEY_PAIR_KEY file is not a valid PEM private key. " +
+      "Expected a file containing one of: PRIVATE KEY, RSA PRIVATE KEY, or ENCRYPTED PRIVATE KEY."
     );
   }
   return content;
@@ -246,12 +260,35 @@ function getAutoCacheMaxBytes(): number {
   return parsed;
 }
 
+function cleanupStaleAutoCacheFiles(autoCacheDir: string): void {
+  try {
+    const sessionTimestamp = SESSION_START_TIME.toISOString().replace(/[:.]/g, "-");
+    const files = readdirSync(autoCacheDir)
+      .filter((f) => f.endsWith(".json"))
+      .sort();
+
+    for (const file of files) {
+      // Filenames are: {ISO_timestamp}-{tool-name}-{uuid}.json
+      // Compare the timestamp prefix against session start
+      if (file < sessionTimestamp) {
+        try {
+          unlinkSync(join(autoCacheDir, file));
+        } catch {
+          // Best-effort — skip files that can't be deleted
+        }
+      }
+    }
+  } catch {
+    // Best-effort cleanup — don't fail the write
+  }
+}
+
 function buildAutoCacheFilePath(
   toolName: string,
   cachedAt: string,
   baseDir: string
 ): string {
-  const directory = join(baseDir, "data", "auto-cache");
+  const directory = join(baseDir, CACHE_DIR_NAME, "auto-cache");
   mkdirSync(directory, { recursive: true });
   const timestamp = cachedAt.replace(/[:.]/g, "-");
   const safeToolName = slugifyFileComponent(toolName) || "tool-response";
@@ -278,6 +315,7 @@ export function buildJsonToolResponse(
   const filePath = buildAutoCacheFilePath(toolName, cachedAt, baseDir);
   try {
     writeFileSync(filePath, `${text}\n`, "utf8");
+    cleanupStaleAutoCacheFiles(dirname(filePath));
   } catch {
     return {
       content: [{ type: "text", text }],

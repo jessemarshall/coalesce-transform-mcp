@@ -1,5 +1,5 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { CoalesceClient, QueryParams } from "../../client.js";
 import { listEnvironmentNodes, listWorkspaceNodes } from "../../coalesce/api/nodes.js";
 import { listRuns } from "../../coalesce/api/runs.js";
@@ -7,8 +7,10 @@ import { listOrgUsers } from "../../coalesce/api/users.js";
 import { sanitizeResponse, validatePathSegment } from "../../coalesce/types.js";
 import type { NodeSummary } from "../workspace/analysis.js";
 import { isPlainObject } from "../../utils.js";
+import { CACHE_DIR_NAME } from "../../cache-dir.js";
 
 const DEFAULT_PAGE_SIZE = 250;
+const MAX_IN_MEMORY_ITEMS = 250;
 
 type PaginatedParams = {
   pageSize?: number;
@@ -49,7 +51,7 @@ function parseCollectionPage(response: unknown): CollectionPage {
   };
 }
 
-async function fetchAllPaginated(
+async function fetchAllPaginatedToMemory(
   fetchPage: FetchPage,
   baseParams: QueryParams,
   params: PaginatedParams
@@ -75,6 +77,12 @@ async function fetchAllPaginated(
 
     const page = parseCollectionPage(response);
     items.push(...page.data);
+    if (items.length > MAX_IN_MEMORY_ITEMS) {
+      throw new Error(
+        `Pagination exceeded ${MAX_IN_MEMORY_ITEMS} item safety limit. ` +
+        `Use a cache-* tool for large collections.`
+      );
+    }
     pageCount += 1;
 
     if (page.next) {
@@ -97,23 +105,93 @@ async function fetchAllPaginated(
   };
 }
 
+type StreamToDiskOptions = {
+  ndjsonPath: string;
+  metaPath: string;
+  itemTransform?: (item: unknown) => unknown;
+};
+
+type StreamToDiskResult = {
+  totalItems: number;
+  pageCount: number;
+  pageSize: number;
+  orderBy: string;
+  orderByDirection?: "asc" | "desc";
+  cachedAt: string;
+};
+
+export async function streamAllPaginatedToDisk(
+  fetchPage: FetchPage,
+  baseParams: QueryParams,
+  params: PaginatedParams,
+  options: StreamToDiskOptions
+): Promise<StreamToDiskResult> {
+  const { ndjsonPath, metaPath, itemTransform } = options;
+  const seenCursors = new Set<string>();
+  const pageSize = Math.max(1, Math.floor(params.pageSize ?? DEFAULT_PAGE_SIZE));
+  const orderBy = params.orderBy ?? "id";
+  const orderByDirection = params.orderByDirection;
+  const cachedAt = new Date().toISOString();
+
+  // Ensure parent directory exists
+  mkdirSync(dirname(ndjsonPath), { recursive: true });
+
+  // Write empty file to start (truncates any previous file)
+  writeFileSync(ndjsonPath, "", "utf8");
+
+  let totalItems = 0;
+  let next: string | undefined;
+  let isFirstPage = true;
+  let pageCount = 0;
+
+  while (isFirstPage || next) {
+    const response = await fetchPage({
+      ...baseParams,
+      limit: pageSize,
+      orderBy,
+      ...(orderByDirection ? { orderByDirection } : {}),
+      ...(next ? { startingFrom: next } : {}),
+    });
+
+    const page = parseCollectionPage(response);
+    pageCount += 1;
+
+    // Write each item as a single NDJSON line
+    for (const item of page.data) {
+      const transformed = itemTransform ? itemTransform(item) : item;
+      appendFileSync(ndjsonPath, JSON.stringify(transformed) + "\n", "utf8");
+      totalItems += 1;
+    }
+
+    if (page.next) {
+      if (seenCursors.has(page.next)) {
+        throw new Error(`Pagination repeated cursor ${page.next}`);
+      }
+      seenCursors.add(page.next);
+    }
+
+    next = page.next;
+    isFirstPage = false;
+  }
+
+  // Write meta file only on successful completion
+  const meta: StreamToDiskResult = {
+    totalItems,
+    pageCount,
+    pageSize,
+    orderBy,
+    ...(orderByDirection ? { orderByDirection } : {}),
+    cachedAt,
+  };
+  writeFileSync(metaPath, JSON.stringify(meta, null, 2) + "\n", "utf8");
+
+  return meta;
+}
+
 function ensureDirectory(...parts: string[]): string {
   const directory = join(...parts);
   mkdirSync(directory, { recursive: true });
   return directory;
-}
-
-function writeSnapshotFile(
-  relativeDirectory: string[],
-  fileName: string,
-  body: unknown,
-  options?: CacheWriteOptions
-): string {
-  const baseDir = options?.baseDir ?? process.cwd();
-  const directory = ensureDirectory(baseDir, "data", ...relativeDirectory);
-  const filePath = join(directory, fileName);
-  writeFileSync(filePath, `${JSON.stringify(body, null, 2)}\n`, "utf8");
-  return filePath;
 }
 
 function buildNodeCacheFileName(
@@ -123,9 +201,9 @@ function buildNodeCacheFileName(
 ): string {
   const safeID = validatePathSegment(id, `${scope}ID`);
   if (detail) {
-    return `${scope}-${safeID}-nodes.json`;
+    return `${scope}-${safeID}-nodes.ndjson`;
   }
-  return `${scope}-${safeID}-nodes-summary.json`;
+  return `${scope}-${safeID}-nodes-summary.ndjson`;
 }
 
 function buildRunsCacheFileName(params: {
@@ -145,14 +223,14 @@ function buildRunsCacheFileName(params: {
     parts.push(params.runStatus);
   }
   parts.push(params.detail === true ? "detail" : "summary");
-  return `${parts.join("-")}.json`;
+  return `${parts.join("-")}.ndjson`;
 }
 
 export async function fetchAllWorkspaceNodes(
   client: CoalesceClient,
   params: { workspaceID: string; detail?: boolean } & PaginatedParams
 ): Promise<PaginatedCollectionResult> {
-  return fetchAllPaginated(
+  return fetchAllPaginatedToMemory(
     (queryParams) => listWorkspaceNodes(client, queryParams as QueryParams & { workspaceID: string }),
     {
       workspaceID: validatePathSegment(params.workspaceID, "workspaceID"),
@@ -166,7 +244,7 @@ export async function fetchAllEnvironmentNodes(
   client: CoalesceClient,
   params: { environmentID: string; detail?: boolean } & PaginatedParams
 ): Promise<PaginatedCollectionResult> {
-  return fetchAllPaginated(
+  return fetchAllPaginatedToMemory(
     (queryParams) =>
       listEnvironmentNodes(client, queryParams as QueryParams & { environmentID: string }),
     {
@@ -186,7 +264,7 @@ export async function fetchAllRuns(
     detail?: boolean;
   } & PaginatedParams
 ): Promise<PaginatedCollectionResult> {
-  return fetchAllPaginated(
+  return fetchAllPaginatedToMemory(
     (queryParams) => listRuns(client, queryParams),
     {
       ...(params.runType ? { runType: params.runType } : {}),
@@ -204,7 +282,7 @@ export async function fetchAllOrgUsers(
   client: CoalesceClient,
   params: PaginatedParams
 ): Promise<PaginatedCollectionResult> {
-  return fetchAllPaginated((queryParams) => listOrgUsers(client, queryParams), {}, params);
+  return fetchAllPaginatedToMemory((queryParams) => listOrgUsers(client, queryParams), {}, params);
 }
 
 export function toNodeSummaries(nodes: unknown[]): NodeSummary[] {
@@ -237,39 +315,38 @@ export async function cacheWorkspaceNodes(
   orderBy: string;
   orderByDirection?: "asc" | "desc";
   filePath: string;
+  metaPath: string;
   cachedAt: string;
 }> {
   const detail = params.detail ?? true;
-  const cachedAt = new Date().toISOString();
-  const result = await fetchAllWorkspaceNodes(client, { ...params, detail });
-  const filePath = writeSnapshotFile(
-    ["nodes"],
-    buildNodeCacheFileName("workspace", params.workspaceID, detail),
+  const baseDir = options?.baseDir ?? process.cwd();
+  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, "nodes");
+  const baseName = buildNodeCacheFileName("workspace", params.workspaceID, detail);
+  const ndjsonPath = join(directory, baseName);
+  const metaPath = join(directory, baseName.replace(/\.ndjson$/, ".meta.json"));
+
+  const result = await streamAllPaginatedToDisk(
+    (queryParams) =>
+      listWorkspaceNodes(client, queryParams as QueryParams & { workspaceID: string }),
     {
-      cachedAt,
-      scope: "workspace",
-      workspaceID: params.workspaceID,
-      detail,
-      totalNodes: result.items.length,
-      pageCount: result.pageCount,
-      pageSize: result.pageSize,
-      orderBy: result.orderBy,
-      ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-      nodes: result.items,
+      workspaceID: validatePathSegment(params.workspaceID, "workspaceID"),
+      ...(detail !== undefined ? { detail } : {}),
     },
-    options
+    params,
+    { ndjsonPath, metaPath }
   );
 
   return {
     workspaceID: params.workspaceID,
     detail,
-    totalNodes: result.items.length,
+    totalNodes: result.totalItems,
     pageCount: result.pageCount,
     pageSize: result.pageSize,
     orderBy: result.orderBy,
     ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-    filePath,
-    cachedAt,
+    filePath: ndjsonPath,
+    metaPath,
+    cachedAt: result.cachedAt,
   };
 }
 
@@ -286,39 +363,38 @@ export async function cacheEnvironmentNodes(
   orderBy: string;
   orderByDirection?: "asc" | "desc";
   filePath: string;
+  metaPath: string;
   cachedAt: string;
 }> {
   const detail = params.detail ?? true;
-  const cachedAt = new Date().toISOString();
-  const result = await fetchAllEnvironmentNodes(client, { ...params, detail });
-  const filePath = writeSnapshotFile(
-    ["nodes"],
-    buildNodeCacheFileName("environment", params.environmentID, detail),
+  const baseDir = options?.baseDir ?? process.cwd();
+  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, "nodes");
+  const baseName = buildNodeCacheFileName("environment", params.environmentID, detail);
+  const ndjsonPath = join(directory, baseName);
+  const metaPath = join(directory, baseName.replace(/\.ndjson$/, ".meta.json"));
+
+  const result = await streamAllPaginatedToDisk(
+    (queryParams) =>
+      listEnvironmentNodes(client, queryParams as QueryParams & { environmentID: string }),
     {
-      cachedAt,
-      scope: "environment",
-      environmentID: params.environmentID,
-      detail,
-      totalNodes: result.items.length,
-      pageCount: result.pageCount,
-      pageSize: result.pageSize,
-      orderBy: result.orderBy,
-      ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-      nodes: result.items,
+      environmentID: validatePathSegment(params.environmentID, "environmentID"),
+      ...(detail !== undefined ? { detail } : {}),
     },
-    options
+    params,
+    { ndjsonPath, metaPath }
   );
 
   return {
     environmentID: params.environmentID,
     detail,
-    totalNodes: result.items.length,
+    totalNodes: result.totalItems,
     pageCount: result.pageCount,
     pageSize: result.pageSize,
     orderBy: result.orderBy,
     ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-    filePath,
-    cachedAt,
+    filePath: ndjsonPath,
+    metaPath,
+    cachedAt: result.cachedAt,
   };
 }
 
@@ -339,43 +415,47 @@ export async function cacheRuns(
   orderBy: string;
   orderByDirection?: "asc" | "desc";
   filePath: string;
+  metaPath: string;
   cachedAt: string;
   runType?: "deploy" | "refresh";
   runStatus?: "completed" | "failed" | "canceled" | "running" | "waitingToRun";
   environmentID?: string;
 }> {
   const detail = params.detail ?? false;
-  const cachedAt = new Date().toISOString();
-  const result = await fetchAllRuns(client, { ...params, detail });
-  const runs = sanitizeResponse(result.items);
-  const filePath = writeSnapshotFile(
-    ["runs"],
-    buildRunsCacheFileName({ ...params, detail }),
+  const baseDir = options?.baseDir ?? process.cwd();
+  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, "runs");
+  const baseName = buildRunsCacheFileName({ ...params, detail });
+  const ndjsonPath = join(directory, baseName);
+  const metaPath = join(directory, baseName.replace(/\.ndjson$/, ".meta.json"));
+
+  const result = await streamAllPaginatedToDisk(
+    (queryParams) => listRuns(client, queryParams),
     {
-      cachedAt,
-      detail,
       ...(params.runType ? { runType: params.runType } : {}),
       ...(params.runStatus ? { runStatus: params.runStatus } : {}),
-      ...(params.environmentID ? { environmentID: params.environmentID } : {}),
-      totalRuns: result.items.length,
-      pageCount: result.pageCount,
-      pageSize: result.pageSize,
-      orderBy: result.orderBy,
-      ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-      runs,
+      ...(params.environmentID
+        ? { environmentID: validatePathSegment(params.environmentID, "environmentID") }
+        : {}),
+      ...(detail !== undefined ? { detail } : {}),
     },
-    options
+    params,
+    {
+      ndjsonPath,
+      metaPath,
+      itemTransform: (item) => sanitizeResponse(item),
+    }
   );
 
   return {
     detail,
-    totalRuns: result.items.length,
+    totalRuns: result.totalItems,
     pageCount: result.pageCount,
     pageSize: result.pageSize,
     orderBy: result.orderBy,
     ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-    filePath,
-    cachedAt,
+    filePath: ndjsonPath,
+    metaPath,
+    cachedAt: result.cachedAt,
     ...(params.runType ? { runType: params.runType } : {}),
     ...(params.runStatus ? { runStatus: params.runStatus } : {}),
     ...(params.environmentID ? { environmentID: params.environmentID } : {}),
@@ -393,32 +473,29 @@ export async function cacheOrgUsers(
   orderBy: string;
   orderByDirection?: "asc" | "desc";
   filePath: string;
+  metaPath: string;
   cachedAt: string;
 }> {
-  const cachedAt = new Date().toISOString();
-  const result = await fetchAllOrgUsers(client, params);
-  const filePath = writeSnapshotFile(
-    ["users"],
-    "org-users.json",
-    {
-      cachedAt,
-      totalUsers: result.items.length,
-      pageCount: result.pageCount,
-      pageSize: result.pageSize,
-      orderBy: result.orderBy,
-      ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-      users: result.items,
-    },
-    options
+  const baseDir = options?.baseDir ?? process.cwd();
+  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, "users");
+  const ndjsonPath = join(directory, "org-users.ndjson");
+  const metaPath = join(directory, "org-users.meta.json");
+
+  const result = await streamAllPaginatedToDisk(
+    (queryParams) => listOrgUsers(client, queryParams),
+    {},
+    params,
+    { ndjsonPath, metaPath }
   );
 
   return {
-    totalUsers: result.items.length,
+    totalUsers: result.totalItems,
     pageCount: result.pageCount,
     pageSize: result.pageSize,
     orderBy: result.orderBy,
     ...(result.orderByDirection ? { orderByDirection: result.orderByDirection } : {}),
-    filePath,
-    cachedAt,
+    filePath: ndjsonPath,
+    metaPath,
+    cachedAt: result.cachedAt,
   };
 }

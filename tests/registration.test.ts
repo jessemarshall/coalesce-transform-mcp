@@ -82,7 +82,7 @@ describe("Tool Registration", () => {
       (call: unknown[]) => call[0] as string
     );
 
-    expect(toolSpy).toHaveBeenCalledTimes(70); // Removed deprecated create-workspace-node
+    expect(toolSpy).toHaveBeenCalledTimes(71); // Removed deprecated create-workspace-node
     expect(toolNames).toContain("list-environments");
     expect(toolNames).toContain("get-environment");
     expect(toolNames).toContain("list-environment-nodes");
@@ -109,6 +109,7 @@ describe("Tool Registration", () => {
     expect(toolNames).toContain("cache-environment-nodes");
     expect(toolNames).toContain("cache-runs");
     expect(toolNames).toContain("cache-org-users");
+    expect(toolNames).toContain("clear_coalesce_transform_mcp_data_cache");
     expect(toolNames).toContain("analyze-workspace-patterns");
     expect(toolNames).toContain("list-workspace-node-types");
     expect(toolNames).toContain("complete-node-configuration");

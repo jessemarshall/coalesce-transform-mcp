@@ -91,7 +91,7 @@ describe("buildRerunBody", () => {
 
   it("throws when key file does not contain a PEM key", () => {
     writeFileSync(keyFilePath, "not a pem key");
-    expect(() => buildRerunBody(validParams)).toThrow("valid PEM key");
+    expect(() => buildRerunBody(validParams)).toThrow("not a valid PEM private key");
   });
 
   it("passes through forceIgnoreWorkspaceStatus", () => {
