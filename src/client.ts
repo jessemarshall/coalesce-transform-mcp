@@ -298,15 +298,16 @@ export function createClient(config: ClientConfig) {
     async put(
       path: string,
       body?: unknown,
+      params?: QueryParams,
       options?: RequestOptions
     ): Promise<unknown> {
-      return request("PUT", path, undefined, body, options);
+      return request("PUT", path, params, body, options);
     },
 
     async patch(
       path: string,
-      params?: QueryParams,
       body?: unknown,
+      params?: QueryParams,
       options?: RequestOptions
     ): Promise<unknown> {
       return request("PATCH", path, params, body, options);

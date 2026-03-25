@@ -39,11 +39,11 @@ export async function updateProject(
 ): Promise<unknown> {
   return client.patch(
     `/api/v1/projects/${validatePathSegment(params.projectID, "projectID")}`,
+    params.body,
     {
       ...(params.includeWorkspaces !== undefined ? { includeWorkspaces: params.includeWorkspaces } : {}),
       ...(params.includeJobs !== undefined ? { includeJobs: params.includeJobs } : {}),
-    },
-    params.body
+    }
   );
 }
 
