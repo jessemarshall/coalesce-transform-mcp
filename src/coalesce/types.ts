@@ -150,16 +150,27 @@ export function buildRerunBody(params: RerunInput) {
   };
 }
 
+const ALLOWED_PEM_HEADERS = [
+  "-----BEGIN PRIVATE KEY-----",
+  "-----BEGIN RSA PRIVATE KEY-----",
+  "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+] as const;
+
 function readKeyPairFile(filePath: string): string {
   if (!existsSync(filePath)) {
     throw new Error(
-      `SNOWFLAKE_KEY_PAIR_KEY file not found: ${filePath}`
+      "SNOWFLAKE_KEY_PAIR_KEY file not found at the configured path. " +
+      "Check that the environment variable points to an existing PEM private key file."
     );
   }
   const content = readFileSync(filePath, "utf-8").trim();
-  if (!content.includes("-----BEGIN")) {
+  const hasValidHeader = ALLOWED_PEM_HEADERS.some((header) =>
+    content.includes(header)
+  );
+  if (!hasValidHeader) {
     throw new Error(
-      `SNOWFLAKE_KEY_PAIR_KEY file does not contain a valid PEM key: ${filePath}`
+      "SNOWFLAKE_KEY_PAIR_KEY file is not a valid PEM private key. " +
+      "Expected a file containing one of: PRIVATE KEY, RSA PRIVATE KEY, or ENCRYPTED PRIVATE KEY."
     );
   }
   return content;
