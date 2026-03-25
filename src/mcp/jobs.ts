@@ -2,12 +2,14 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
 import {
+  listEnvironmentJobs,
   createWorkspaceJob,
   getEnvironmentJob,
   updateWorkspaceJob,
   deleteWorkspaceJob,
 } from "../coalesce/api/jobs.js";
 import {
+  PaginationParams,
   buildJsonToolResponse,
   handleToolError,
   READ_ONLY_ANNOTATIONS,
@@ -19,6 +21,23 @@ export function registerJobTools(
   server: McpServer,
   client: CoalesceClient
 ): void {
+  server.tool(
+    "list-jobs",
+    "List all jobs in a Coalesce environment.",
+    PaginationParams.extend({
+      environmentID: z.string().describe("The environment ID"),
+    }).shape,
+    READ_ONLY_ANNOTATIONS,
+    async (params) => {
+      try {
+        const result = await listEnvironmentJobs(client, params);
+        return buildJsonToolResponse("list-jobs", result);
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
   server.tool(
     "create-workspace-job",
     "Create a job in a Coalesce workspace. A job defines which nodes to include/exclude when running.\n\nThe includeSelector and excludeSelector use the format:\n  { location: LOCATION_NAME name: NODE_NAME } OR { location: LOCATION_NAME name: NODE_NAME }\n\nUse locationName from node details (e.g., 'ETL_STAGE', 'ANALYTICS'), NOT database.schema.",
