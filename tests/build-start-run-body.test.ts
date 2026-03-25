@@ -114,7 +114,37 @@ describe("buildStartRunBody", () => {
 
   it("throws when key file does not contain a PEM key", () => {
     writeFileSync(keyFilePath, "not a pem key");
-    expect(() => buildStartRunBody(scopedParams)).toThrow("valid PEM key");
+    expect(() => buildStartRunBody(scopedParams)).toThrow("not a valid PEM private key");
+  });
+
+  it("rejects a PEM certificate (not a private key)", () => {
+    writeFileSync(keyFilePath, "-----BEGIN CERTIFICATE-----\nxxx\n-----END CERTIFICATE-----");
+    expect(() => buildStartRunBody(scopedParams)).toThrow("not a valid PEM private key");
+  });
+
+  it("accepts RSA PRIVATE KEY format", () => {
+    writeFileSync(keyFilePath, "-----BEGIN RSA PRIVATE KEY-----\nxxx\n-----END RSA PRIVATE KEY-----");
+    const body = buildStartRunBody(scopedParams);
+    expect(body.userCredentials.snowflakeKeyPairKey).toContain("RSA PRIVATE KEY");
+  });
+
+  it("accepts ENCRYPTED PRIVATE KEY format", () => {
+    writeFileSync(keyFilePath, "-----BEGIN ENCRYPTED PRIVATE KEY-----\nxxx\n-----END ENCRYPTED PRIVATE KEY-----");
+    const body = buildStartRunBody(scopedParams);
+    expect(body.userCredentials.snowflakeKeyPairKey).toContain("ENCRYPTED PRIVATE KEY");
+  });
+
+  it("does not expose file paths in error messages", () => {
+    const secretPath = "/home/user/.secret/keys/my-key.pem";
+    process.env.SNOWFLAKE_KEY_PAIR_KEY = secretPath;
+    try {
+      buildStartRunBody(scopedParams);
+      expect.unreachable("should have thrown");
+    } catch (e: unknown) {
+      const message = (e as Error).message;
+      expect(message).not.toContain(secretPath);
+      expect(message).toContain("SNOWFLAKE_KEY_PAIR_KEY");
+    }
   });
 
   // --- confirmRunAllNodes safety check ---
