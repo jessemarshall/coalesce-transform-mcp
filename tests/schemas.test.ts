@@ -263,7 +263,7 @@ describe("buildJsonToolResponse", () => {
     expect(metadata).toMatchObject({
       autoCached: true,
       toolName: "list-workspace-nodes",
-      filePath: expect.stringContaining(join(baseDir, "data", "auto-cache")),
+      filePath: expect.stringContaining(join(baseDir, "coalesce_transform_mcp_data_cache", "auto-cache")),
       maxInlineBytes: 128,
     });
 

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { CACHE_DIR_NAME } from "../cache-dir.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
 import { planPipeline } from "../services/pipelines/planning.js";
@@ -32,7 +33,7 @@ function buildPlanFingerprint(
 }
 
 function getPlanSummaryDir(): string {
-  return join(process.cwd(), "data", "plans");
+  return join(process.cwd(), CACHE_DIR_NAME, "plans");
 }
 
 function findCachedPlanSummary(

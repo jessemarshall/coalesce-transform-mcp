@@ -7,6 +7,7 @@ import { listOrgUsers } from "../../coalesce/api/users.js";
 import { sanitizeResponse, validatePathSegment } from "../../coalesce/types.js";
 import type { NodeSummary } from "../workspace/analysis.js";
 import { isPlainObject } from "../../utils.js";
+import { CACHE_DIR_NAME } from "../../cache-dir.js";
 
 const DEFAULT_PAGE_SIZE = 250;
 const MAX_IN_MEMORY_ITEMS = 250;
@@ -319,7 +320,7 @@ export async function cacheWorkspaceNodes(
 }> {
   const detail = params.detail ?? true;
   const baseDir = options?.baseDir ?? process.cwd();
-  const directory = ensureDirectory(baseDir, "data", "nodes");
+  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, "nodes");
   const baseName = buildNodeCacheFileName("workspace", params.workspaceID, detail);
   const ndjsonPath = join(directory, baseName);
   const metaPath = join(directory, baseName.replace(/\.ndjson$/, ".meta.json"));
@@ -367,7 +368,7 @@ export async function cacheEnvironmentNodes(
 }> {
   const detail = params.detail ?? true;
   const baseDir = options?.baseDir ?? process.cwd();
-  const directory = ensureDirectory(baseDir, "data", "nodes");
+  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, "nodes");
   const baseName = buildNodeCacheFileName("environment", params.environmentID, detail);
   const ndjsonPath = join(directory, baseName);
   const metaPath = join(directory, baseName.replace(/\.ndjson$/, ".meta.json"));
@@ -422,7 +423,7 @@ export async function cacheRuns(
 }> {
   const detail = params.detail ?? false;
   const baseDir = options?.baseDir ?? process.cwd();
-  const directory = ensureDirectory(baseDir, "data", "runs");
+  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, "runs");
   const baseName = buildRunsCacheFileName({ ...params, detail });
   const ndjsonPath = join(directory, baseName);
   const metaPath = join(directory, baseName.replace(/\.ndjson$/, ".meta.json"));
@@ -476,7 +477,7 @@ export async function cacheOrgUsers(
   cachedAt: string;
 }> {
   const baseDir = options?.baseDir ?? process.cwd();
-  const directory = ensureDirectory(baseDir, "data", "users");
+  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, "users");
   const ndjsonPath = join(directory, "org-users.ndjson");
   const metaPath = join(directory, "org-users.meta.json");
 
