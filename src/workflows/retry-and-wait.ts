@@ -9,6 +9,13 @@ import {
   sanitizeResponse,
   handleToolError,
 } from "../coalesce/types.js";
+import {
+  createWorkflowProgressReporter,
+  sleepWithAbort,
+  throwIfAborted,
+  type WorkflowProgressExtra,
+  type WorkflowProgressReporter,
+} from "./progress.js";
 
 function remainingTimeMs(startedAt: number, totalTimeoutMs: number): number {
   return Math.max(0, totalTimeoutMs - (Date.now() - startedAt));
@@ -33,11 +40,18 @@ export async function retryAndWait(
   params: z.infer<typeof RerunParams> & {
     pollInterval?: number;
     timeout?: number;
-  }
+  },
+  options: {
+    signal?: AbortSignal;
+    reportProgress?: WorkflowProgressReporter;
+  } = {}
 ): Promise<unknown> {
   const pollInterval = Math.max(5, Math.min(params.pollInterval ?? 10, 300)) * 1000;
   const timeout = Math.max(30, Math.min(params.timeout ?? 1800, 3600)) * 1000;
   const startedAt = Date.now();
+  const { signal, reportProgress } = options;
+
+  throwIfAborted(signal);
 
   // Retry the run — response is { runCounter: number }
   const body = buildRerunBody(params);
@@ -50,12 +64,16 @@ export async function retryAndWait(
     );
   }
   const runCounter: number = rerunResult.runCounter;
+  await reportProgress?.(
+    `Started retry run ${runCounter}. Polling every ${pollInterval / 1000}s for up to ${timeout / 1000}s.`
+  );
 
   // Poll for status
   let lastStatus: unknown = null;
+  let pollCount = 0;
   while (remainingTimeMs(startedAt, timeout) > 0) {
     const nextPollDelay = Math.min(pollInterval, remainingTimeMs(startedAt, timeout));
-    await new Promise((resolve) => setTimeout(resolve, nextPollDelay));
+    await sleepWithAbort(nextPollDelay, signal);
 
     const statusTimeoutMs = remainingTimeMs(startedAt, timeout);
     if (statusTimeoutMs <= 0) {
@@ -73,17 +91,31 @@ export async function retryAndWait(
       )) as Record<string, unknown>;
     } catch (error) {
       if (error instanceof CoalesceApiError && error.status === 408) {
+        pollCount += 1;
+        await reportProgress?.(
+          `Status check ${pollCount} for retry run ${runCounter} timed out. Retrying while time remains.`
+        );
         continue;
       }
       throw error;
     }
     lastStatus = status;
+    pollCount += 1;
 
     const runStatus = status.runStatus;
+    await reportProgress?.(
+      `Status check ${pollCount} for retry run ${runCounter}: ${typeof runStatus === "string" ? runStatus : "unknown"}.`
+    );
     if (runStatus === "completed" || runStatus === "failed" || runStatus === "canceled") {
       // Fetch run results — runCounter is the numeric run ID
+      await reportProgress?.(
+        `Retry run ${runCounter} reached terminal status ${runStatus}. Fetching results.`
+      );
       const resultsTimeoutMs = remainingTimeMs(startedAt, timeout);
       if (resultsTimeoutMs <= 0) {
+        await reportProgress?.(
+          `Workflow deadline reached before results could be fetched for retry run ${runCounter}.`
+        );
         return {
           status,
           results: null,
@@ -101,12 +133,17 @@ export async function retryAndWait(
           undefined,
           { timeoutMs: resultsTimeoutMs }
         );
+        await reportProgress?.(`Fetched results for retry run ${runCounter}.`);
         return { status, results };
       } catch (error) {
+        const serializedError = serializeResultsError(error);
+        await reportProgress?.(
+          `Retry run ${runCounter} finished, but fetching results failed: ${serializedError.message}.`
+        );
         return {
           status,
           results: null,
-          resultsError: serializeResultsError(error),
+          resultsError: serializedError,
           incomplete: true,
         };
       }
@@ -131,6 +168,9 @@ export async function retryAndWait(
       }
     }
   }
+  await reportProgress?.(
+    `Timed out waiting for retry run ${runCounter}. Returning the last known status.`
+  );
   return { status: finalStatus, results: null, timedOut: true };
 }
 
@@ -144,9 +184,15 @@ export function registerRetryAndWait(server: McpServer, client: CoalesceClient):
       timeout: z.number().optional().describe("Max seconds to wait (default: 1800, min: 30, max: 3600)"),
     }).shape,
     WRITE_ANNOTATIONS,
-    async (params) => {
+    async (params, extra) => {
       try {
-        const result = await retryAndWait(client, params);
+        const progressReporter = createWorkflowProgressReporter(
+          extra as WorkflowProgressExtra | undefined
+        );
+        const result = await retryAndWait(client, params, {
+          signal: extra?.signal,
+          reportProgress: progressReporter,
+        });
         return buildJsonToolResponse("retry-and-wait", sanitizeResponse(result));
       } catch (error) {
         return handleToolError(error);

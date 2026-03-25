@@ -19,6 +19,11 @@ import {
 } from "../coalesce/types.js";
 import { isPlainObject } from "../utils.js";
 
+const REWRITTEN_SQL_ERROR_MESSAGE =
+  "The sql parameter contains {{ ref() }} syntax, which means you rewrote the user's SQL. " +
+  "Pass the user's EXACT SQL unchanged — the planner resolves source references automatically. " +
+  "Do NOT replace table names with {{ ref() }}.";
+
 function buildPlanFingerprint(
   workspaceID: string,
   repoPath: string | null,
@@ -228,16 +233,7 @@ export function registerPipelineTools(
       try {
         // Reject SQL that the agent rewrote with {{ ref() }}
         if (params.sql && /\{\{\s*ref\s*\(/.test(params.sql)) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify({
-                  error: "The sql parameter contains {{ ref() }} syntax, which means you rewrote the user's SQL. Pass the user's EXACT SQL unchanged — the planner resolves source references automatically. Do NOT replace table names with {{ ref() }}.",
-                }),
-              },
-            ],
-          };
+          return handleToolError(new Error(REWRITTEN_SQL_ERROR_MESSAGE));
         }
 
         const result = await planPipeline(client, params);
@@ -399,16 +395,7 @@ export function registerPipelineTools(
       try {
         // Reject SQL that the agent rewrote with {{ ref() }} — the user's original SQL won't contain these
         if (/\{\{\s*ref\s*\(/.test(params.sql)) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify({
-                  error: "The sql parameter contains {{ ref() }} syntax, which means you rewrote the user's SQL. Pass the user's EXACT SQL unchanged — the planner resolves source references automatically. Do NOT replace table names with {{ ref() }}.",
-                }),
-              },
-            ],
-          };
+          return handleToolError(new Error(REWRITTEN_SQL_ERROR_MESSAGE));
         }
         const result = await createPipelineFromSql(client, params);
         return buildJsonToolResponse("create-pipeline-from-sql", result);
