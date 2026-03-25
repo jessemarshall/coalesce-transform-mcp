@@ -27,13 +27,13 @@
 
 - Large list endpoints may be paginated. Do not assume one page is complete if `next` or paging cursors are present.
 - Prefer discovery first, then targeted reads.
-- Large JSON responses may be auto-cached to `data/auto-cache/`; the tool returns cache metadata plus the file path instead of the full payload.
+- Large JSON responses may be auto-cached to `coalesce_transform_mcp_data_cache/auto-cache/`; the tool returns cache metadata plus the file path instead of the full payload.
 - Use explicit cache tools for large lists: `cache-workspace-nodes`, `cache-environment-nodes`, `cache-runs`, `cache-org-users`.
 
 ### Large Workspace Analysis
 
 - `analyze-workspace-patterns` for a compact workspace profile (naming, packages, methodology conventions)
-- `cache-workspace-nodes` when the full payload should be written to `data/nodes/` for reuse
+- `cache-workspace-nodes` when the full payload should be written to `coalesce_transform_mcp_data_cache/nodes/` for reuse
 - For architecture guidance, see `coalesce://context/data-engineering-principles`
 
 ## Mandatory: Plan Before Creating Nodes
