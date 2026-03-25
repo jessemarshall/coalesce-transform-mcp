@@ -198,6 +198,88 @@ describe("CoalesceClient", () => {
       );
     });
 
+    it("rejects request body exceeding size limit", async () => {
+      const mockFetch = vi.fn();
+      vi.stubGlobal("fetch", mockFetch);
+
+      // Set a very low limit for testing
+      process.env.COALESCE_MCP_MAX_REQUEST_BODY_BYTES = "100";
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+
+      const largeBody = { data: "x".repeat(200) };
+      await expect(client.post("/scheduler/startRun", largeBody)).rejects.toMatchObject({
+        message: expect.stringContaining("exceeds"),
+        status: 413,
+      });
+
+      // Should never have called fetch
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("allows request body within size limit", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ok: true }),
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      process.env.COALESCE_MCP_MAX_REQUEST_BODY_BYTES = "10000";
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+
+      const smallBody = { data: "hello" };
+      const result = await client.post("/scheduler/startRun", smallBody);
+      expect(result).toEqual({ ok: true });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("uses default 512KB limit when env var is not set", async () => {
+      const mockFetch = vi.fn();
+      vi.stubGlobal("fetch", mockFetch);
+
+      delete process.env.COALESCE_MCP_MAX_REQUEST_BODY_BYTES;
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+
+      // 100KB body should be fine under 512KB default
+      const body = { data: "x".repeat(100_000) };
+      const mockResponse = {
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ok: true }),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
+      const result = await client.post("/api/v1/test", body);
+      expect(result).toEqual({ ok: true });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("includes override hint in body size error message", async () => {
+      vi.stubGlobal("fetch", vi.fn());
+      process.env.COALESCE_MCP_MAX_REQUEST_BODY_BYTES = "10";
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+
+      await expect(client.post("/test", { big: "data" })).rejects.toThrow(
+        "COALESCE_MCP_MAX_REQUEST_BODY_BYTES"
+      );
+    });
+
     it("retries on 429 and succeeds on subsequent attempt", async () => {
       vi.useFakeTimers();
       const mockFetch = vi.fn()
@@ -347,6 +429,7 @@ describe("CoalesceClient", () => {
       });
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
+
 
     it("handles 204 no-content response", async () => {
       const mockFetch = vi.fn().mockResolvedValue({
