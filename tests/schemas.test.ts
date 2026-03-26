@@ -203,6 +203,11 @@ describe("handleToolError", () => {
     expect(result).toEqual({
       isError: true,
       content: [{ type: "text", text: "something broke" }],
+      structuredContent: {
+        error: {
+          message: "something broke",
+        },
+      },
     });
   });
 
@@ -211,14 +216,28 @@ describe("handleToolError", () => {
     expect(result).toEqual({
       isError: true,
       content: [{ type: "text", text: "string error" }],
+      structuredContent: {
+        error: {
+          message: "string error",
+        },
+      },
     });
   });
 
   it("extracts message from CoalesceApiError", () => {
-    const result = handleToolError(new CoalesceApiError("Not found", 404));
+    const result = handleToolError(
+      new CoalesceApiError("Not found", 404, { retryAfterMs: 1500 })
+    );
     expect(result).toEqual({
       isError: true,
       content: [{ type: "text", text: "Not found" }],
+      structuredContent: {
+        error: {
+          message: "Not found",
+          status: 404,
+          detail: { retryAfterMs: 1500 },
+        },
+      },
     });
   });
 });

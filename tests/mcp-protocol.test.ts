@@ -48,9 +48,12 @@ describe("MCP Protocol Surface", () => {
         idempotentHint: true,
         destructiveHint: false,
       });
-      expect(setTool?.outputSchema).toMatchObject({
-        type: "object",
+      expect(setTool?.outputSchema?.type).toBe("object");
+      expect(setTool?.outputSchema?.properties).toMatchObject({
+        validation: expect.objectContaining({ type: "object" }),
+        warning: expect.objectContaining({ type: "string" }),
       });
+      expect(setTool?.outputSchema?.properties).toHaveProperty("configCompletion");
       expect(setTool?.inputSchema).toMatchObject({
         type: "object",
         properties: {
@@ -102,6 +105,39 @@ describe("MCP Protocol Surface", () => {
       const listRunsTool = result.tools.find((tool) => tool.name === "list-runs");
       expect(listRunsTool?.outputSchema).toMatchObject({
         type: "object",
+        properties: expect.objectContaining({
+          data: expect.objectContaining({
+            type: "array",
+          }),
+          next: expect.objectContaining({ type: "string" }),
+        }),
+      });
+
+      const planPipelineTool = result.tools.find(
+        (tool) => tool.name === "plan-pipeline"
+      );
+      expect(planPipelineTool?.description).toContain("planSummaryUri");
+      expect(planPipelineTool?.description).not.toContain("data/plans/");
+      expect(planPipelineTool?.outputSchema).toMatchObject({
+        type: "object",
+        properties: expect.objectContaining({
+          status: expect.objectContaining({ type: "string" }),
+          planSummaryUri: expect.objectContaining({ type: "string" }),
+          USE_THIS_NODE_TYPE: expect.objectContaining({ type: "string" }),
+        }),
+      });
+
+      const runAndWaitTool = result.tools.find(
+        (tool) => tool.name === "run-and-wait"
+      );
+      expect(runAndWaitTool?.outputSchema).toMatchObject({
+        type: "object",
+        properties: expect.objectContaining({
+          status: expect.objectContaining({}),
+          results: expect.objectContaining({}),
+          timedOut: expect.objectContaining({ type: "boolean" }),
+          incomplete: expect.objectContaining({ type: "boolean" }),
+        }),
       });
 
       const prompts = await harness.client.listPrompts();
@@ -195,6 +231,34 @@ describe("MCP Protocol Surface", () => {
       ]);
       expect(nodeOperations.contents[0]?.text).not.toContain(
         "Rewrite with `{{ ref('LOCATION', 'NODE') }}` syntax, preserving original aliases"
+      );
+
+      const toolUsage = await harness.client.readResource({
+        uri: "coalesce://context/tool-usage",
+      });
+      expect(toolUsage.contents).toEqual([
+        expect.objectContaining({
+          uri: "coalesce://context/tool-usage",
+          mimeType: "text/markdown",
+          text: expect.stringContaining("`coalesce://cache/...` resource URI"),
+        }),
+      ]);
+      expect(toolUsage.contents[0]?.text).not.toContain("plus the file path");
+
+      const pipelineWorkflows = await harness.client.readResource({
+        uri: "coalesce://context/pipeline-workflows",
+      });
+      expect(pipelineWorkflows.contents).toEqual([
+        expect.objectContaining({
+          uri: "coalesce://context/pipeline-workflows",
+          mimeType: "text/markdown",
+          text: expect.stringContaining(
+            "still call `plan-pipeline` before creating anything"
+          ),
+        }),
+      ]);
+      expect(pipelineWorkflows.contents[0]?.text).not.toContain(
+        "skip discovery and create directly"
       );
 
       const cacheUri = buildCacheResourceUri(cacheFilePath, tempDir);

@@ -196,7 +196,7 @@ describe("Pipeline Tools", () => {
       sql: "SELECT * FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       isError: true,
       content: [
         {
@@ -204,6 +204,13 @@ describe("Pipeline Tools", () => {
           text: expect.stringContaining("The sql parameter contains {{ ref() }} syntax"),
         },
       ],
+    });
+    expect(result).toMatchObject({
+      structuredContent: {
+        error: {
+          message: expect.stringContaining("The sql parameter contains {{ ref() }} syntax"),
+        },
+      },
     });
     expect(client.get).not.toHaveBeenCalled();
     expect(client.post).not.toHaveBeenCalled();
@@ -234,7 +241,7 @@ describe("Pipeline Tools", () => {
       sql: "SELECT * FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       isError: true,
       content: [
         {
@@ -242,6 +249,13 @@ describe("Pipeline Tools", () => {
           text: expect.stringContaining("The sql parameter contains {{ ref() }} syntax"),
         },
       ],
+    });
+    expect(result).toMatchObject({
+      structuredContent: {
+        error: {
+          message: expect.stringContaining("The sql parameter contains {{ ref() }} syntax"),
+        },
+      },
     });
     expect(client.get).not.toHaveBeenCalled();
     expect(client.post).not.toHaveBeenCalled();
