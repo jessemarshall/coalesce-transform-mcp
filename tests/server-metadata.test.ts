@@ -1,5 +1,12 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import {
+  buildServerEnvironmentVariables,
+  getRuntimeEnvironmentVariableNames,
+  renderReadmeCoreEnvironmentTable,
+  renderReadmeSnowflakeEnvironmentTable,
+} from "../scripts/env-metadata.mjs";
 
 type ServerManifest = {
   packages?: Array<{
@@ -8,6 +15,7 @@ type ServerManifest = {
       description?: string;
       isRequired?: boolean;
       isSecret?: boolean;
+      format?: string;
     }>;
   }>;
 };
@@ -16,46 +24,48 @@ function loadServerManifest(): ServerManifest {
   return JSON.parse(readFileSync("server.json", "utf8")) as ServerManifest;
 }
 
-describe("server.json metadata", () => {
-  it("advertises the supported runtime environment variables", () => {
-    const manifest = loadServerManifest();
-    const environmentVariables = manifest.packages?.[0]?.environmentVariables ?? [];
-    const names = environmentVariables.map((entry) => entry.name);
+function walkFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const fullPath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      return walkFiles(fullPath);
+    }
+    return entry.isFile() ? [fullPath] : [];
+  });
+}
 
-    expect(names).toEqual([
-      "COALESCE_ACCESS_TOKEN",
-      "COALESCE_BASE_URL",
-      "COALESCE_ORG_ID",
-      "COALESCE_REPO_PATH",
-      "COALESCE_MCP_AUTO_CACHE_MAX_BYTES",
-      "COALESCE_MCP_MAX_REQUEST_BODY_BYTES",
-      "SNOWFLAKE_USERNAME",
-      "SNOWFLAKE_KEY_PAIR_KEY",
-      "SNOWFLAKE_KEY_PAIR_PASS",
-      "SNOWFLAKE_WAREHOUSE",
-      "SNOWFLAKE_ROLE",
-    ]);
+function getRuntimeEnvNamesFromSource(): string[] {
+  const names = new Set<string>();
+  for (const filePath of walkFiles("src")) {
+    if (!filePath.endsWith(".ts")) {
+      continue;
+    }
+    const content = readFileSync(filePath, "utf8");
+    for (const match of content.matchAll(/process\.env\.([A-Z0-9_]+)/g)) {
+      names.add(match[1]);
+    }
+  }
+  return [...names].sort();
+}
+
+describe("server.json metadata", () => {
+  it("matches the generated MCP environment variable manifest", () => {
+    const manifest = loadServerManifest();
+    expect(manifest.packages?.[0]?.environmentVariables).toEqual(
+      buildServerEnvironmentVariables()
+    );
   });
 
-  it("marks the documented required and secret variables correctly", () => {
-    const manifest = loadServerManifest();
-    const environmentVariables = manifest.packages?.[0]?.environmentVariables ?? [];
-    const byName = new Map(
-      environmentVariables.flatMap((entry) =>
-        entry.name ? [[entry.name, entry]] : []
-      )
-    );
+  it("keeps the README environment tables in sync with metadata", () => {
+    const readme = readFileSync("README.md", "utf8");
 
-    expect(byName.get("COALESCE_ACCESS_TOKEN")).toMatchObject({
-      isRequired: true,
-      isSecret: true,
-    });
-    expect(byName.get("SNOWFLAKE_KEY_PAIR_PASS")).toMatchObject({
-      isRequired: false,
-      isSecret: true,
-    });
-    expect(byName.get("COALESCE_REPO_PATH")?.description).toContain("repo-backed tools");
-    expect(byName.get("COALESCE_MCP_AUTO_CACHE_MAX_BYTES")?.description).toContain("auto-caching");
-    expect(byName.get("COALESCE_MCP_MAX_REQUEST_BODY_BYTES")?.description).toContain("request body size");
+    expect(readme).toContain(renderReadmeCoreEnvironmentTable());
+    expect(readme).toContain(renderReadmeSnowflakeEnvironmentTable());
+  });
+
+  it("covers every runtime process.env variable in the shared metadata", () => {
+    expect(getRuntimeEnvNamesFromSource()).toEqual(
+      [...getRuntimeEnvironmentVariableNames()].sort()
+    );
   });
 });

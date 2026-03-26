@@ -66,26 +66,30 @@ The server defaults to the US region. See [Environment Variables](#environment-v
 
 Only `COALESCE_ACCESS_TOKEN` is required. Everything else is optional.
 
+<!-- ENV_METADATA_CORE_TABLE_START -->
 | Variable | Description | Default |
-| -------- | ----------- | ------- |
+| -------- | -------- | -------- |
 | `COALESCE_ACCESS_TOKEN` | **Required.** Bearer token from the Coalesce Deploy tab. | — |
-| `COALESCE_BASE_URL` | Region-specific base URL. | `https://app.coalescesoftware.io` (US) |
-| `COALESCE_ORG_ID` | Fallback org ID for `cancel-run`. | — |
+| `COALESCE_BASE_URL` | Region-specific base URL. | `https://app.coalescesoftware.io (US)` |
+| `COALESCE_ORG_ID` | Fallback org ID for cancel-run. | — |
 | `COALESCE_REPO_PATH` | Local repo root for repo-backed tools and pipeline planning. | — |
 | `COALESCE_MCP_AUTO_CACHE_MAX_BYTES` | JSON size threshold before auto-caching to disk. | `32768` |
 | `COALESCE_MCP_MAX_REQUEST_BODY_BYTES` | Max outbound API request body size. | `524288` |
+<!-- ENV_METADATA_CORE_TABLE_END -->
 
 ### Snowflake (for run tools only)
 
 Required for `start-run`, `retry-run`, `run-and-wait`, and `retry-and-wait`. The server starts without them — they're validated when you first use a run tool.
 
+<!-- ENV_METADATA_SNOWFLAKE_TABLE_START -->
 | Variable | Required | Description |
-| -------- | -------- | ----------- |
+| -------- | -------- | -------- |
 | `SNOWFLAKE_USERNAME` | Yes | Snowflake account username |
 | `SNOWFLAKE_KEY_PAIR_KEY` | Yes | Path to PEM-encoded private key |
 | `SNOWFLAKE_KEY_PAIR_PASS` | No | Passphrase for encrypted keys |
 | `SNOWFLAKE_WAREHOUSE` | Yes | Snowflake compute warehouse |
 | `SNOWFLAKE_ROLE` | Yes | Snowflake user role |
+<!-- ENV_METADATA_SNOWFLAKE_TABLE_END -->
 
 To use optional variables, add them to your shell profile and pass them through in your MCP config. Here's a full example with everything enabled:
 

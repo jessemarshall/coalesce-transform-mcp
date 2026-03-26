@@ -17,42 +17,42 @@
       },
       "environmentVariables": [
         {
-          "description": "Bearer token from Coalesce Deploy tab",
+          "description": "Bearer token from the Coalesce Deploy tab.",
           "isRequired": true,
           "format": "string",
           "isSecret": true,
           "name": "COALESCE_ACCESS_TOKEN"
         },
         {
-          "description": "Region-specific Coalesce base URL. Defaults to US (https://app.coalescesoftware.io)",
+          "description": "Region-specific base URL. Defaults to https://app.coalescesoftware.io (US).",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
           "name": "COALESCE_BASE_URL"
         },
         {
-          "description": "Fallback organization ID used by cancel-run when orgID is omitted",
+          "description": "Fallback org ID for cancel-run.",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
           "name": "COALESCE_ORG_ID"
         },
         {
-          "description": "Local Coalesce repo root for repo-backed tools and pipeline planning",
+          "description": "Local repo root for repo-backed tools and pipeline planning.",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
           "name": "COALESCE_REPO_PATH"
         },
         {
-          "description": "JSON byte threshold for auto-caching oversized tool responses to disk (default: 32768)",
+          "description": "JSON size threshold before auto-caching to disk. Defaults to 32768.",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
           "name": "COALESCE_MCP_AUTO_CACHE_MAX_BYTES"
         },
         {
-          "description": "Maximum outbound API request body size in bytes (default: 524288)",
+          "description": "Max outbound API request body size. Defaults to 524288.",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
@@ -66,14 +66,14 @@
           "name": "SNOWFLAKE_USERNAME"
         },
         {
-          "description": "Path to PEM-encoded Snowflake private key (required for run tools)",
+          "description": "Path to PEM-encoded private key (required for run tools)",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
           "name": "SNOWFLAKE_KEY_PAIR_KEY"
         },
         {
-          "description": "Password for encrypted Snowflake private key",
+          "description": "Passphrase for encrypted keys",
           "isRequired": false,
           "format": "string",
           "isSecret": true,
