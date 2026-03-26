@@ -390,13 +390,19 @@ export async function createPipelineFromSql(
     schema?: string;
     repoPath?: string;
     dryRun?: boolean;
+    confirmed?: boolean;
   }
 ): Promise<unknown> {
   const plan = await planPipeline(client, params);
-  if (plan.status !== "ready" || params.dryRun) {
+  if (plan.status !== "ready" || params.dryRun || params.confirmed !== true) {
     return {
       created: false,
-      STOP_AND_CONFIRM: "STOP. Present the pipeline summary to the user in a table format and ask for confirmation BEFORE creating any nodes. For EACH node, display: name, the EXACT nodeType string (e.g. 'Coalesce-Base-Node-Types:::Stage'), transforms, and filters. Use the cteNodeSummary or nodes array — do NOT paraphrase or simplify the nodeType values. Do NOT proceed until the user explicitly approves.",
+      ...(plan.status === "ready" && !params.dryRun
+        ? {
+            STOP_AND_CONFIRM:
+              "STOP. Present the pipeline summary to the user in a table format and ask for confirmation BEFORE creating any nodes. For EACH node, display: name, the EXACT nodeType string (e.g. 'Coalesce-Base-Node-Types:::Stage'), transforms, and filters. Use the cteNodeSummary or nodes array — do NOT paraphrase or simplify the nodeType values. Do NOT proceed until the user explicitly approves.",
+          }
+        : {}),
       ...(params.dryRun ? { dryRun: true } : {}),
       plan,
       ...(plan.status !== "ready"

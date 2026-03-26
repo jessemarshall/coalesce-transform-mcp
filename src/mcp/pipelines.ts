@@ -17,6 +17,7 @@ import { NodeConfigInputSchema } from "../schemas/node-payloads.js";
 import {
   buildJsonToolResponse,
   handleToolError,
+  type JsonToolResponse,
   READ_ONLY_ANNOTATIONS,
   WRITE_ANNOTATIONS,
   validatePathSegment,
@@ -209,6 +210,62 @@ function buildPlanSummaryForElicitation(plan: unknown): string {
   return lines.join("\n");
 }
 
+async function requirePipelineCreationApproval(
+  server: McpServer,
+  toolName: "create-pipeline-from-plan" | "create-pipeline-from-sql",
+  plan: unknown,
+  confirmed?: boolean,
+  payload: Record<string, unknown> = {}
+): Promise<JsonToolResponse | null> {
+  if (confirmed === true) {
+    return null;
+  }
+
+  const planSummary = buildPlanSummaryForElicitation(plan);
+  try {
+    const elicitation = await server.server.elicitInput({
+      message: planSummary,
+      requestedSchema: {
+        type: "object",
+        properties: {
+          confirmed: {
+            type: "boolean",
+            title: "Create these pipeline nodes?",
+            description: "Select true to proceed with node creation, false to cancel.",
+          },
+        },
+        required: ["confirmed"],
+      },
+    });
+
+    if (elicitation.action !== "accept" || elicitation.content?.confirmed !== true) {
+      return buildJsonToolResponse(toolName, {
+        created: false,
+        cancelled: true,
+        reason:
+          elicitation.action === "accept"
+            ? "User declined pipeline creation."
+            : `Pipeline creation ${elicitation.action}d by user.`,
+        ...payload,
+      });
+    }
+  } catch (error) {
+    // Client does not support elicitation — fall back to STOP_AND_CONFIRM convention
+    if (error instanceof Error && error.message.includes("does not support")) {
+      return buildJsonToolResponse(toolName, {
+        created: false,
+        STOP_AND_CONFIRM:
+          `STOP. Present the pipeline plan to the user in a table showing each node name and nodeType. ` +
+          `Ask for explicit approval BEFORE creating any nodes. Once the user approves, call ${toolName} again with confirmed=true.`,
+        ...payload,
+      });
+    }
+    throw error;
+  }
+
+  return null;
+}
+
 export function registerPipelineTools(
   server: McpServer,
   client: CoalesceClient
@@ -320,6 +377,10 @@ export function registerPipelineTools(
     {
       workspaceID: z.string().describe("The workspace ID"),
       plan: PipelinePlanSchema.describe("The plan object returned by plan-pipeline."),
+      confirmed: z
+        .boolean()
+        .optional()
+        .describe("Set to true only after presenting the plan to the user and receiving explicit approval. This bypasses interactive confirmation for clients that do not support MCP elicitation."),
       dryRun: z
         .boolean()
         .optional()
@@ -329,44 +390,15 @@ export function registerPipelineTools(
     async (params) => {
       try {
         if (!params.dryRun) {
-          const planSummary = buildPlanSummaryForElicitation(params.plan);
-          try {
-            const elicitation = await server.server.elicitInput({
-              message: planSummary,
-              requestedSchema: {
-                type: "object",
-                properties: {
-                  confirmed: {
-                    type: "boolean",
-                    title: "Create these pipeline nodes?",
-                    description: "Select true to proceed with node creation, false to cancel.",
-                  },
-                },
-                required: ["confirmed"],
-              },
-            });
-
-            if (elicitation.action !== "accept" || elicitation.content?.confirmed !== true) {
-              return buildJsonToolResponse("create-pipeline-from-plan", {
-                created: false,
-                cancelled: true,
-                reason:
-                  elicitation.action === "accept"
-                    ? "User declined pipeline creation."
-                    : `Pipeline creation ${elicitation.action}d by user.`,
-              });
-            }
-          } catch (elicitError) {
-            // Client does not support elicitation — fall back to STOP_AND_CONFIRM convention
-            if (elicitError instanceof Error && elicitError.message.includes("does not support")) {
-              return buildJsonToolResponse("create-pipeline-from-plan", {
-                created: false,
-                STOP_AND_CONFIRM:
-                  "STOP. Present the pipeline plan to the user in a table showing each node name and nodeType. Ask for explicit approval BEFORE creating any nodes. Once the user approves, call create-pipeline-from-plan again.",
-                plan: params.plan,
-              });
-            }
-            throw elicitError;
+          const approvalResponse = await requirePipelineCreationApproval(
+            server,
+            "create-pipeline-from-plan",
+            params.plan,
+            params.confirmed,
+            { plan: params.plan }
+          );
+          if (approvalResponse) {
+            return approvalResponse;
           }
         }
 
@@ -401,6 +433,10 @@ export function registerPipelineTools(
         .string()
         .optional()
         .describe("Optional local committed Coalesce repo path for repo-first node-type ranking. Falls back to COALESCE_REPO_PATH when omitted."),
+      confirmed: z
+        .boolean()
+        .optional()
+        .describe("Set to true only after presenting the ready plan to the user and receiving explicit approval. This bypasses interactive confirmation for clients that do not support MCP elicitation."),
       dryRun: z
         .boolean()
         .optional()
@@ -413,7 +449,38 @@ export function registerPipelineTools(
         if (/\{\{\s*ref\s*\(/.test(params.sql)) {
           return handleToolError(new Error(REWRITTEN_SQL_ERROR_MESSAGE));
         }
-        const result = await createPipelineFromSql(client, params);
+        const preview = await createPipelineFromSql(client, {
+          ...params,
+          confirmed: false,
+        });
+        if (
+          params.dryRun ||
+          !isPlainObject(preview) ||
+          !isPlainObject(preview.plan) ||
+          preview.plan.status !== "ready"
+        ) {
+          return buildJsonToolResponse("create-pipeline-from-sql", preview);
+        }
+
+        const approvalResponse = await requirePipelineCreationApproval(
+          server,
+          "create-pipeline-from-sql",
+          preview.plan,
+          params.confirmed,
+          { plan: preview.plan }
+        );
+        if (approvalResponse) {
+          return approvalResponse;
+        }
+
+        const execution = await createPipelineFromPlan(client, {
+          workspaceID: params.workspaceID,
+          plan: preview.plan,
+        });
+        const result = {
+          plan: preview.plan,
+          ...((isPlainObject(execution) ? execution : { execution }) as Record<string, unknown>),
+        };
         return buildJsonToolResponse("create-pipeline-from-sql", result);
       } catch (error) {
         return handleToolError(error);

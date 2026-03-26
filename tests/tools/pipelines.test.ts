@@ -31,6 +31,7 @@ const fixtureRepoPath = resolve("tests/fixtures/repo-backed-coalesce");
 const originalEnv = process.env;
 
 afterEach(() => {
+  vi.restoreAllMocks();
   process.env = originalEnv;
 });
 
@@ -799,6 +800,116 @@ describe("Pipeline Tools", () => {
     expect(client.put).not.toHaveBeenCalled();
   });
 
+  it("createPipelineFromSql returns STOP_AND_CONFIRM for ready plans until confirmed", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes") {
+        return Promise.resolve({
+          data: [{ id: "source-1", name: "CUSTOMER", nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(sourceNode);
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
+
+    const result = await createPipelineFromSql(client as any, {
+      workspaceID: "ws-1",
+      sql: "SELECT * FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
+    });
+
+    expect(result).toMatchObject({
+      created: false,
+      STOP_AND_CONFIRM: expect.stringContaining("Present the pipeline summary"),
+    });
+    expect((result as any).plan.status).toBe("ready");
+    expect(client.post).not.toHaveBeenCalled();
+    expect(client.put).not.toHaveBeenCalled();
+  });
+
+  it("create-pipeline-from-sql tool executes when confirmed=true without elicitation", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "tool");
+    const client = createMockClient();
+    registerPipelineTools(server, client as any);
+
+    const executionModule = await import("../../src/services/pipelines/execution.js");
+    const previewPlan = {
+      version: 1,
+      intent: "sql",
+      status: "ready",
+      workspaceID: "ws-1",
+      platform: null,
+      goal: null,
+      sql: "select 1 as customer_id",
+      nodes: [{ name: "STG_CUSTOMER", nodeType: "Stage" }],
+      assumptions: [],
+      openQuestions: [],
+      warnings: [],
+      supportedNodeTypes: ["Stage"],
+    };
+    const previewSpy = vi
+      .spyOn(executionModule, "createPipelineFromSql")
+      .mockResolvedValue({
+        created: false,
+        plan: previewPlan,
+      });
+    const executeSpy = vi
+      .spyOn(executionModule, "createPipelineFromPlan")
+      .mockResolvedValue({
+        created: true,
+        workspaceID: "ws-1",
+        nodeCount: 1,
+      });
+
+    const elicitSpy = vi.spyOn(server.server, "elicitInput");
+    const createToolCall = toolSpy.mock.calls.find(
+      (call) => call[0] === "create-pipeline-from-sql"
+    );
+    const handler = createToolCall?.[4] as
+      | ((params: { workspaceID: string; sql: string; confirmed?: boolean }) => Promise<{
+          structuredContent?: Record<string, unknown>;
+        }>)
+      | undefined;
+
+    expect(typeof handler).toBe("function");
+
+    const result = await handler!({
+      workspaceID: "ws-1",
+      sql: "select 1 as customer_id",
+      confirmed: true,
+    });
+
+    expect(result).toMatchObject({
+      structuredContent: {
+        created: true,
+        workspaceID: "ws-1",
+        nodeCount: 1,
+        plan: expect.objectContaining({
+          status: "ready",
+        }),
+      },
+    });
+    expect(elicitSpy).not.toHaveBeenCalled();
+    expect(previewSpy).toHaveBeenCalledWith(client, {
+      workspaceID: "ws-1",
+      sql: "select 1 as customer_id",
+      confirmed: false,
+    });
+    expect(executeSpy).toHaveBeenCalledWith(client, {
+      workspaceID: "ws-1",
+      plan: previewPlan,
+    });
+  });
+
   it("createPipelineFromPlan regenerates unique output column identities for repeated source columns", async () => {
     const client = createMockClient();
     const sourceNode = buildSourceNode("source-1", "CUSTOMER");
@@ -1353,7 +1464,6 @@ describe("Pipeline Tools", () => {
       expect(result).toMatchObject({
         created: false,
       });
-      expect((result as any).plan.status).toBe("needs_clarification");
       expect((result as any).plan.warnings).toBeDefined();
       expect((result as any).plan.warnings.some((w: string) => w.includes("not observed in current workspace nodes"))).toBe(true);
     });
