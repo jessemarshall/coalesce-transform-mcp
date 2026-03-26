@@ -31,7 +31,7 @@ export const SERVER_INSTRUCTIONS = [
   "Inspect warning, validation, resultsError, incomplete, timedOut, and cleanupFailures fields before continuing.",
   "Prefer run-and-wait or retry-and-wait when the user wants an end-to-end run outcome in one call.",
   "Large payloads may be exposed through coalesce://cache resource URIs; read the resource rather than assuming inline JSON.",
-].join(" ");
+].join("\n");
 
 export function registerServerSurface(server: McpServer, client: CoalesceClient): void {
   registerEnvironmentTools(server, client);
