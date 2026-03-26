@@ -16,10 +16,11 @@ import {
   type WorkflowProgressExtra,
   type WorkflowProgressReporter,
 } from "./progress.js";
-
-const TERMINAL_RUN_STATUSES = new Set(["completed", "failed", "canceled"]);
-const KNOWN_RUN_STATUSES = new Set(["completed", "failed", "canceled", "running", "waitingToRun"]);
-const MAX_CONSECUTIVE_UNRECOGNIZED = 5;
+import {
+  formatRunStatusForMessage,
+  isTerminalRunStatus,
+  validateRunStatus,
+} from "./run-status.js";
 
 function remainingTimeMs(startedAt: number, totalTimeoutMs: number): number {
   return Math.max(0, totalTimeoutMs - (Date.now() - startedAt));
@@ -75,7 +76,6 @@ export async function runAndWait(
   // Poll for status
   let lastStatus: unknown = null;
   let pollCount = 0;
-  let consecutiveUnrecognized = 0;
   while (remainingTimeMs(startedAt, timeout) > 0) {
     const nextPollDelay = Math.min(pollInterval, remainingTimeMs(startedAt, timeout));
     await sleepWithAbort(nextPollDelay, signal);
@@ -108,33 +108,14 @@ export async function runAndWait(
     pollCount += 1;
 
     const runStatus = status.runStatus;
-    if (typeof runStatus !== "string") {
-      throw new Error(
-        `runStatus response missing a string runStatus field (got ${typeof runStatus})`
-      );
-    }
-
-    if (!KNOWN_RUN_STATUSES.has(runStatus)) {
-      consecutiveUnrecognized += 1;
-      await reportProgress?.(
-        `Status check ${pollCount} for run ${runCounter}: unrecognized status "${runStatus}" (${consecutiveUnrecognized}/${MAX_CONSECUTIVE_UNRECOGNIZED}).`
-      );
-      if (consecutiveUnrecognized >= MAX_CONSECUTIVE_UNRECOGNIZED) {
-        throw new Error(
-          `Run ${runCounter} returned unrecognized status "${runStatus}" ${MAX_CONSECUTIVE_UNRECOGNIZED} consecutive times. Aborting to avoid an infinite poll loop.`
-        );
-      }
-      continue;
-    }
-    consecutiveUnrecognized = 0;
-
     await reportProgress?.(
-      `Status check ${pollCount} for run ${runCounter}: ${runStatus}.`
+      `Status check ${pollCount} for run ${runCounter}: ${formatRunStatusForMessage(runStatus)}.`
     );
-    if (TERMINAL_RUN_STATUSES.has(runStatus)) {
+    const validatedRunStatus = validateRunStatus(runCounter, runStatus);
+    if (isTerminalRunStatus(validatedRunStatus)) {
       // Fetch run results — runCounter is the numeric run ID
       await reportProgress?.(
-        `Run ${runCounter} reached terminal status ${runStatus}. Fetching results.`
+        `Run ${runCounter} reached terminal status ${validatedRunStatus}. Fetching results.`
       );
       const resultsTimeoutMs = remainingTimeMs(startedAt, timeout);
       if (resultsTimeoutMs <= 0) {
@@ -192,6 +173,9 @@ export async function runAndWait(
         throw error;
       }
     }
+  }
+  if (finalStatus && typeof finalStatus === "object") {
+    validateRunStatus(runCounter, (finalStatus as Record<string, unknown>).runStatus);
   }
   await reportProgress?.(
     `Timed out waiting for run ${runCounter}. Returning the last known status.`

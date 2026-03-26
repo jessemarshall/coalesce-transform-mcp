@@ -392,6 +392,68 @@ describe("run-and-wait workflow", () => {
     });
   });
 
+  it("treats waitingToRun as a valid non-terminal status", async () => {
+    const client = createMockClient();
+    let pollCount = 0;
+
+    client.get.mockImplementation((path: string) => {
+      if (path === "/scheduler/runStatus") {
+        pollCount++;
+        return Promise.resolve({
+          ...POSTMAN_RUN_STATUS_RESPONSE,
+          runStatus: pollCount === 1 ? "waitingToRun" : "completed",
+        });
+      }
+      if (path === "/api/v1/runs/0/results") {
+        return Promise.resolve({ data: "final" });
+      }
+      return Promise.resolve({});
+    });
+
+    const promise = runAndWait(client as any, {
+      runDetails: { environmentID: "env-1", jobID: "job-1" },
+      pollInterval: 5,
+    });
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    const result = await promise;
+
+    expect(pollCount).toBe(2);
+    expect(result).toEqual({
+      status: {
+        ...POSTMAN_RUN_STATUS_RESPONSE,
+        runStatus: "completed",
+      },
+      results: { data: "final" },
+    });
+  });
+
+  it("throws when runStatus falls outside the documented status set", async () => {
+    const client = createMockClient();
+
+    client.get.mockImplementation((path: string) => {
+      if (path === "/scheduler/runStatus") {
+        return Promise.resolve({
+          ...POSTMAN_RUN_STATUS_RESPONSE,
+          runStatus: "mystery_status",
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    const promise = runAndWait(client as any, {
+      runDetails: { environmentID: "env-1", jobID: "job-1" },
+      pollInterval: 5,
+    });
+    const rejection = expect(promise).rejects.toThrow(
+      "Run 0 returned unexpected runStatus 'mystery_status'. Expected one of: waitingToRun, running, completed, failed, canceled."
+    );
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    await rejection;
+  });
+
   it("keeps polling after a timed-out status request while time remains", async () => {
     const client = createMockClient();
     let pollCount = 0;

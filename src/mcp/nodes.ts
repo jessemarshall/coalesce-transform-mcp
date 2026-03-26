@@ -24,8 +24,14 @@ import { assertNoSqlOverridePayload } from "../services/policies/sql-override.js
 import { buildWorkspaceProfile } from "../services/workspace/analysis.js";
 import { fetchAllWorkspaceNodes, toNodeSummaries } from "../services/cache/snapshots.js";
 import {
+  NodeConfigInputSchema,
+  StorageLocationInputSchema,
+  WorkspaceNodeColumnInputSchema,
+  WorkspaceNodeMetadataInputSchema,
+  WorkspaceNodeWriteInputSchema,
+} from "../schemas/node-payloads.js";
+import {
   PaginationParams,
-  WorkspaceNodeBodySchema,
   buildJsonToolResponse,
   READ_ONLY_ANNOTATIONS,
   WRITE_ANNOTATIONS,
@@ -129,19 +135,16 @@ export function registerNodeTools(
         .optional()
         .describe("Optional node description to apply after creation."),
       storageLocations: z
-        .array(z.unknown())
+        .array(StorageLocationInputSchema)
         .optional()
         .describe("Optional storageLocations array to apply after creation."),
-      config: z
-        .record(z.unknown())
+      config: NodeConfigInputSchema
         .optional()
         .describe("Optional config object to apply after creation."),
-      metadata: z
-        .record(z.unknown())
+      metadata: WorkspaceNodeMetadataInputSchema
         .optional()
         .describe("Optional metadata object to apply after creation, including metadata.columns."),
-      changes: z
-        .record(z.unknown())
+      changes: WorkspaceNodeWriteInputSchema
         .optional()
         .describe("Optional additional partial fields to merge after the node is created and fetched."),
       repoPath: z
@@ -166,8 +169,8 @@ export function registerNodeTools(
     {
       workspaceID: z.string().describe("The workspace ID"),
       nodeID: z.string().describe("The node ID"),
-      body: WorkspaceNodeBodySchema.describe(
-        "Complete node data to set. Known structural fields (name, description, nodeType, database, schema, locationName, storageLocations, config, metadata) are validated; node-type-specific fields are passed through. Do not include overrideSQL — it is auto-preserved."
+      body: WorkspaceNodeWriteInputSchema.describe(
+        "Complete node data to set. Common fields include name, description, nodeType, table, database, schema, locationName, storageLocations, config, and metadata. Do not include overrideSQL — it is auto-preserved."
       ),
     },
     IDEMPOTENT_WRITE_ANNOTATIONS,
@@ -215,12 +218,9 @@ export function registerNodeTools(
     {
       workspaceID: z.string().describe("The workspace ID"),
       nodeID: z.string().describe("The node ID"),
-      changes: z
-        .record(z.unknown())
-        .refine((obj) => Object.keys(obj).length > 0, {
-          message: "changes must contain at least one field to update",
-        })
-        .describe("Partial node fields to update. Object fields are deep-merged; arrays replace the existing array when provided."),
+      changes: WorkspaceNodeWriteInputSchema.describe(
+        "Partial node fields to update. Common fields include name, description, database, schema, locationName, storageLocations, config, and metadata. Object fields are deep-merged; arrays replace the existing array when provided."
+      ),
     },
     IDEMPOTENT_WRITE_ANNOTATIONS,
     async (params) => {
@@ -239,17 +239,16 @@ export function registerNodeTools(
     {
       workspaceID: z.string().describe("The workspace ID"),
       nodeID: z.string().describe("The node ID"),
-      columns: z
-        .array(z.unknown())
-        .describe("Complete new columns array to replace metadata.columns. Each column should have name, transform, and optionally datatype, description."),
+      columns: z.array(WorkspaceNodeColumnInputSchema).describe(
+        "Complete new columns array to replace metadata.columns. Each column should include name and may include transform, dataType, description, nullable, sources, and other hydrated metadata fields."
+      ),
       whereCondition: z
         .string()
         .optional()
         .describe("Optional WHERE filter to append to the node's existing joinCondition. Just provide the condition — do NOT include the WHERE keyword or construct {{ ref() }} syntax. The FROM clause is already set from node creation. Example: '\"LOCATION\".\"LOCATION_ID\" IS NOT NULL AND \"LOCATION\".\"LOCATION_ID\" != 0'"),
-      additionalChanges: z
-        .record(z.unknown())
+      additionalChanges: WorkspaceNodeWriteInputSchema
         .optional()
-        .describe("Optional additional fields to update (e.g., config, description, name). Object fields are deep-merged; arrays are replaced. Do NOT include metadata.sourceMapping or customSQL — use whereCondition for WHERE filters, apply-join-condition for join setup, or convert-join-to-aggregation for GROUP BY patterns."),
+        .describe("Optional additional fields to update, such as name, description, config, or metadata. Object fields are deep-merged; arrays are replaced. Do NOT include metadata.sourceMapping or customSQL — use whereCondition for WHERE filters, apply-join-condition for join setup, or convert-join-to-aggregation for GROUP BY patterns."),
     },
     IDEMPOTENT_WRITE_ANNOTATIONS,
     async (params) => {
@@ -356,19 +355,10 @@ export function registerNodeTools(
         .array(z.string())
         .min(1)
         .describe("One or more predecessor node IDs to link to the new node"),
-      changes: z
-        .record(z.unknown())
+      changes: WorkspaceNodeWriteInputSchema
         .optional()
-        .describe("Optional partial fields to apply after successful auto-population validation (e.g., name, description)."),
-      columns: z
-        .array(
-          z.object({
-            name: z.string().describe("Column name"),
-            transform: z.string().optional().describe("Column transform expression (e.g., UPPER(\"TABLE\".\"COL\"))"),
-            dataType: z.string().optional().describe("Data type (defaults from predecessor or VARCHAR)"),
-            description: z.string().optional().describe("Column description"),
-          })
-        )
+        .describe("Optional partial fields to apply after successful auto-population validation, such as name, description, config, metadata, database, schema, or locationName."),
+      columns: z.array(WorkspaceNodeColumnInputSchema)
         .optional()
         .describe("Replace auto-populated columns with these specific columns and transforms. Mutually exclusive with groupByColumns/aggregates."),
       whereCondition: z
