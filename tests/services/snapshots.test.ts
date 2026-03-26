@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -135,7 +135,32 @@ describe("streamAllPaginatedToDisk", () => {
       streamAllPaginatedToDisk(fetchPage, {}, {}, { ndjsonPath, metaPath })
     ).rejects.toThrow("API failure");
 
+    expect(existsSync(ndjsonPath)).toBe(false);
     expect(existsSync(metaPath)).toBe(false);
+  });
+
+  it("preserves the previous snapshot when a replacement stream fails", async () => {
+    const baseDir = createTempDir();
+    const ndjsonPath = join(baseDir, "data", "test.ndjson");
+    const metaPath = join(baseDir, "data", "test.meta.json");
+
+    mkdirSync(join(baseDir, "data"), { recursive: true });
+    writeFileSync(ndjsonPath, '{"id":"existing"}\n', "utf8");
+    writeFileSync(metaPath, '{"totalItems":1}\n', "utf8");
+
+    const fetchPage = vi.fn()
+      .mockResolvedValueOnce({
+        data: [{ id: "a" }],
+        next: "cursor-2",
+      })
+      .mockRejectedValueOnce(new Error("API failure"));
+
+    await expect(
+      streamAllPaginatedToDisk(fetchPage, {}, {}, { ndjsonPath, metaPath })
+    ).rejects.toThrow("API failure");
+
+    expect(readFileSync(ndjsonPath, "utf8")).toBe('{"id":"existing"}\n');
+    expect(readFileSync(metaPath, "utf8")).toBe('{"totalItems":1}\n');
   });
 
   it("applies itemTransform to each item before writing", async () => {

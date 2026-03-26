@@ -213,6 +213,22 @@ function listCacheFilePaths(directory: string): string[] {
   return filePaths.sort();
 }
 
+function isCompleteSnapshotArtifact(filePath: string): boolean {
+  if (filePath.includes(".tmp-")) {
+    return false;
+  }
+
+  if (filePath.endsWith(".ndjson")) {
+    return existsSync(filePath.replace(/\.ndjson$/, ".meta.json"));
+  }
+
+  if (filePath.endsWith(".meta.json")) {
+    return existsSync(filePath.replace(/\.meta\.json$/, ".ndjson"));
+  }
+
+  return true;
+}
+
 function listCacheResources(baseDir?: string): {
   uri: string;
   name: string;
@@ -220,7 +236,9 @@ function listCacheResources(baseDir?: string): {
   mimeType: string;
 }[] {
   const cacheDir = getCacheDir(baseDir);
-  return listCacheFilePaths(cacheDir).flatMap((filePath) => {
+  return listCacheFilePaths(cacheDir)
+    .filter(isCompleteSnapshotArtifact)
+    .flatMap((filePath) => {
     const uri = buildCacheResourceUri(filePath, baseDir);
     if (!uri) {
       return [];
@@ -234,7 +252,7 @@ function listCacheResources(baseDir?: string): {
         mimeType: getCacheResourceMimeType(filePath),
       },
     ];
-  });
+    });
 }
 
 /**
@@ -295,7 +313,7 @@ export function registerResources(server: McpServer): void {
     },
     async (resourceUri) => {
       const resolved = resolveCacheResourceUri(resourceUri.toString());
-      if (!resolved) {
+      if (!resolved || !isCompleteSnapshotArtifact(resolved.filePath)) {
         throw new Error(`Unknown cache resource: ${resourceUri.toString()}`);
       }
 

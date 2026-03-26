@@ -222,4 +222,45 @@ describe("Resources", () => {
 
     cwdSpy.mockRestore();
   });
+
+  it("does not list or read orphaned snapshot files without matching metadata", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "coalesce-resource-orphan-"));
+    tempDirs.push(tempDir);
+
+    const orphanNdjsonPath = join(
+      tempDir,
+      "coalesce_transform_mcp_data_cache",
+      "nodes",
+      "workspace-ws-1-nodes.ndjson"
+    );
+    mkdirSync(join(tempDir, "coalesce_transform_mcp_data_cache", "nodes"), {
+      recursive: true,
+    });
+    writeFileSync(orphanNdjsonPath, '{"id":"partial"}\n', "utf8");
+
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(tempDir);
+    registerResources(server);
+
+    const cacheTemplateCall = resourceSpy.mock.calls.find(
+      (call) => typeof call[1] !== "string"
+    );
+    const template = cacheTemplateCall?.[1];
+    const readCallback = cacheTemplateCall?.[3];
+    const orphanUri = buildCacheResourceUri(orphanNdjsonPath, tempDir);
+
+    expect(orphanUri).toBeTruthy();
+
+    const listResult = await template.listCallback({} as never);
+    expect(listResult.resources).not.toContainEqual(
+      expect.objectContaining({
+        uri: orphanUri,
+      })
+    );
+
+    await expect(
+      readCallback?.(new URL(orphanUri!), {} as never, {} as never)
+    ).rejects.toThrow(`Unknown cache resource: ${orphanUri}`);
+
+    cwdSpy.mockRestore();
+  });
 });
