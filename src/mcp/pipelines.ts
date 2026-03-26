@@ -31,12 +31,22 @@ const REWRITTEN_SQL_ERROR_MESSAGE =
 function buildPlanFingerprint(
   workspaceID: string,
   repoPath: string | null,
-  workspaceNodeTypes: string[]
+  workspaceNodeTypes: string[],
+  requestInputs?: {
+    goal?: string;
+    sql?: string;
+    sourceNodeIDs?: string[];
+    targetNodeType?: string;
+  }
 ): string {
   const input = [
     `workspace:${workspaceID}`,
     `repo:${repoPath ?? "none"}`,
     `types:${[...workspaceNodeTypes].sort().join(",")}`,
+    `goal:${requestInputs?.goal ?? ""}`,
+    `sql:${requestInputs?.sql ?? ""}`,
+    `sources:${requestInputs?.sourceNodeIDs ? [...requestInputs.sourceNodeIDs].sort().join(",") : ""}`,
+    `targetType:${requestInputs?.targetNodeType ?? ""}`,
   ].join("|");
   return createHash("sha256").update(input).digest("hex").slice(0, 16);
 }
@@ -252,7 +262,13 @@ export function registerPipelineTools(
         const fingerprint = buildPlanFingerprint(
           params.workspaceID,
           repoPath,
-          workspaceNodeTypes
+          workspaceNodeTypes,
+          {
+            goal: params.goal,
+            sql: params.sql,
+            sourceNodeIDs: params.sourceNodeIDs,
+            targetNodeType: params.targetNodeType,
+          }
         );
 
         // Check for a cached plan with the same fingerprint
