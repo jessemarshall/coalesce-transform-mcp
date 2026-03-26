@@ -7,7 +7,7 @@ import {
   listWorkspaceNodes,
 } from "../../coalesce/api/nodes.js";
 import { listWorkspaceNodeTypes } from "../workspace/mutations.js";
-import { isPlainObject } from "../../utils.js";
+import { isPlainObject, uniqueInOrder } from "../../utils.js";
 import { NodeConfigInputSchema } from "../../schemas/node-payloads.js";
 import {
   selectPipelineNodeType,
@@ -245,6 +245,34 @@ export function deepClone<T>(value: T): T {
 
 export function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+export function buildSourceDependencyKey(
+  locationName: string | null | undefined,
+  nodeName: string
+): string {
+  return `${normalizeSqlIdentifier(locationName ?? "")}::${normalizeSqlIdentifier(nodeName)}`;
+}
+
+export function getUniqueSourceDependencies(
+  sourceRefs: Array<{ locationName: string; nodeName: string }>
+): Array<{ locationName: string; nodeName: string }> {
+  const seen = new Set<string>();
+  const dependencies: Array<{ locationName: string; nodeName: string }> = [];
+
+  for (const ref of sourceRefs) {
+    const key = buildSourceDependencyKey(ref.locationName, ref.nodeName);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    dependencies.push({
+      locationName: ref.locationName,
+      nodeName: ref.nodeName,
+    });
+  }
+
+  return dependencies;
 }
 
 function isIdentifierChar(char: string | undefined): boolean {
@@ -1673,9 +1701,9 @@ function buildPlanFromSql(
     );
   }
 
-  const predecessorNodeIDs = parseResult.refs.flatMap((ref) =>
+  const predecessorNodeIDs = uniqueInOrder(parseResult.refs.flatMap((ref) =>
     ref.nodeID ? [ref.nodeID] : []
-  );
+  ));
   const predecessorNodeNames = parseResult.refs.map((ref) => ref.nodeName);
 
   const ready =
@@ -2523,9 +2551,9 @@ export async function planPipeline(
             )}_MULTI_SOURCE`,
           nodeType: selectedNodeType,
           nodeTypeFamily: selectionResult.selectedCandidate?.family ?? null,
-          predecessorNodeIDs: sourceRefs.flatMap((ref) =>
+          predecessorNodeIDs: uniqueInOrder(sourceRefs.flatMap((ref) =>
             ref.nodeID ? [ref.nodeID] : []
-          ),
+          )),
           predecessorPlanNodeIDs: [],
           predecessorNodeNames: sourceRefs.map((ref) => ref.nodeName),
           description: params.description ?? null,
@@ -2734,10 +2762,7 @@ export function buildStageSourceMappingFromPlan(
           : {}),
         customSQL: "",
       },
-      dependencies: nodePlan.sourceRefs.map((ref) => ({
-        locationName: ref.locationName,
-        nodeName: ref.nodeName,
-      })),
+      dependencies: getUniqueSourceDependencies(nodePlan.sourceRefs),
       join: {
         ...(isPlainObject(existingEntry) && isPlainObject(existingEntry.join)
           ? existingEntry.join
@@ -2828,10 +2853,27 @@ function validateSavedStageNode(
     isPlainObject(sourceMappingEntry) && Array.isArray(sourceMappingEntry.dependencies)
       ? sourceMappingEntry.dependencies
           .filter(isPlainObject)
-          .flatMap((dependency) =>
-            typeof dependency.nodeName === "string" ? [dependency.nodeName] : []
-          )
+          .flatMap((dependency) => {
+            if (typeof dependency.nodeName !== "string") {
+              return [];
+            }
+            return [{
+              locationName:
+                typeof dependency.locationName === "string" ? dependency.locationName : null,
+              nodeName: dependency.nodeName,
+            }];
+          })
       : [];
+  const expectedDependencies = getUniqueSourceDependencies(nodePlan.sourceRefs);
+  const actualDependencyKeys = uniqueInOrder(
+    savedDependencies.map((dependency) =>
+      buildSourceDependencyKey(dependency.locationName, dependency.nodeName)
+    )
+  );
+  const expectedDependencyKeys = expectedDependencies.map((dependency) =>
+    buildSourceDependencyKey(dependency.locationName, dependency.nodeName)
+  );
+  const expectedPredecessorNodeIDs = uniqueInOrder(nodePlan.predecessorNodeIDs);
   const savedJoinCondition =
     isPlainObject(sourceMappingEntry) &&
     isPlainObject(sourceMappingEntry.join) &&
@@ -2855,20 +2897,22 @@ function validateSavedStageNode(
     expectedColumnNames,
     actualColumnNames: savedColumnNames,
     sourceMappingDependenciesSatisfied:
-      savedDependencies.length === nodePlan.sourceRefs.length &&
-      nodePlan.sourceRefs.every((ref) => savedDependencies.includes(ref.nodeName)),
-    expectedDependencyNodeNames: nodePlan.sourceRefs.map((ref) => ref.nodeName),
-    actualDependencyNodeNames: savedDependencies,
+      actualDependencyKeys.length === expectedDependencyKeys.length &&
+      expectedDependencyKeys.every((key) => actualDependencyKeys.includes(key)),
+    expectedDependencyNodeNames: expectedDependencies.map((dependency) => dependency.nodeName),
+    actualDependencyNodeNames: uniqueInOrder(
+      savedDependencies.map((dependency) => dependency.nodeName)
+    ),
     joinConditionSatisfied:
       (nodePlan.joinCondition === null && savedJoinCondition.length === 0) ||
       savedJoinCondition === normalizeWhitespace(nodePlan.joinCondition ?? ""),
     expectedJoinCondition: nodePlan.joinCondition,
     actualJoinCondition:
       savedJoinCondition.length > 0 ? savedJoinCondition : null,
-    predecessorCoverageSatisfied: nodePlan.predecessorNodeIDs.every((nodeID) =>
+    predecessorCoverageSatisfied: expectedPredecessorNodeIDs.every((nodeID) =>
       referencedPredecessorNodeIDs.has(nodeID)
     ),
-    predecessorNodeIDs: nodePlan.predecessorNodeIDs,
+    predecessorNodeIDs: expectedPredecessorNodeIDs,
     referencedPredecessorNodeIDs: Array.from(referencedPredecessorNodeIDs),
   };
 }

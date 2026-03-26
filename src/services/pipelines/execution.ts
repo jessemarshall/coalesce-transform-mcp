@@ -6,9 +6,11 @@ import {
   planPipeline,
   type PlannedPipelineNode,
   DEFAULT_STAGE_CONFIG,
+  buildSourceDependencyKey,
   deepClone,
   findMatchingBaseColumn,
   buildStageSourceMappingFromPlan,
+  getUniqueSourceDependencies,
   renameSourceMappingEntries,
   getColumnNamesFromNode,
   normalizeSqlIdentifier,
@@ -21,7 +23,7 @@ import {
   setWorkspaceNode,
 } from "../../coalesce/api/nodes.js";
 import { createWorkspaceNodeFromPredecessor, buildUpdatedWorkspaceNodeBody } from "../workspace/mutations.js";
-import { isPlainObject } from "../../utils.js";
+import { isPlainObject, uniqueInOrder } from "../../utils.js";
 
 function isStageLikeNode(nodePlan: PlannedPipelineNode): boolean {
   return (
@@ -122,10 +124,27 @@ function validateSavedNode(
     isPlainObject(sourceMappingEntry) && Array.isArray(sourceMappingEntry.dependencies)
       ? sourceMappingEntry.dependencies
           .filter(isPlainObject)
-          .flatMap((dependency) =>
-            typeof dependency.nodeName === "string" ? [dependency.nodeName] : []
-          )
+          .flatMap((dependency) => {
+            if (typeof dependency.nodeName !== "string") {
+              return [];
+            }
+            return [{
+              locationName:
+                typeof dependency.locationName === "string" ? dependency.locationName : null,
+              nodeName: dependency.nodeName,
+            }];
+          })
       : [];
+  const expectedDependencies = getUniqueSourceDependencies(nodePlan.sourceRefs);
+  const actualDependencyKeys = uniqueInOrder(
+    savedDependencies.map((dependency) =>
+      buildSourceDependencyKey(dependency.locationName, dependency.nodeName)
+    )
+  );
+  const expectedDependencyKeys = expectedDependencies.map((dependency) =>
+    buildSourceDependencyKey(dependency.locationName, dependency.nodeName)
+  );
+  const expectedPredecessorNodeIDs = uniqueInOrder(nodePlan.predecessorNodeIDs);
   const savedJoinCondition =
     isPlainObject(sourceMappingEntry) &&
     isPlainObject(sourceMappingEntry.join) &&
@@ -149,20 +168,22 @@ function validateSavedNode(
     expectedColumnNames,
     actualColumnNames: savedColumnNames,
     sourceMappingDependenciesSatisfied:
-      savedDependencies.length === nodePlan.sourceRefs.length &&
-      nodePlan.sourceRefs.every((ref) => savedDependencies.includes(ref.nodeName)),
-    expectedDependencyNodeNames: nodePlan.sourceRefs.map((ref) => ref.nodeName),
-    actualDependencyNodeNames: savedDependencies,
+      actualDependencyKeys.length === expectedDependencyKeys.length &&
+      expectedDependencyKeys.every((key) => actualDependencyKeys.includes(key)),
+    expectedDependencyNodeNames: expectedDependencies.map((dependency) => dependency.nodeName),
+    actualDependencyNodeNames: uniqueInOrder(
+      savedDependencies.map((dependency) => dependency.nodeName)
+    ),
     joinConditionSatisfied:
       (nodePlan.joinCondition === null && savedJoinCondition.length === 0) ||
       savedJoinCondition === normalizeWhitespace(nodePlan.joinCondition ?? ""),
     expectedJoinCondition: nodePlan.joinCondition,
     actualJoinCondition:
       savedJoinCondition.length > 0 ? savedJoinCondition : null,
-    predecessorCoverageSatisfied: nodePlan.predecessorNodeIDs.every((nodeID) =>
+    predecessorCoverageSatisfied: expectedPredecessorNodeIDs.every((nodeID) =>
       referencedPredecessorNodeIDs.has(nodeID)
     ),
-    predecessorNodeIDs: nodePlan.predecessorNodeIDs,
+    predecessorNodeIDs: expectedPredecessorNodeIDs,
     referencedPredecessorNodeIDs: Array.from(referencedPredecessorNodeIDs),
   };
 }
@@ -258,13 +279,13 @@ export async function createPipelineFromPlan(
   const createdNodeIDsForRollback: string[] = [];
 
   for (const nodePlan of plan.nodes) {
-    const predecessorNodeIDs = [
+    const predecessorNodeIDs = uniqueInOrder([
       ...nodePlan.predecessorNodeIDs,
       ...nodePlan.predecessorPlanNodeIDs.flatMap((planNodeID) => {
         const createdNodeID = createdNodeIDsByPlanNodeID.get(planNodeID);
         return createdNodeID ? [createdNodeID] : [];
       }),
-    ];
+    ]);
 
     if (predecessorNodeIDs.length === 0) {
       throw new Error(

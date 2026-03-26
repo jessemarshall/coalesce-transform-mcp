@@ -8,7 +8,7 @@ import {
 import { fetchAllWorkspaceNodes } from "../cache/snapshots.js";
 import { assertNoSqlOverridePayload } from "../policies/sql-override.js";
 import { completeNodeConfiguration, type ConfigCompletionResult } from "../config/intelligent.js";
-import { isPlainObject } from "../../utils.js";
+import { isPlainObject, uniqueInOrder } from "../../utils.js";
 import { selectPipelineNodeType } from "../pipelines/node-type-selection.js";
 import { detectSpecializedPatternPenalty } from "../pipelines/node-type-intent.js";
 
@@ -345,7 +345,8 @@ function getReferencedPredecessorNodeIDs(
   node: Record<string, unknown>,
   predecessorNodeIDs: string[]
 ): string[] {
-  const predecessorSet = new Set(predecessorNodeIDs);
+  const uniquePredecessorNodeIDs = uniqueInOrder(predecessorNodeIDs);
+  const predecessorSet = new Set(uniquePredecessorNodeIDs);
   const metadata = isPlainObject(node.metadata) ? node.metadata : undefined;
   if (!Array.isArray(metadata?.columns)) {
     return [];
@@ -368,7 +369,7 @@ function getReferencedPredecessorNodeIDs(
     }
   }
 
-  return predecessorNodeIDs.filter((nodeID) => referenced.has(nodeID));
+  return uniquePredecessorNodeIDs.filter((nodeID) => referenced.has(nodeID));
 }
 
 function normalizeColumnName(name: string): string {
@@ -1500,6 +1501,7 @@ export async function createWorkspaceNodeFromPredecessor(
   }
 ): Promise<unknown> {
   assertNotSourceNodeType(params.nodeType);
+  const effectivePredecessorNodeIDs = uniqueInOrder(params.predecessorNodeIDs);
 
   if (params.changes) {
     assertNoSqlOverridePayload(
@@ -1535,12 +1537,12 @@ export async function createWorkspaceNodeFromPredecessor(
     validateNodeTypeChoice(client, {
       workspaceID: params.workspaceID,
       nodeType: params.nodeType,
-      predecessorCount: params.predecessorNodeIDs.length,
+      predecessorCount: effectivePredecessorNodeIDs.length,
       repoPath: params.repoPath,
       goal: params.goal,
     }),
     Promise.all(
-      params.predecessorNodeIDs.map(async (nodeID) => {
+      effectivePredecessorNodeIDs.map(async (nodeID) => {
         const predecessor = await getWorkspaceNode(client, {
           workspaceID: params.workspaceID,
           nodeID,
@@ -1560,7 +1562,7 @@ export async function createWorkspaceNodeFromPredecessor(
   const created = await createWorkspaceNode(client, {
     workspaceID: params.workspaceID,
     nodeType: params.nodeType,
-    predecessorNodeIDs: params.predecessorNodeIDs,
+    predecessorNodeIDs: effectivePredecessorNodeIDs,
   });
 
   if (!isPlainObject(created) || typeof created.id !== "string") {
@@ -1578,13 +1580,13 @@ export async function createWorkspaceNodeFromPredecessor(
 
   const referencedPredecessorNodeIDs = getReferencedPredecessorNodeIDs(
     createdNode,
-    params.predecessorNodeIDs
+    effectivePredecessorNodeIDs
   );
   const allPredecessorsRepresented =
-    referencedPredecessorNodeIDs.length === params.predecessorNodeIDs.length;
+    referencedPredecessorNodeIDs.length === effectivePredecessorNodeIDs.length;
   const autoPopulatedColumns =
     getNodeColumnCount(createdNode) > 0 &&
-    (params.predecessorNodeIDs.length === 1
+    (effectivePredecessorNodeIDs.length === 1
       ? referencedPredecessorNodeIDs.length > 0
       : allPredecessorsRepresented);
 
@@ -1594,13 +1596,13 @@ export async function createWorkspaceNodeFromPredecessor(
     columnCount: getNodeColumnCount(createdNode),
     dependencyCount: getNodeDependencyNames(createdNode).length,
     dependencyNames: getNodeDependencyNames(createdNode),
-    predecessorNodeIDs: params.predecessorNodeIDs,
+    predecessorNodeIDs: effectivePredecessorNodeIDs,
     referencedPredecessorNodeIDs,
   };
 
   // Build context-aware next steps for multi-predecessor nodes
   const nextSteps = buildPostCreationNextSteps(
-    params.predecessorNodeIDs.length,
+    effectivePredecessorNodeIDs.length,
     params.nodeType,
     joinSuggestions,
     createdNode
@@ -1608,7 +1610,7 @@ export async function createWorkspaceNodeFromPredecessor(
 
   if (!validation.autoPopulatedColumns) {
     const warning =
-      params.predecessorNodeIDs.length > 1
+      effectivePredecessorNodeIDs.length > 1
         ? "Workspace node was created from predecessor(s), but columns were not auto-populated from all requested predecessors. Review the suggested join columns and verify the node in Coalesce before proceeding."
         : "Workspace node was created from predecessor(s), but columns were not auto-populated. Verify the node in Coalesce before proceeding.";
     return {

@@ -1278,6 +1278,78 @@ describe("Node Tools", () => {
     });
   });
 
+  it("createWorkspaceNodeFromPredecessor dedupes duplicate predecessor IDs for self-join creation", async () => {
+    const client = createMockClient();
+    client.post.mockResolvedValue({ id: "new-node", nodeType: "Stage" });
+
+    client.get.mockImplementation((path: string) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes") {
+        return Promise.resolve({ data: [{ id: "existing-node", nodeType: "Stage" }] });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/pred-1") {
+        return Promise.resolve({
+          id: "pred-1",
+          name: "CUSTOMER",
+          metadata: {
+            columns: [{ name: "CUSTOMER_ID" }, { name: "CUSTOMER_NAME" }],
+          },
+        });
+      }
+      return Promise.resolve({
+        id: "new-node",
+        name: "STG_CUSTOMER",
+        metadata: {
+          columns: [
+            {
+              name: "CUSTOMER_ID",
+              sources: [
+                {
+                  columnReferences: [{ nodeID: "pred-1" }],
+                },
+              ],
+            },
+          ],
+          sourceMapping: [
+            {
+              dependencies: [{ nodeName: "CUSTOMER" }],
+            },
+          ],
+        },
+      });
+    });
+
+    const result = await createWorkspaceNodeFromPredecessor(client as any, {
+      workspaceID: "ws-1",
+      nodeType: "Stage",
+      predecessorNodeIDs: ["pred-1", "pred-1"],
+    });
+
+    expect(client.post).toHaveBeenCalledWith("/api/v1/workspaces/ws-1/nodes", {
+      nodeType: "Stage",
+      predecessorNodeIDs: ["pred-1"],
+    });
+    expect(result).toMatchObject({
+      predecessors: [
+        {
+          nodeID: "pred-1",
+          nodeName: "CUSTOMER",
+          columnCount: 2,
+          columnNames: ["CUSTOMER_ID", "CUSTOMER_NAME"],
+        },
+      ],
+      validation: {
+        autoPopulatedColumns: true,
+        allPredecessorsRepresented: true,
+        columnCount: 1,
+        dependencyCount: 1,
+        dependencyNames: ["CUSTOMER"],
+        predecessorNodeIDs: ["pred-1"],
+        referencedPredecessorNodeIDs: ["pred-1"],
+      },
+      configCompletion: expect.objectContaining({ schemaSource: "corpus" }),
+    });
+  });
+
   it("createWorkspaceNodeFromPredecessor returns a warning when a join node does not include all predecessors", async () => {
     const client = createMockClient();
     client.post.mockResolvedValue({ id: "new-node", nodeType: "Stage" });

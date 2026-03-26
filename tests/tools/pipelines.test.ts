@@ -395,6 +395,62 @@ describe("Pipeline Tools", () => {
     ]);
   });
 
+  it("planPipeline keeps self-join aliases while deduping predecessor node IDs", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes") {
+        return Promise.resolve({
+          data: [{ id: "source-1", name: "CUSTOMER", nodeType: "Source", locationName: "RAW" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(sourceNode);
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
+
+    const result = await planPipeline(client as any, {
+      workspaceID: "ws-1",
+      sql: [
+        "SELECT c1.CUSTOMER_ID AS LEFT_CUSTOMER_ID, c2.CUSTOMER_NAME AS RIGHT_CUSTOMER_NAME",
+        "FROM RAW.CUSTOMER c1",
+        "INNER JOIN RAW.CUSTOMER c2 ON c1.CUSTOMER_ID = c2.CUSTOMER_ID",
+      ].join("\n"),
+      targetName: "STG_CUSTOMER_SELF_JOIN",
+      locationName: "STAGING",
+      database: "STAGING",
+      schema: "ANALYTICS",
+    });
+
+    expect(result.status).toBe("ready");
+    expect(result.nodes[0]?.predecessorNodeIDs).toEqual(["source-1"]);
+    expect(result.nodes[0]?.sourceRefs).toEqual([
+      {
+        locationName: "RAW",
+        nodeName: "CUSTOMER",
+        alias: "c1",
+        nodeID: "source-1",
+      },
+      {
+        locationName: "RAW",
+        nodeName: "CUSTOMER",
+        alias: "c2",
+        nodeID: "source-1",
+      },
+    ]);
+    expect(result.nodes[0]?.joinCondition).toContain("FROM {{ ref('RAW', 'CUSTOMER') }} c1");
+    expect(result.nodes[0]?.joinCondition).toContain(
+      "INNER JOIN {{ ref('RAW', 'CUSTOMER') }} c2 ON c1.CUSTOMER_ID = c2.CUSTOMER_ID"
+    );
+  });
+
   it("planPipeline does not mark non-SELECT SQL as ready even when refs resolve", async () => {
     const client = createMockClient();
 
@@ -839,6 +895,166 @@ describe("Pipeline Tools", () => {
       "CUSTOMER_ID",
       "CUSTOMER_NAME",
     ]);
+  });
+
+  it("createPipelineFromPlan supports self-joins when the saved node dedupes dependency entries", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+    const createdNode = buildCreatedStageNode("source-1");
+    let savedBody: Record<string, unknown> | null = null;
+
+    client.post.mockResolvedValue({ id: "new-node" });
+    client.put.mockImplementation((_path: string, body: Record<string, unknown>) => {
+      savedBody = body;
+      return Promise.resolve(body);
+    });
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(sourceNode);
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/new-node") {
+        if (!savedBody) {
+          return Promise.resolve(createdNode);
+        }
+        const sourceMapping = ((savedBody as any).metadata.sourceMapping ?? []) as any[];
+        return Promise.resolve({
+          ...savedBody,
+          metadata: {
+            ...(savedBody as any).metadata,
+            sourceMapping: sourceMapping.map((entry, index) =>
+              index === 0
+                ? {
+                    ...entry,
+                    dependencies: [
+                      {
+                        locationName: "RAW",
+                        nodeName: "CUSTOMER",
+                      },
+                    ],
+                  }
+                : entry
+            ),
+          },
+        });
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
+
+    const result = await createPipelineFromPlan(client as any, {
+      workspaceID: "ws-1",
+      plan: {
+        version: 1,
+        intent: "sql",
+        status: "ready",
+        workspaceID: "ws-1",
+        platform: null,
+        goal: null,
+        sql: [
+          "SELECT c1.CUSTOMER_ID AS LEFT_CUSTOMER_ID, c2.CUSTOMER_NAME AS RIGHT_CUSTOMER_NAME",
+          "FROM {{ ref('RAW', 'CUSTOMER') }} c1",
+          "INNER JOIN {{ ref('RAW', 'CUSTOMER') }} c2 ON c1.CUSTOMER_ID = c2.CUSTOMER_ID",
+        ].join("\n"),
+        nodes: [
+          {
+            planNodeID: "node-1",
+            name: "STG_CUSTOMER_SELF_JOIN",
+            nodeType: "Stage",
+            predecessorNodeIDs: ["source-1", "source-1"],
+            predecessorPlanNodeIDs: [],
+            predecessorNodeNames: ["CUSTOMER", "CUSTOMER"],
+            description: null,
+            sql: [
+              "SELECT c1.CUSTOMER_ID AS LEFT_CUSTOMER_ID, c2.CUSTOMER_NAME AS RIGHT_CUSTOMER_NAME",
+              "FROM {{ ref('RAW', 'CUSTOMER') }} c1",
+              "INNER JOIN {{ ref('RAW', 'CUSTOMER') }} c2 ON c1.CUSTOMER_ID = c2.CUSTOMER_ID",
+            ].join("\n"),
+            selectItems: [
+              {
+                expression: "c1.CUSTOMER_ID",
+                outputName: "LEFT_CUSTOMER_ID",
+                sourceNodeAlias: "c1",
+                sourceNodeName: "CUSTOMER",
+                sourceNodeID: "source-1",
+                sourceColumnName: "CUSTOMER_ID",
+                kind: "column",
+                supported: true,
+              },
+              {
+                expression: "c2.CUSTOMER_NAME",
+                outputName: "RIGHT_CUSTOMER_NAME",
+                sourceNodeAlias: "c2",
+                sourceNodeName: "CUSTOMER",
+                sourceNodeID: "source-1",
+                sourceColumnName: "CUSTOMER_NAME",
+                kind: "column",
+                supported: true,
+              },
+            ],
+            outputColumnNames: ["LEFT_CUSTOMER_ID", "RIGHT_CUSTOMER_NAME"],
+            configOverrides: {
+              testsEnabled: false,
+            },
+            sourceRefs: [
+              {
+                locationName: "RAW",
+                nodeName: "CUSTOMER",
+                alias: "c1",
+                nodeID: "source-1",
+              },
+              {
+                locationName: "RAW",
+                nodeName: "CUSTOMER",
+                alias: "c2",
+                nodeID: "source-1",
+              },
+            ],
+            joinCondition: [
+              "FROM {{ ref('RAW', 'CUSTOMER') }} c1",
+              "INNER JOIN {{ ref('RAW', 'CUSTOMER') }} c2 ON c1.CUSTOMER_ID = c2.CUSTOMER_ID",
+            ].join("\n"),
+            location: {
+              locationName: "STAGING",
+              database: "STAGING",
+              schema: "ANALYTICS",
+            },
+            requiresFullSetNode: true,
+          },
+        ],
+        assumptions: [],
+        openQuestions: [],
+        warnings: [],
+        supportedNodeTypes: ["Stage"],
+      },
+    });
+
+    expect(result).toMatchObject({
+      created: true,
+      workspaceID: "ws-1",
+      nodeCount: 1,
+    });
+    expect(client.post).toHaveBeenCalledWith("/api/v1/workspaces/ws-1/nodes", {
+      nodeType: "Stage",
+      predecessorNodeIDs: ["source-1"],
+    });
+    expect(savedBody).not.toBeNull();
+    expect((savedBody as any).metadata.sourceMapping[0].dependencies).toEqual([
+      {
+        locationName: "RAW",
+        nodeName: "CUSTOMER",
+      },
+    ]);
+    expect((savedBody as any).metadata.sourceMapping[0].aliases).toEqual({
+      c1: "source-1",
+      c2: "source-1",
+    });
+    expect((savedBody as any).metadata.sourceMapping[0].join.joinCondition).toContain(
+      "INNER JOIN {{ ref('RAW', 'CUSTOMER') }} c2 ON c1.CUSTOMER_ID = c2.CUSTOMER_ID"
+    );
   });
 
   it("createPipelineFromSql returns a dry-run plan without creating nodes", async () => {
