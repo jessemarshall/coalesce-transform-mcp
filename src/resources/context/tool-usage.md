@@ -41,8 +41,7 @@
 **NEVER skip `plan-pipeline` before creating nodes.** Do not hardcode node types like "Stage", "65", or any other ID.
 
 1. Call `plan-pipeline` with `goal`, `sourceNodeIDs`, and `repoPath` — it discovers and ranks all node types
-2. Use the `nodeType` from the plan result when calling creation tools
-3. If the plan suggests a specialized type (Dynamic Table, Incremental, etc.) but you're doing standard batch ETL, use Stage or Work instead
+2. Use the `nodeType` from the plan result when calling creation tools — the planner already excludes specialized types (Dynamic Table, Incremental, Materialized View, etc.) unless your context explicitly requires them
 
 **Common mistake**: Picking node types by ID or name without calling `plan-pipeline`. This leads to wrong types (e.g., Dynamic Tables for batch ETL) because the agent has no visibility into what types are available or appropriate.
 

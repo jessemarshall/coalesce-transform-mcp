@@ -239,14 +239,22 @@ const CorpusVariantOutputSchema = z.object({
 }).passthrough();
 
 const PipelinePlanOutputSchema = z.object({
+  version: z.number().optional(),
+  intent: z.string().optional(),
   status: z.string().optional(),
+  workspaceID: z.string().optional(),
+  platform: z.string().nullable().optional(),
+  goal: z.string().nullable().optional(),
+  sql: z.string().nullable().optional(),
   warning: z.string().optional(),
   warnings: z.array(z.string()).optional(),
+  assumptions: z.array(z.string()).optional(),
   openQuestions: z.array(z.unknown()).optional(),
   nodes: z.array(z.unknown()).optional(),
   cteNodeSummary: z.array(z.unknown()).optional(),
   supportedNodeTypes: z.array(z.string()).optional(),
   nodeTypeSelection: JsonObjectSchema.optional(),
+  STOP_AND_CONFIRM: z.string().optional(),
   USE_THIS_NODE_TYPE: z.string().optional(),
   nodeTypeDisplayName: z.string().optional(),
   nodeTypeInstruction: z.string().optional(),
@@ -262,6 +270,10 @@ const PipelineCreateOutputSchema = z.object({
   STOP_AND_CONFIRM: z.string().optional(),
   reason: z.string().optional(),
   warning: z.string().optional(),
+  workspaceID: z.string().optional(),
+  nodeCount: z.number().optional(),
+  incomplete: z.boolean().optional(),
+  failedPlanNodeID: z.string().optional(),
   plan: z.unknown().optional(),
   createdNodes: z.array(z.unknown()).optional(),
   cleanupFailedNodeIDs: z.array(z.string()).optional(),
@@ -783,6 +795,10 @@ export function buildJsonToolResponse(
       "Full response was automatically cached to disk because it exceeded the inline response threshold.",
   };
 
+  // Omit structuredContent for auto-cached responses: the cache metadata shape
+  // does not match the tool's declared output schema, so including it would
+  // violate the MCP output contract.  Clients still receive the cache metadata
+  // as text content and can follow the resourceUri to fetch the full payload.
   return {
     content: [
       {
@@ -791,7 +807,6 @@ export function buildJsonToolResponse(
       },
       ...(cacheLink ? [cacheLink] : []),
     ],
-    structuredContent: metadata,
   };
 }
 

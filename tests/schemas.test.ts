@@ -350,7 +350,9 @@ describe("buildJsonToolResponse", () => {
       type: "resource_link",
       uri: metadata.resourceUri,
     });
-    expect(result.structuredContent).toMatchObject(metadata);
+    // structuredContent is intentionally omitted for auto-cached responses
+    // because cache metadata does not match the tool's declared output schema
+    expect(result.structuredContent).toBeUndefined();
   });
 });
 
