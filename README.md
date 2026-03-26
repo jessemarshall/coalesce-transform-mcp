@@ -257,6 +257,15 @@ Large JSON tool and workflow responses are auto-cached to `coalesce_transform_mc
 - The default threshold is `32768` bytes and can be overridden with `COALESCE_MCP_AUTO_CACHE_MAX_BYTES`.
 - Explicit cache tools such as `cache-workspace-nodes` are still the better choice when you already know you want a reusable snapshot under `coalesce_transform_mcp_data_cache/`.
 
+## Prompt Surface
+
+The server also exposes reusable MCP prompts for high-value workflows:
+
+- `coalesce-start-here` - ID discovery and safe first steps before mutations
+- `safe-pipeline-planning` - planner-first pipeline review and approval flow
+- `run-operations-guide` - choosing the right run helper and interpreting statuses
+- `large-result-handling` - working with cached responses and `coalesce://cache/...` resources
+
 ## Repo-Backed Workflow
 
 Use repo-backed discovery, template generation, and pipeline planning when you have a local clone of your Coalesce repo. Set `COALESCE_REPO_PATH` to the repo root (the directory containing `nodeTypes/`, `nodes/`, and usually `packages/`) or pass `repoPath` explicitly on individual tool calls.

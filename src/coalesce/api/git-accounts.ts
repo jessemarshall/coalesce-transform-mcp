@@ -33,8 +33,8 @@ export async function updateGitAccount(
 ): Promise<unknown> {
   return client.patch(
     `/api/v1/gitAccounts/${validatePathSegment(params.gitAccountID, "gitAccountID")}`,
-    { ...(params.accountOwner !== undefined ? { accountOwner: params.accountOwner } : {}) },
-    params.body
+    params.body,
+    { ...(params.accountOwner !== undefined ? { accountOwner: params.accountOwner } : {}) }
   );
 }
 

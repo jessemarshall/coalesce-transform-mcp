@@ -442,7 +442,7 @@ describe("CoalesceClient", () => {
         },
         {
           label: "PATCH",
-          invoke: (client: ReturnType<typeof createClient>) => client.patch("/api/v1/projects/1", undefined, { name: "Test" }),
+          invoke: (client: ReturnType<typeof createClient>) => client.patch("/api/v1/projects/1", { name: "Test" }),
         },
         {
           label: "DELETE",

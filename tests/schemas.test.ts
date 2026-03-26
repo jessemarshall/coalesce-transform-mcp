@@ -276,6 +276,24 @@ describe("buildJsonToolResponse", () => {
     expect(result.structuredContent).toMatchObject(parsed);
   });
 
+  it("wraps non-object payloads in structuredContent", () => {
+    const result = buildJsonToolResponse("list-values", ["a", "b"], {
+      maxInlineBytes: 4096,
+    });
+
+    expect(result).toEqual({
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(["a", "b"], null, 2),
+        },
+      ],
+      structuredContent: {
+        value: ["a", "b"],
+      },
+    });
+  });
+
   it("auto-caches large payloads to disk and returns metadata", () => {
     const baseDir = mkdtempSync(join(tmpdir(), "coalesce-auto-cache-schema-"));
     tempDirs.push(baseDir);

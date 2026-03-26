@@ -311,6 +311,32 @@ describe("retry-and-wait workflow", () => {
     });
   });
 
+  it("throws when retry runStatus falls outside the documented status set", async () => {
+    const client = createMockClient();
+
+    client.get.mockImplementation((path: string) => {
+      if (path === "/scheduler/runStatus") {
+        return Promise.resolve({
+          ...POSTMAN_RUN_STATUS_RESPONSE,
+          runStatus: "mystery_status",
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    const promise = retryAndWait(client as any, {
+      runDetails: { runID: "0" },
+      pollInterval: 5,
+    });
+    const rejection = expect(promise).rejects.toThrow(
+      "Run 0 returned unexpected runStatus 'mystery_status'. Expected one of: waitingToRun, running, completed, failed, canceled."
+    );
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    await rejection;
+  });
+
   it("keeps polling after a timed-out status request while time remains", async () => {
     const client = createMockClient();
     let pollCount = 0;

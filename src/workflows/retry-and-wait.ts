@@ -16,6 +16,11 @@ import {
   type WorkflowProgressExtra,
   type WorkflowProgressReporter,
 } from "./progress.js";
+import {
+  formatRunStatusForMessage,
+  isTerminalRunStatus,
+  validateRunStatus,
+} from "./run-status.js";
 
 function remainingTimeMs(startedAt: number, totalTimeoutMs: number): number {
   return Math.max(0, totalTimeoutMs - (Date.now() - startedAt));
@@ -104,12 +109,13 @@ export async function retryAndWait(
 
     const runStatus = status.runStatus;
     await reportProgress?.(
-      `Status check ${pollCount} for retry run ${runCounter}: ${typeof runStatus === "string" ? runStatus : "unknown"}.`
+      `Status check ${pollCount} for retry run ${runCounter}: ${formatRunStatusForMessage(runStatus)}.`
     );
-    if (runStatus === "completed" || runStatus === "failed" || runStatus === "canceled") {
+    const validatedRunStatus = validateRunStatus(runCounter, runStatus);
+    if (isTerminalRunStatus(validatedRunStatus)) {
       // Fetch run results — runCounter is the numeric run ID
       await reportProgress?.(
-        `Retry run ${runCounter} reached terminal status ${runStatus}. Fetching results.`
+        `Retry run ${runCounter} reached terminal status ${validatedRunStatus}. Fetching results.`
       );
       const resultsTimeoutMs = remainingTimeMs(startedAt, timeout);
       if (resultsTimeoutMs <= 0) {
@@ -167,6 +173,9 @@ export async function retryAndWait(
         throw error;
       }
     }
+  }
+  if (finalStatus && typeof finalStatus === "object") {
+    validateRunStatus(runCounter, (finalStatus as Record<string, unknown>).runStatus);
   }
   await reportProgress?.(
     `Timed out waiting for retry run ${runCounter}. Returning the last known status.`

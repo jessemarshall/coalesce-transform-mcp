@@ -7,6 +7,7 @@ import {
   type CacheResourceLink,
 } from "../cache-dir.js";
 import { z } from "zod";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 const SESSION_START_TIME = new Date();
 
@@ -74,6 +75,14 @@ export const DESTRUCTIVE_ANNOTATIONS = {
 } as const;
 
 const DEFAULT_AUTO_CACHE_MAX_BYTES = 32 * 1024;
+const JSON_TOOL_OUTPUT_SCHEMA_PATCHED = Symbol("jsonToolOutputSchemaPatched");
+
+export const JsonToolOutputSchema = z
+  .object({})
+  .passthrough()
+  .describe(
+    "Tool-specific JSON object output. Oversized responses may be replaced with cache metadata including resourceUri."
+  );
 
 type TextContent = { type: "text"; text: string };
 
@@ -391,8 +400,15 @@ function buildInlineJsonResponse(
   const text = JSON.stringify(result, null, 2);
   return {
     content: [{ type: "text", text }, ...resourceLinks],
-    ...(isPlainRecord(result) ? { structuredContent: result } : {}),
+    structuredContent: normalizeStructuredContent(result),
   };
+}
+
+function normalizeStructuredContent(result: unknown): Record<string, unknown> {
+  if (isPlainRecord(result)) {
+    return result;
+  }
+  return { value: result ?? null };
 }
 
 export function buildJsonToolResponse(
@@ -477,6 +493,73 @@ export function handleToolError(
     isError: true,
     content: [{ type: "text" as const, text: message }],
   };
+}
+
+export function ensureJsonToolOutputSchemas(server: McpServer): void {
+  const looksLikeToolAnnotations = (value: unknown): boolean =>
+    typeof value === "object" &&
+    value !== null &&
+    ("readOnlyHint" in value ||
+      "idempotentHint" in value ||
+      "destructiveHint" in value);
+
+  const patchedServer = server as McpServer & {
+    tool: (...args: unknown[]) => unknown;
+    registerTool: (...args: unknown[]) => unknown;
+    [JSON_TOOL_OUTPUT_SCHEMA_PATCHED]?: boolean;
+  };
+
+  if (patchedServer[JSON_TOOL_OUTPUT_SCHEMA_PATCHED]) {
+    return;
+  }
+
+  const originalRegisterTool = patchedServer.registerTool.bind(server) as (
+    ...args: unknown[]
+  ) => unknown;
+
+  patchedServer.tool = ((...args: unknown[]) => {
+    const [name, ...rest] = args;
+    if (typeof name !== "string") {
+      throw new Error("Tool name must be a string");
+    }
+
+    const callback = rest.at(-1);
+    if (typeof callback !== "function") {
+      throw new Error("Tool callback must be a function");
+    }
+
+    const configArgs = [...rest.slice(0, -1)];
+    const config: Record<string, unknown> = {
+      outputSchema: JsonToolOutputSchema,
+    };
+
+    if (typeof configArgs[0] === "string") {
+      config.description = configArgs.shift();
+    }
+
+    if (configArgs.length === 1) {
+      if (looksLikeToolAnnotations(configArgs[0])) {
+        config.annotations = configArgs[0];
+      } else {
+        config.inputSchema = configArgs[0];
+      }
+    }
+
+    if (configArgs.length === 2) {
+      config.inputSchema = configArgs[0];
+      config.annotations = configArgs[1];
+    }
+
+    if (configArgs.length > 2) {
+      throw new Error(
+        "Unsupported tool registration signature while applying output schemas"
+      );
+    }
+
+    return originalRegisterTool(name, config, callback);
+  }) as typeof patchedServer.tool;
+
+  patchedServer[JSON_TOOL_OUTPUT_SCHEMA_PATCHED] = true;
 }
 
 export function buildStartRunBody(params: StartRunInput) {

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { CoalesceClient } from "../../client.js";
+import { CoalesceApiError, type CoalesceClient } from "../../client.js";
 import { validatePathSegment } from "../../coalesce/types.js";
 import {
   PipelinePlanSchema,
@@ -177,19 +177,46 @@ async function deleteWorkspaceNode(
   );
 }
 
+type SerializedPipelineError = {
+  message: string;
+  status?: number;
+  detail?: unknown;
+};
+
+type RollbackCleanupFailure = SerializedPipelineError & {
+  nodeID: string;
+};
+
+function serializePipelineExecutionError(error: unknown): SerializedPipelineError {
+  if (error instanceof CoalesceApiError) {
+    return {
+      message: error.message,
+      status: error.status,
+      ...(error.detail !== undefined ? { detail: error.detail } : {}),
+    };
+  }
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+  return { message: "Pipeline creation failed", detail: error };
+}
+
 async function rollbackCreatedPipelineNodes(
   client: CoalesceClient,
   workspaceID: string,
   nodeIDs: string[]
-): Promise<string[]> {
-  const rollbackFailures: string[] = [];
+): Promise<RollbackCleanupFailure[]> {
+  const rollbackFailures: RollbackCleanupFailure[] = [];
   const uniqueNodeIDs = Array.from(new Set(nodeIDs));
 
   for (const nodeID of uniqueNodeIDs.reverse()) {
     try {
       await deleteWorkspaceNode(client, workspaceID, nodeID);
-    } catch {
-      rollbackFailures.push(nodeID);
+    } catch (error) {
+      rollbackFailures.push({
+        nodeID,
+        ...serializePipelineExecutionError(error),
+      });
     }
   }
 
@@ -329,13 +356,11 @@ export async function createPipelineFromPlan(
           incomplete: true,
           failedPlanNodeID: nodePlan.planNodeID,
           createdNodes,
-          cleanupFailedNodeIDs: rollbackFailures,
+          cleanupFailedNodeIDs: rollbackFailures.map((failure) => failure.nodeID),
+          cleanupFailures: rollbackFailures,
           warning:
             "Pipeline creation failed after nodes were created, and automatic cleanup did not fully succeed. Review the workspace manually before continuing.",
-          error:
-            error instanceof Error
-              ? { message: error.message }
-              : { message: "Pipeline creation failed", detail: error },
+          error: serializePipelineExecutionError(error),
         };
       }
       throw error;
