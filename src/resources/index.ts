@@ -214,7 +214,7 @@ function listCacheFilePaths(directory: string): string[] {
 }
 
 function isCompleteSnapshotArtifact(filePath: string): boolean {
-  if (filePath.includes(".tmp-")) {
+  if (filePath.includes(".tmp-") || filePath.includes(".bak-")) {
     return false;
   }
 
