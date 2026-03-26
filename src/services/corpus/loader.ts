@@ -51,7 +51,7 @@ export type NodeTypeCorpusVariant = {
 
 export type NodeTypeCorpusSnapshot = {
   generatedAt: string;
-  sourceRoot: string;
+  sourceRoot?: string;
   packageCount: number;
   definitionCount: number;
   uniqueVariantCount: number;

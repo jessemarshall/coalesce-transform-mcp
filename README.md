@@ -1,56 +1,41 @@
 # coalesce-transform-mcp
 
-**Disclaimer:** This is a sample project provided as-is for reference.
+MCP server for the [Coalesce](https://coalesce.io/) Transform API. Connect AI assistants like Claude, Cursor, or Windsurf to your Coalesce workspace to manage nodes, pipelines, environments, jobs, runs, and more.
 
-MCP server for the Coalesce Transform API. Lets MCP-compatible AI assistants handle supported Coalesce workflows such as managing environments, nodes, jobs, and subgraphs, triggering runs, and selected project, user, and git-account operations from an editor or CLI.
+## Quick Start
 
-## Requirements
-
-- [Node.js](https://nodejs.org/) >= 18.0.0 (includes npm)
-- A [Coalesce](https://coalesce.io/) account with at least one workspace
-- A Coalesce access token (generated from the Deploy tab in your workspace; see [Coalesce API docs](https://docs.coalesce.io/docs/api/authentication))
-- An MCP-compatible AI client (Claude Code, Claude Desktop, Cursor, Windsurf, etc.)
-- **For run tools only:** A Snowflake account with key pair authentication configured
-
-## Installation
-
-### 1. Set Environment Variables
-
-Add your credentials to your shell profile (`~/.zshrc` or `~/.bashrc`):
+**1. Set your access token** in `~/.zshrc` or `~/.bashrc`:
 
 ```bash
-# Coalesce API (required)
 export COALESCE_ACCESS_TOKEN="your-token-here"
-export COALESCE_BASE_URL="https://app.coalescesoftware.io"
-export COALESCE_ORG_ID="your-org-id"  # Optional: used as fallback by cancel-run
-export COALESCE_REPO_PATH="/path/to/local/coalesce-repo"  # Optional: fallback for repo-backed node-type tools and pipeline planning
-
-# Snowflake Key Pair Auth (required for `start-run`, `retry-run`, `run-and-wait`, and `retry-and-wait`)
-export SNOWFLAKE_USERNAME="your-snowflake-username"
-export SNOWFLAKE_KEY_PAIR_KEY="/path/to/your/snowflake_key.pem"
-export SNOWFLAKE_KEY_PAIR_PASS="your-key-passphrase"  # Only needed for encrypted keys
-export SNOWFLAKE_WAREHOUSE="your-warehouse"
-export SNOWFLAKE_ROLE="your-role"
 ```
 
-Then reload your shell:
+Generate a token from the Deploy tab in your Coalesce workspace ([docs](https://docs.coalesce.io/docs/api/authentication)).
 
-```bash
-source ~/.zshrc
-```
+**2. Add to your MCP client config:**
 
-### 2. Add the MCP Server to Your Client
-
-Add the following to your client's MCP configuration file:
-
-| Client | Config file location |
-|--------|---------------------|
-| Claude Code | `.mcp.json` in your project root (or `~/.claude.json` for global) |
+| Client | Config file |
+| ------ | ----------- |
+| Claude Code | `.mcp.json` in project root (or `~/.claude.json` for global) |
 | Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Cursor | `.cursor/mcp.json` in your project root |
+| Cursor | `.cursor/mcp.json` in project root |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
 
-**Claude Desktop, Cursor, Windsurf** (`mcpServers` wrapper):
+**Claude Code** (`.mcp.json`):
+
+```json
+{
+  "coalesce-transform": {
+    "command": "npx",
+    "args": ["coalesce-transform-mcp"],
+    "env": {
+      "COALESCE_ACCESS_TOKEN": "${COALESCE_ACCESS_TOKEN}"
+    }
+  }
+}
+```
+
+**Claude Desktop, Cursor, Windsurf** — same thing, wrapped in `"mcpServers"`:
 
 ```json
 {
@@ -59,21 +44,65 @@ Add the following to your client's MCP configuration file:
       "command": "npx",
       "args": ["coalesce-transform-mcp"],
       "env": {
-        "COALESCE_ACCESS_TOKEN": "${COALESCE_ACCESS_TOKEN}",
-        "COALESCE_BASE_URL": "${COALESCE_BASE_URL}",
-        "COALESCE_REPO_PATH": "${COALESCE_REPO_PATH}",
-        "SNOWFLAKE_USERNAME": "${SNOWFLAKE_USERNAME}",
-        "SNOWFLAKE_KEY_PAIR_KEY": "${SNOWFLAKE_KEY_PAIR_KEY}",
-        "SNOWFLAKE_KEY_PAIR_PASS": "${SNOWFLAKE_KEY_PAIR_PASS}",
-        "SNOWFLAKE_WAREHOUSE": "${SNOWFLAKE_WAREHOUSE}",
-        "SNOWFLAKE_ROLE": "${SNOWFLAKE_ROLE}"
+        "COALESCE_ACCESS_TOKEN": "${COALESCE_ACCESS_TOKEN}"
       }
     }
   }
 }
 ```
 
-**Claude Code** (`.mcp.json` — no `mcpServers` wrapper):
+The server defaults to the US region. See [Environment Variables](#environment-variables) if you need to change the region, enable run tools, or configure repo-backed features.
+
+> **Never hardcode credentials in config files tracked by git.** The `${VAR}` syntax pulls values from your shell environment.
+
+## Requirements
+
+- [Node.js](https://nodejs.org/) >= 22.0.0
+- A [Coalesce](https://coalesce.io/) account with a workspace and access token
+- An MCP-compatible AI client
+- **For run tools only:** Snowflake key pair authentication (see below)
+
+## Environment Variables
+
+Only `COALESCE_ACCESS_TOKEN` is required. Everything else is optional.
+
+| Variable | Description | Default |
+| -------- | ----------- | ------- |
+| `COALESCE_ACCESS_TOKEN` | **Required.** Bearer token from the Coalesce Deploy tab. | — |
+| `COALESCE_BASE_URL` | Region-specific base URL. | `https://app.coalescesoftware.io` (US) |
+| `COALESCE_ORG_ID` | Fallback org ID for `cancel-run`. | — |
+| `COALESCE_REPO_PATH` | Local repo root for repo-backed tools and pipeline planning. | — |
+| `COALESCE_MCP_AUTO_CACHE_MAX_BYTES` | JSON size threshold before auto-caching to disk. | `32768` |
+| `COALESCE_MCP_MAX_REQUEST_BODY_BYTES` | Max outbound API request body size. | `524288` |
+
+### Snowflake (for run tools only)
+
+Required for `start-run`, `retry-run`, `run-and-wait`, and `retry-and-wait`. The server starts without them — they're validated when you first use a run tool.
+
+| Variable | Required | Description |
+| -------- | -------- | ----------- |
+| `SNOWFLAKE_USERNAME` | Yes | Snowflake account username |
+| `SNOWFLAKE_KEY_PAIR_KEY` | Yes | Path to PEM-encoded private key |
+| `SNOWFLAKE_KEY_PAIR_PASS` | No | Passphrase for encrypted keys |
+| `SNOWFLAKE_WAREHOUSE` | Yes | Snowflake compute warehouse |
+| `SNOWFLAKE_ROLE` | Yes | Snowflake user role |
+
+To use optional variables, add them to your shell profile and pass them through in your MCP config. Here's a full example with everything enabled:
+
+**`~/.zshrc`:**
+
+```bash
+export COALESCE_ACCESS_TOKEN="your-token-here"
+export COALESCE_BASE_URL="https://app.eu.coalescesoftware.io"
+export COALESCE_REPO_PATH="/path/to/local/coalesce-repo"
+export SNOWFLAKE_USERNAME="your-username"
+export SNOWFLAKE_KEY_PAIR_KEY="/path/to/snowflake_key.pem"
+export SNOWFLAKE_KEY_PAIR_PASS="your-passphrase"
+export SNOWFLAKE_WAREHOUSE="your-warehouse"
+export SNOWFLAKE_ROLE="your-role"
+```
+
+**`.mcp.json`:**
 
 ```json
 {
@@ -94,49 +123,7 @@ Add the following to your client's MCP configuration file:
 }
 ```
 
-The `${VAR}` syntax pulls values from your shell environment, keeping credentials out of your config files. Pass through `COALESCE_ORG_ID` if you want the `cancel-run` fallback, and `COALESCE_REPO_PATH` if you want repo-backed tools and pipeline planning to default to a local repo path.
-
-> **Never hardcode credentials in config files that are tracked by git.** Use environment variable references (`${VAR}`) instead.
-
-## Environment Variable Reference
-
-### Coalesce (required at startup)
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `COALESCE_ACCESS_TOKEN` | Bearer token from Coalesce Deploy tab | `eyJhbG...` |
-| `COALESCE_BASE_URL` | Region-specific base URL (see [Region Base URLs](#region-base-urls)) | `https://app.coalescesoftware.io` |
-
-### Coalesce (optional)
-
-| Variable | Used By | Description |
-|----------|---------|-------------|
-| `COALESCE_ORG_ID` | `cancel-run` | Optional fallback Org ID when `orgID` is not passed to the tool |
-| `COALESCE_REPO_PATH` | Repo-backed node-type tools, `plan-pipeline`, `create-pipeline-from-sql` | Optional fallback local repo path when `repoPath` is not passed explicitly. Point this at the repo root that contains `nodeTypes/`, `nodes/`, and usually `packages/`. |
-| `COALESCE_MCP_AUTO_CACHE_MAX_BYTES` | All JSON-returning tools/workflows | Pretty-printed JSON size threshold in bytes before the full response is automatically written to disk and only cache metadata is returned inline. Defaults to `32768`. |
-| `COALESCE_MCP_MAX_REQUEST_BODY_BYTES` | All API-calling tools | Maximum serialized JSON body size in bytes for outbound API requests. Rejects oversized payloads before they leave the process. Defaults to `524288` (512 KB). |
-
-### Snowflake (required for run tools: `start-run`, `retry-run`, `run-and-wait`, `retry-and-wait`)
-
-These are validated lazily: the server starts without them, but the run-triggering tools will error if they are missing.
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `SNOWFLAKE_USERNAME` | Yes | Snowflake account username |
-| `SNOWFLAKE_KEY_PAIR_KEY` | Yes | File path to PEM-encoded private key for Snowflake auth |
-| `SNOWFLAKE_KEY_PAIR_PASS` | No | Password to decrypt an encrypted private key |
-| `SNOWFLAKE_WAREHOUSE` | Yes | Snowflake compute warehouse |
-| `SNOWFLAKE_ROLE` | Yes | Snowflake user role |
-
-## Region Base URLs
-
-| Region | URL |
-|--------|-----|
-| US (default) | `https://app.coalescesoftware.io` |
-| EU (west-3) | `https://app.eu.coalescesoftware.io` |
-| EU (west-2) | `https://app.eu-west-2.aws.coalescesoftware.io` |
-| Canada | `https://app.northamerica-northeast1.gcp.coalescesoftware.io` |
-| Australia | `https://app.australia-southeast1.gcp.coalescesoftware.io` |
+Only include the variables you need — the Quick Start config with just `COALESCE_ACCESS_TOKEN` is enough to get started.
 
 ## Tool Reference
 
@@ -264,56 +251,17 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 - `get-run-details` - Get run metadata and results in one call
 - `get-environment-overview` - Get environment details with full node list
 
-## Automatic Large-Response Caching
+## Notes
 
-Large JSON tool and workflow responses are auto-cached to `coalesce_transform_mcp_data_cache/auto-cache/`.
+- **Caching:** Large responses are auto-cached to disk. Use `cache-workspace-nodes` and similar tools when you want a reusable snapshot. Configure the threshold with `COALESCE_MCP_AUTO_CACHE_MAX_BYTES`.
+- **Repo-backed tools:** Set `COALESCE_REPO_PATH` to your local Coalesce repo root (containing `nodeTypes/`, `nodes/`, `packages/`) or pass `repoPath` on individual tool calls. The server does not clone repos or install packages.
+- **SQL override is disallowed.** Nodes are built via YAML/config (columns, transforms, join conditions), not raw SQL. Template generation strips `overrideSQLToggle`, and write helpers reject `overrideSQL` fields.
 
-- If the pretty-printed JSON response is at or below the inline threshold, the full payload is returned inline.
-- If it exceeds the threshold, the server writes the full JSON response to `coalesce_transform_mcp_data_cache/auto-cache/` and returns compact metadata with an MCP `resourceUri` plus a `resource_link` you can read through the client.
-- The default threshold is `32768` bytes and can be overridden with `COALESCE_MCP_AUTO_CACHE_MAX_BYTES`.
-- Explicit cache tools such as `cache-workspace-nodes` are still the better choice when you already know you want a reusable snapshot under `coalesce_transform_mcp_data_cache/`.
+## Links
 
-## Prompt Surface
-
-The server also exposes reusable MCP prompts for high-value workflows:
-
-- `coalesce-start-here` - ID discovery and safe first steps before mutations
-- `safe-pipeline-planning` - planner-first pipeline review and approval flow
-- `run-operations-guide` - choosing the right run helper and interpreting statuses
-- `large-result-handling` - working with cached responses and `coalesce://cache/...` resources
-
-## Repo-Backed Workflow
-
-Use repo-backed discovery, template generation, and pipeline planning when you have a local clone of your Coalesce repo. Set `COALESCE_REPO_PATH` to the repo root (the directory containing `nodeTypes/`, `nodes/`, and usually `packages/`) or pass `repoPath` explicitly on individual tool calls.
-
-Notes:
-
-- `repoPath` is supported on repo-backed discovery/template tools and pipeline planning.
-- `COALESCE_REPO_PATH` is an optional fallback for those repo-backed tools when `repoPath` is omitted.
-- The MCP does not clone repos, fetch branches, or install packages.
-- If the committed repo does not contain the definition, fall back to the corpus tools.
-
-## Large Collection Workflow
-
-When a list response would be too large for chat context, or you want a reusable artifact on disk:
-
-1. Use the matching cache tool instead of the inline list result:
-   - `cache-workspace-nodes`
-   - `cache-environment-nodes`
-   - `cache-runs`
-   - `cache-org-users`
-2. Read the returned `fileUri` or `metaUri` resource through MCP, or follow the returned `resource_link` content blocks.
-3. Use inline list tools for smaller exploratory reads and targeted follow-up calls.
-
-## Operational Guardrails
-
-- SQL override is intentionally disallowed in this project. Repo and corpus template generation strips `overrideSQLToggle`, and node write helpers reject `overrideSQL` and `override.*` fields.
-
-## Helpful Coalesce Docs
-
-- [Coalesce Docs](https://docs.coalesce.io/docs) - General product documentation, concepts, and platform guidance.
-- [Coalesce API Docs](https://docs.coalesce.io/docs/api/authentication) - Authentication, endpoints, and request/response reference for the API.
-- [Coalesce Marketplace Docs](https://docs.coalesce.io/docs/marketplace) - Packages, marketplace-managed node types, and template authoring context.
+- [Coalesce Docs](https://docs.coalesce.io/docs)
+- [Coalesce API Docs](https://docs.coalesce.io/docs/api/authentication)
+- [Coalesce Marketplace Docs](https://docs.coalesce.io/docs/marketplace)
 
 ## License
 

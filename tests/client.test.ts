@@ -21,9 +21,10 @@ describe("CoalesceClient", () => {
       expect(() => validateConfig()).toThrow("COALESCE_ACCESS_TOKEN");
     });
 
-    it("throws if COALESCE_BASE_URL is missing", () => {
+    it("defaults COALESCE_BASE_URL to US region when missing", () => {
       delete process.env.COALESCE_BASE_URL;
-      expect(() => validateConfig()).toThrow("COALESCE_BASE_URL");
+      const config = validateConfig();
+      expect(config.baseUrl).toBe("https://app.coalescesoftware.io");
     });
 
     it("returns config when both vars are set", () => {

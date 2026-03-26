@@ -28,7 +28,6 @@ export function summarizeNodeTypeCorpus(snapshot: NodeTypeCorpusSnapshot) {
 
   return {
     generatedAt: snapshot.generatedAt,
-    sourceRoot: snapshot.sourceRoot,
     packageCount: snapshot.packageCount,
     definitionCount: snapshot.definitionCount,
     uniqueVariantCount: snapshot.uniqueVariantCount,

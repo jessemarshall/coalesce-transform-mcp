@@ -9,8 +9,6 @@ import {
 import { join, relative } from "node:path";
 import YAML from "yaml";
 
-const DEFAULT_SOURCE_ROOT =
-  "/Users/jmarshall/Documents/GitHub/client_services_toolkit/node_investigations/node_source_code";
 const OUTPUT_PATH = join(
   process.cwd(),
   "generated",
@@ -302,7 +300,6 @@ function buildSnapshot(sourceRoot) {
 
   return {
     generatedAt: new Date().toISOString(),
-    sourceRoot,
     packageCount: packageDirs.length,
     definitionCount,
     uniqueVariantCount: variants.length,
@@ -324,13 +321,11 @@ function buildSnapshot(sourceRoot) {
 
 function main() {
   const sourceRoot =
-    process.argv[2] ??
-    process.env.NODE_TYPE_CORPUS_SOURCE_ROOT ??
-    DEFAULT_SOURCE_ROOT;
+    process.argv[2] ?? process.env.NODE_TYPE_CORPUS_SOURCE_ROOT;
 
-  if (!existsSync(sourceRoot)) {
+  if (!sourceRoot || !existsSync(sourceRoot)) {
     throw new Error(
-      `Node type corpus source root not found: ${sourceRoot}\nPass a path explicitly or set NODE_TYPE_CORPUS_SOURCE_ROOT.`
+      `Node type corpus source root not found: ${sourceRoot ?? "(not set)"}\nPass a path as an argument or set NODE_TYPE_CORPUS_SOURCE_ROOT.`
     );
   }
 
