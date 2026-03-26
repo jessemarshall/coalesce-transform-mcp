@@ -217,6 +217,9 @@ export function registerNodeTools(
       nodeID: z.string().describe("The node ID"),
       changes: z
         .record(z.unknown())
+        .refine((obj) => Object.keys(obj).length > 0, {
+          message: "changes must contain at least one field to update",
+        })
         .describe("Partial node fields to update. Object fields are deep-merged; arrays replace the existing array when provided."),
     },
     IDEMPOTENT_WRITE_ANNOTATIONS,
