@@ -18,3 +18,4 @@ src/generated/
 .claude/
 RELEASE.md
 .sfdx/
+docs/
