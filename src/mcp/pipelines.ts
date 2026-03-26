@@ -24,11 +24,6 @@ import {
 } from "../coalesce/types.js";
 import { isPlainObject } from "../utils.js";
 
-const REWRITTEN_SQL_ERROR_MESSAGE =
-  "The sql parameter contains {{ ref() }} syntax, which means you rewrote the user's SQL. " +
-  "Pass the user's EXACT SQL unchanged — the planner resolves source references automatically. " +
-  "Do NOT replace table names with {{ ref() }}.";
-
 function buildPlanFingerprint(
   workspaceID: string,
   repoPath: string | null,
@@ -276,7 +271,7 @@ export function registerPipelineTools(
     {
       workspaceID: z.string().describe("The workspace ID"),
       goal: z.string().optional().describe("Optional natural-language pipeline goal"),
-      sql: z.string().optional().describe("The user's EXACT SQL, copied verbatim. Do NOT rewrite table names, do NOT add {{ ref() }} syntax, do NOT modify it. Pass it exactly as the user provided it. If you are building a pipeline yourself, do NOT write SQL — use goal + sourceNodeIDs instead."),
+      sql: z.string().optional().describe("The user's EXACT SQL, copied verbatim. It may use raw table names or existing Coalesce {{ ref() }} syntax. Do NOT rewrite between SQL styles or modify the query. If you are building a pipeline yourself, do NOT write SQL — use goal + sourceNodeIDs instead."),
       targetName: z.string().optional().describe("Optional target node name override"),
       targetNodeType: z
         .string()
@@ -301,11 +296,6 @@ export function registerPipelineTools(
     READ_ONLY_ANNOTATIONS,
     async (params) => {
       try {
-        // Reject SQL that the agent rewrote with {{ ref() }}
-        if (params.sql && /\{\{\s*ref\s*\(/.test(params.sql)) {
-          return handleToolError(new Error(REWRITTEN_SQL_ERROR_MESSAGE));
-        }
-
         const result = await planPipeline(client, params);
 
         // Build fingerprint from workspace + repo + observed types
@@ -412,10 +402,10 @@ export function registerPipelineTools(
 
   server.tool(
     "create-pipeline-from-sql",
-    "Plan and create a Coalesce pipeline from user-provided SQL. Pass the user's EXACT SQL unchanged — do NOT rewrite it, do NOT replace table references with {{ ref() }}, do NOT modify the SQL in any way. The planner handles source resolution automatically.\n\nIf you are building a pipeline yourself, use declarative tools directly: create-workspace-node-from-predecessor → convert-join-to-aggregation → replace-workspace-node-columns.\n\nThis tool validates candidate node types against currently observed workspace nodes. If a selected type is not observed, the plan will include a warning asking the user to confirm installation in Coalesce.\n\nConsult coalesce://context/node-type-corpus for node type patterns and metadata structures.",
+    "Plan and create a Coalesce pipeline from user-provided SQL. Pass the user's EXACT SQL unchanged. The SQL may use raw table names or already contain Coalesce {{ ref() }} syntax if that is what the user provided. Do NOT rewrite between styles or otherwise modify the query. The planner resolves workspace sources automatically and generates a Coalesce-compatible joinCondition for the final node.\n\nIf you are building a pipeline yourself, use declarative tools directly: create-workspace-node-from-predecessor → convert-join-to-aggregation → replace-workspace-node-columns.\n\nThis tool validates candidate node types against currently observed workspace nodes. If a selected type is not observed, the plan will include a warning asking the user to confirm installation in Coalesce.\n\nConsult coalesce://context/node-type-corpus for node type patterns and metadata structures.",
     {
       workspaceID: z.string().describe("The workspace ID"),
-      sql: z.string().describe("The user's EXACT SQL, copied verbatim. Do NOT rewrite table names, do NOT add {{ ref() }} syntax, do NOT modify it in any way. Pass it exactly as the user provided it."),
+      sql: z.string().describe("The user's EXACT SQL, copied verbatim. It may use raw table names or existing Coalesce {{ ref() }} syntax. Do NOT rewrite between SQL styles or modify it in any way. Pass it exactly as the user provided it."),
       goal: z.string().optional().describe("Optional business goal or context for the SQL"),
       targetName: z.string().optional().describe("Optional target node name override"),
       targetNodeType: z
@@ -445,10 +435,6 @@ export function registerPipelineTools(
     WRITE_ANNOTATIONS,
     async (params) => {
       try {
-        // Reject SQL that the agent rewrote with {{ ref() }} — the user's original SQL won't contain these
-        if (/\{\{\s*ref\s*\(/.test(params.sql)) {
-          return handleToolError(new Error(REWRITTEN_SQL_ERROR_MESSAGE));
-        }
         const preview = await createPipelineFromSql(client, {
           ...params,
           confirmed: false,

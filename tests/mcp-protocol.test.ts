@@ -10,6 +10,118 @@ import {
 
 const tempDirs: string[] = [];
 
+function buildSourceColumn(name: string, nodeID: string, columnID: string) {
+  return {
+    name,
+    columnID,
+    dataType: "VARCHAR",
+    nullable: true,
+    columnReference: {
+      stepCounter: nodeID,
+      columnCounter: columnID,
+    },
+    sources: [
+      {
+        columnReferences: [
+          {
+            nodeID,
+            columnID,
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function buildSourceNode(nodeID: string, name: string, locationName = "RAW") {
+  return {
+    id: nodeID,
+    name,
+    locationName,
+    metadata: {
+      columns: [
+        buildSourceColumn("CUSTOMER_ID", nodeID, `${nodeID}-cust-id`),
+        buildSourceColumn("CUSTOMER_NAME", nodeID, `${nodeID}-cust-name`),
+      ],
+    },
+  };
+}
+
+function buildCreatedStageNode(predecessorNodeID: string) {
+  return {
+    id: "new-node",
+    name: "STG_CUSTOMER",
+    description: "",
+    locationName: "STAGING",
+    database: "STAGING",
+    schema: "ANALYTICS",
+    config: {
+      preSQL: "",
+      postSQL: "",
+      testsEnabled: true,
+    },
+    metadata: {
+      columns: [
+        {
+          name: "CUSTOMER_ID",
+          dataType: "NUMBER(38,0)",
+          nullable: false,
+          columnReference: {
+            stepCounter: "new-node",
+            columnCounter: "new-customer-id",
+          },
+          sources: [
+            {
+              columnReferences: [
+                {
+                  nodeID: predecessorNodeID,
+                  columnID: `${predecessorNodeID}-cust-id`,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          name: "CUSTOMER_NAME",
+          dataType: "VARCHAR(256)",
+          nullable: true,
+          columnReference: {
+            stepCounter: "new-node",
+            columnCounter: "new-customer-name",
+          },
+          sources: [
+            {
+              columnReferences: [
+                {
+                  nodeID: predecessorNodeID,
+                  columnID: `${predecessorNodeID}-cust-name`,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      sourceMapping: [
+        {
+          aliases: {},
+          customSQL: { customSQL: "" },
+          dependencies: [
+            {
+              locationName: "RAW",
+              nodeName: "CUSTOMER",
+            },
+          ],
+          join: {
+            joinCondition: `FROM {{ ref('RAW', 'CUSTOMER') }}`,
+          },
+          name: "STG_CUSTOMER",
+          noLinkRefs: [],
+        },
+      ],
+    },
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   for (const directory of tempDirs.splice(0, tempDirs.length)) {
@@ -340,36 +452,45 @@ describe("MCP Protocol Surface", () => {
   });
 
   it("executes create-pipeline-from-sql over the real MCP harness when confirmed=true", async () => {
-    const executionModule = await import("../src/services/pipelines/execution.js");
-    const previewPlan = {
-      version: 1,
-      intent: "sql",
-      status: "ready",
-      workspaceID: "ws-1",
-      platform: null,
-      goal: null,
-      sql: "select 1 as customer_id",
-      nodes: [{ name: "STG_CUSTOMER", nodeType: "Stage" }],
-      assumptions: [],
-      openQuestions: [],
-      warnings: [],
-      supportedNodeTypes: ["Stage"],
-    };
-    const previewSpy = vi
-      .spyOn(executionModule, "createPipelineFromSql")
-      .mockResolvedValue({
-        created: false,
-        plan: previewPlan,
-      });
-    const executeSpy = vi
-      .spyOn(executionModule, "createPipelineFromPlan")
-      .mockResolvedValue({
-        created: true,
-        workspaceID: "ws-1",
-        nodeCount: 1,
-      });
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+    const createdNode = buildCreatedStageNode("source-1");
+    let savedBody: Record<string, unknown> | null = null;
 
-    const harness = await createConnectedMcpHarness(createMockApiClient());
+    const apiClient = createMockApiClient({
+      get: vi.fn(async (path: unknown, params?: Record<string, unknown>) => {
+        if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+          return {
+            data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+          };
+        }
+        if (path === "/api/v1/workspaces/ws-1/nodes") {
+          return {
+            data: [
+              {
+                id: "source-1",
+                name: "CUSTOMER",
+                nodeType: "Source",
+                locationName: "RAW",
+              },
+            ],
+          };
+        }
+        if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+          return sourceNode;
+        }
+        if (path === "/api/v1/workspaces/ws-1/nodes/new-node") {
+          return savedBody ?? createdNode;
+        }
+        throw new Error(`Unexpected GET ${String(path)} ${JSON.stringify(params)}`);
+      }),
+      post: vi.fn(async () => ({ id: "new-node" })),
+      put: vi.fn(async (_path: unknown, body: unknown) => {
+        savedBody = body as Record<string, unknown>;
+        return body;
+      }),
+    });
+
+    const harness = await createConnectedMcpHarness(apiClient);
 
     try {
       const elicitSpy = vi.spyOn(harness.server.server, "elicitInput");
@@ -378,7 +499,7 @@ describe("MCP Protocol Surface", () => {
         name: "create-pipeline-from-sql",
         arguments: {
           workspaceID: "ws-1",
-          sql: "select 1 as customer_id",
+          sql: "SELECT * FROM RAW.CUSTOMER",
           confirmed: true,
         },
       });
@@ -390,23 +511,22 @@ describe("MCP Protocol Surface", () => {
         nodeCount: 1,
         plan: expect.objectContaining({
           status: "ready",
-          sql: "select 1 as customer_id",
+          sql: "SELECT * FROM RAW.CUSTOMER",
+          nodes: [
+            expect.objectContaining({
+              joinCondition: "FROM {{ ref('RAW', 'CUSTOMER') }}",
+            }),
+          ],
         }),
       });
       expect(result.structuredContent).not.toHaveProperty("STOP_AND_CONFIRM");
       expect(elicitSpy).not.toHaveBeenCalled();
-      expect(previewSpy).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.objectContaining({
-          workspaceID: "ws-1",
-          sql: "select 1 as customer_id",
-          confirmed: false,
-        })
+      expect(apiClient.post).toHaveBeenCalledTimes(1);
+      expect(apiClient.put).toHaveBeenCalledTimes(1);
+      expect(savedBody).not.toBeNull();
+      expect((savedBody as any).metadata.sourceMapping[0].join.joinCondition).toBe(
+        "FROM {{ ref('RAW', 'CUSTOMER') }}"
       );
-      expect(executeSpy).toHaveBeenCalledWith(expect.any(Object), {
-        workspaceID: "ws-1",
-        plan: previewPlan,
-      });
     } finally {
       await harness.close();
     }

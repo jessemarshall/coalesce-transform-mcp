@@ -173,10 +173,27 @@ describe("Pipeline Tools", () => {
     expect(true).toBe(true);
   });
 
-  it("plan-pipeline returns an MCP error when sql contains rewritten ref() syntax", async () => {
+  it("plan-pipeline tool accepts ref-based SQL unchanged", async () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
     const toolSpy = vi.spyOn(server, "tool");
     const client = createMockClient();
+
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes") {
+        return Promise.resolve({
+          data: [{ id: "source-1", name: "CUSTOMER", nodeType: "Source", locationName: "RAW" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(buildSourceNode("source-1", "CUSTOMER", "RAW"));
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
 
     registerPipelineTools(server, client as any);
 
@@ -198,30 +215,42 @@ describe("Pipeline Tools", () => {
     });
 
     expect(result).toMatchObject({
-      isError: true,
-      content: [
-        {
-          type: "text",
-          text: expect.stringContaining("The sql parameter contains {{ ref() }} syntax"),
-        },
-      ],
-    });
-    expect(result).toMatchObject({
       structuredContent: {
-        error: {
-          message: expect.stringContaining("The sql parameter contains {{ ref() }} syntax"),
-        },
+        status: "ready",
+        nodes: [
+          expect.objectContaining({
+            predecessorNodeIDs: ["source-1"],
+            joinCondition: "FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
+          }),
+        ],
       },
     });
-    expect(client.get).not.toHaveBeenCalled();
+    expect((result as any).isError).toBeUndefined();
     expect(client.post).not.toHaveBeenCalled();
     expect(client.put).not.toHaveBeenCalled();
   });
 
-  it("create-pipeline-from-sql returns an MCP error when sql contains rewritten ref() syntax", async () => {
+  it("create-pipeline-from-sql tool accepts ref-based SQL unchanged", async () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
     const toolSpy = vi.spyOn(server, "tool");
     const client = createMockClient();
+
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes") {
+        return Promise.resolve({
+          data: [{ id: "source-1", name: "CUSTOMER", nodeType: "Source", locationName: "RAW" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(buildSourceNode("source-1", "CUSTOMER", "RAW"));
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
 
     registerPipelineTools(server, client as any);
 
@@ -243,22 +272,15 @@ describe("Pipeline Tools", () => {
     });
 
     expect(result).toMatchObject({
-      isError: true,
-      content: [
-        {
-          type: "text",
-          text: expect.stringContaining("The sql parameter contains {{ ref() }} syntax"),
-        },
-      ],
-    });
-    expect(result).toMatchObject({
       structuredContent: {
-        error: {
-          message: expect.stringContaining("The sql parameter contains {{ ref() }} syntax"),
-        },
+        created: false,
+        plan: expect.objectContaining({
+          status: "ready",
+        }),
+        STOP_AND_CONFIRM: expect.stringContaining("Ask for explicit approval"),
       },
     });
-    expect(client.get).not.toHaveBeenCalled();
+    expect((result as any).isError).toBeUndefined();
     expect(client.post).not.toHaveBeenCalled();
     expect(client.put).not.toHaveBeenCalled();
   });
@@ -313,6 +335,61 @@ describe("Pipeline Tools", () => {
         locationName: "RAW",
         nodeName: "CUSTOMER",
         alias: "CUSTOMER",
+        nodeID: "source-1",
+      },
+    ]);
+  });
+
+  it("planPipeline builds a ready Stage plan from raw SQL and normalizes joinCondition to ref syntax", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes") {
+        return Promise.resolve({
+          data: [{ id: "source-1", name: "CUSTOMER", nodeType: "Source", locationName: "RAW" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(sourceNode);
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
+
+    const result = await planPipeline(client as any, {
+      workspaceID: "ws-1",
+      sql: [
+        "SELECT RAW.CUSTOMER.CUSTOMER_ID, RAW.CUSTOMER.CUSTOMER_NAME AS NAME",
+        "FROM RAW.CUSTOMER",
+      ].join("\n"),
+      targetName: "STG_CUSTOMER",
+      locationName: "STAGING",
+      database: "STAGING",
+      schema: "ANALYTICS",
+    });
+
+    expect(result.status).toBe("ready");
+    expect(result.nodes).toHaveLength(1);
+    expect(result.nodes[0]?.name).toBe("STG_CUSTOMER");
+    expect(result.nodes[0]?.nodeType).toBe("Stage");
+    expect(result.nodes[0]?.predecessorNodeIDs).toEqual(["source-1"]);
+    expect(result.nodes[0]?.outputColumnNames).toEqual([
+      "CUSTOMER_ID",
+      "NAME",
+    ]);
+    expect(result.nodes[0]?.joinCondition).toBe(
+      "FROM {{ ref('RAW', 'CUSTOMER') }}"
+    );
+    expect(result.nodes[0]?.sourceRefs).toEqual([
+      {
+        locationName: "RAW",
+        nodeName: "CUSTOMER",
+        alias: null,
         nodeID: "source-1",
       },
     ]);
@@ -787,7 +864,7 @@ describe("Pipeline Tools", () => {
 
     const result = await createPipelineFromSql(client as any, {
       workspaceID: "ws-1",
-      sql: "SELECT * FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
+      sql: "SELECT * FROM RAW.CUSTOMER",
       dryRun: true,
     });
 
@@ -823,7 +900,7 @@ describe("Pipeline Tools", () => {
 
     const result = await createPipelineFromSql(client as any, {
       workspaceID: "ws-1",
-      sql: "SELECT * FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
+      sql: "SELECT * FROM RAW.CUSTOMER",
     });
 
     expect(result).toMatchObject({

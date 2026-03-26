@@ -208,8 +208,15 @@ type ResolvedSqlRef = {
   nodeID: string | null;
 };
 
+type ParsedSqlSourceRef = ResolvedSqlRef & {
+  sourceStyle: "coalesce_ref" | "table_name";
+  locationCandidates: string[];
+  relationStart: number;
+  relationEnd: number;
+};
+
 type SqlParseResult = {
-  refs: ResolvedSqlRef[];
+  refs: ParsedSqlSourceRef[];
   selectItems: PlannedSelectItem[];
   warnings: string[];
 };
@@ -426,6 +433,115 @@ function splitTopLevel(value: string, delimiter: string): string[] {
   return parts;
 }
 
+function splitTopLevelWhitespace(value: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let parenDepth = 0;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inBacktick = false;
+  let inBracket = false;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    const next = value[index + 1];
+
+    if (inSingleQuote) {
+      current += char;
+      if (char === "'" && next === "'") {
+        current += next;
+        index += 1;
+      } else if (char === "'") {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+    if (inDoubleQuote) {
+      current += char;
+      if (char === '"') {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+    if (inBacktick) {
+      current += char;
+      if (char === "`") {
+        inBacktick = false;
+      }
+      continue;
+    }
+    if (inBracket) {
+      current += char;
+      if (char === "]") {
+        inBracket = false;
+      }
+      continue;
+    }
+
+    if (char === "'") {
+      inSingleQuote = true;
+      current += char;
+      continue;
+    }
+    if (char === '"') {
+      inDoubleQuote = true;
+      current += char;
+      continue;
+    }
+    if (char === "`") {
+      inBacktick = true;
+      current += char;
+      continue;
+    }
+    if (char === "[") {
+      inBracket = true;
+      current += char;
+      continue;
+    }
+    if (char === "(") {
+      parenDepth += 1;
+      current += char;
+      continue;
+    }
+    if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+      current += char;
+      continue;
+    }
+    if (/\s/u.test(char) && parenDepth === 0) {
+      if (current.trim().length > 0) {
+        parts.push(current.trim());
+        current = "";
+      }
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.trim().length > 0) {
+    parts.push(current.trim());
+  }
+
+  return parts;
+}
+
+function skipWhitespace(value: string, index: number): number {
+  let nextIndex = index;
+  while (nextIndex < value.length && /\s/u.test(value[nextIndex] ?? "")) {
+    nextIndex += 1;
+  }
+  return nextIndex;
+}
+
+function matchesKeywordAt(value: string, index: number, keyword: string): boolean {
+  return (
+    value.slice(index, index + keyword.length).toLowerCase() === keyword &&
+    !isIdentifierChar(value[index - 1]) &&
+    !isIdentifierChar(value[index + keyword.length])
+  );
+}
+
 function extractSelectClause(sql: string): string | null {
   const selectIndex = findTopLevelKeywordIndex(sql, "select");
   if (selectIndex < 0) {
@@ -453,21 +569,261 @@ function extractFromClause(sql: string): string | null {
     .replace(/;+\s*$/u, "");
 }
 
-function parseRefCalls(sql: string): ResolvedSqlRef[] {
-  const refs: ResolvedSqlRef[] = [];
-  const pattern =
-    /\{\{\s*ref\(\s*(['"])([^'"]+)\1\s*,\s*(['"])([^'"]+)\3\s*\)\s*\}\}\s*(?:(?:AS)\s+)?([A-Za-z_][\w$]*|"[^"]+"|`[^`]+`|\[[^\]]+\])?/gi;
+function extractTopLevelSourceSegments(
+  fromClause: string
+): Array<{ text: string; relationStart: number; relationEnd: number }> {
+  const segments: Array<{ text: string; relationStart: number; relationEnd: number }> = [];
+  let parenDepth = 0;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inBacktick = false;
+  let inBracket = false;
+  let captureStart: number | null = null;
 
-  for (const match of sql.matchAll(pattern)) {
-    refs.push({
-      locationName: match[2] ?? "",
-      nodeName: match[4] ?? "",
-      alias: match[5] ? stripIdentifierQuotes(match[5]) : null,
-      nodeID: null,
-    });
+  const pushSegment = (endIndex: number) => {
+    if (captureStart === null) {
+      return;
+    }
+    let trimmedEnd = endIndex;
+    while (trimmedEnd > captureStart && /\s/u.test(fromClause[trimmedEnd - 1] ?? "")) {
+      trimmedEnd -= 1;
+    }
+    if (trimmedEnd > captureStart) {
+      segments.push({
+        text: fromClause.slice(captureStart, trimmedEnd),
+        relationStart: captureStart,
+        relationEnd: trimmedEnd,
+      });
+    }
+  };
+
+  for (let index = 0; index < fromClause.length; index += 1) {
+    const char = fromClause[index];
+    const next = fromClause[index + 1];
+
+    if (inSingleQuote) {
+      if (char === "'" && next === "'") {
+        index += 1;
+      } else if (char === "'") {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+    if (inDoubleQuote) {
+      if (char === '"') {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+    if (inBacktick) {
+      if (char === "`") {
+        inBacktick = false;
+      }
+      continue;
+    }
+    if (inBracket) {
+      if (char === "]") {
+        inBracket = false;
+      }
+      continue;
+    }
+
+    if (char === "'") {
+      inSingleQuote = true;
+      continue;
+    }
+    if (char === '"') {
+      inDoubleQuote = true;
+      continue;
+    }
+    if (char === "`") {
+      inBacktick = true;
+      continue;
+    }
+    if (char === "[") {
+      inBracket = true;
+      continue;
+    }
+    if (char === "(") {
+      parenDepth += 1;
+      continue;
+    }
+    if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+      continue;
+    }
+    if (parenDepth !== 0) {
+      continue;
+    }
+
+    if (captureStart === null) {
+      if (matchesKeywordAt(fromClause, index, "from")) {
+        captureStart = skipWhitespace(fromClause, index + 4);
+        index += 3;
+        continue;
+      }
+      if (matchesKeywordAt(fromClause, index, "join")) {
+        captureStart = skipWhitespace(fromClause, index + 4);
+        index += 3;
+        continue;
+      }
+      if (char === ",") {
+        captureStart = skipWhitespace(fromClause, index + 1);
+      }
+      continue;
+    }
+
+    if (char === ",") {
+      pushSegment(index);
+      captureStart = skipWhitespace(fromClause, index + 1);
+      continue;
+    }
+
+    const terminator =
+      matchesKeywordAt(fromClause, index, "join")
+        ? "join"
+        : matchesKeywordAt(fromClause, index, "left")
+          ? "left"
+          : matchesKeywordAt(fromClause, index, "right")
+            ? "right"
+            : matchesKeywordAt(fromClause, index, "inner")
+              ? "inner"
+              : matchesKeywordAt(fromClause, index, "full")
+                ? "full"
+                : matchesKeywordAt(fromClause, index, "cross")
+                  ? "cross"
+                  : matchesKeywordAt(fromClause, index, "natural")
+                    ? "natural"
+                    : matchesKeywordAt(fromClause, index, "on")
+                      ? "on"
+                      : matchesKeywordAt(fromClause, index, "using")
+                        ? "using"
+                        : matchesKeywordAt(fromClause, index, "where")
+                          ? "where"
+                          : matchesKeywordAt(fromClause, index, "group")
+                            ? "group"
+                            : matchesKeywordAt(fromClause, index, "order")
+                              ? "order"
+                              : matchesKeywordAt(fromClause, index, "having")
+                                ? "having"
+                                : matchesKeywordAt(fromClause, index, "limit")
+                                  ? "limit"
+                                  : matchesKeywordAt(fromClause, index, "qualify")
+                                    ? "qualify"
+                                    : matchesKeywordAt(fromClause, index, "union")
+                                      ? "union"
+                                      : null;
+
+    if (!terminator) {
+      continue;
+    }
+
+    pushSegment(index);
+    captureStart =
+      terminator === "join"
+        ? skipWhitespace(fromClause, index + terminator.length)
+        : null;
+    index += terminator.length - 1;
   }
 
-  return refs;
+  pushSegment(fromClause.length);
+  return segments;
+}
+
+function isSupportedIdentifierToken(token: string): boolean {
+  return (
+    /^[A-Za-z_][\w$]*$/u.test(token) ||
+    /^"[^"]+"$/u.test(token) ||
+    /^`[^`]+`$/u.test(token) ||
+    /^\[[^\]]+\]$/u.test(token)
+  );
+}
+
+function parseSqlSourceSegment(
+  segment: { text: string; relationStart: number; relationEnd: number }
+): ParsedSqlSourceRef | null {
+  const trimmedSegment = segment.text.trim();
+  if (trimmedSegment.length === 0) {
+    return null;
+  }
+
+  let relationText: string;
+  let aliasTokens: string[];
+  if (trimmedSegment.startsWith("{{")) {
+    const closingIndex = trimmedSegment.indexOf("}}");
+    if (closingIndex < 0) {
+      return null;
+    }
+    relationText = trimmedSegment.slice(0, closingIndex + 2);
+    aliasTokens = splitTopLevelWhitespace(trimmedSegment.slice(closingIndex + 2).trim());
+  } else {
+    const tokens = splitTopLevelWhitespace(trimmedSegment);
+    if (tokens.length === 0) {
+      return null;
+    }
+    relationText = tokens[0]!;
+    aliasTokens = tokens.slice(1);
+  }
+
+  const alias =
+    aliasTokens[0]?.toLowerCase() === "as"
+      ? (aliasTokens[1] ? stripIdentifierQuotes(aliasTokens[1]) : null)
+      : aliasTokens[0]
+        ? stripIdentifierQuotes(aliasTokens[0])
+        : null;
+
+  const refMatch = relationText.match(
+    /^\{\{\s*ref\(\s*(['"])([^'"]+)\1\s*,\s*(['"])([^'"]+)\3\s*\)\s*\}\}$/iu
+  );
+  if (refMatch) {
+    return {
+      locationName: refMatch[2] ?? "",
+      nodeName: refMatch[4] ?? "",
+      alias,
+      nodeID: null,
+      sourceStyle: "coalesce_ref",
+      locationCandidates: refMatch[2] ? [refMatch[2]] : [],
+      relationStart: segment.relationStart,
+      relationEnd: segment.relationStart + relationText.length,
+    };
+  }
+
+  if (relationText.startsWith("(")) {
+    return null;
+  }
+
+  const parts = splitTopLevel(relationText, ".").map((part) => part.trim());
+  if (
+    parts.length === 0 ||
+    parts.some((part) => part.length === 0 || !isSupportedIdentifierToken(part))
+  ) {
+    return null;
+  }
+
+  const normalizedParts = parts.map(stripIdentifierQuotes);
+  const nodeName = normalizedParts[normalizedParts.length - 1] ?? "";
+
+  return {
+    locationName: "",
+    nodeName,
+    alias,
+    nodeID: null,
+    sourceStyle: "table_name",
+    locationCandidates: normalizedParts.slice(0, -1).reverse(),
+    relationStart: segment.relationStart,
+    relationEnd: segment.relationStart + relationText.length,
+  };
+}
+
+function parseSqlSourceRefs(sql: string): ParsedSqlSourceRef[] {
+  const fromClause = extractFromClause(sql);
+  if (!fromClause) {
+    return [];
+  }
+
+  return extractTopLevelSourceSegments(fromClause)
+    .map(parseSqlSourceSegment)
+    .filter((ref): ref is ParsedSqlSourceRef => ref !== null);
 }
 
 function splitExpressionAlias(rawItem: string): { expression: string; outputName: string | null } {
@@ -509,18 +865,18 @@ function parseDirectColumnExpression(expression: string): {
     return null;
   }
 
-  const qualifiedMatch = trimmed.match(
-    /^(?:(?<alias>"[^"]+"|`[^`]+`|\[[^\]]+\]|[A-Za-z_][\w$]*)\s*\.\s*)?(?<column>"[^"]+"|`[^`]+`|\[[^\]]+\]|[A-Za-z_][\w$]*)$/u
-  );
-  if (!qualifiedMatch?.groups?.column) {
+  const parts = splitTopLevel(trimmed, ".").map((part) => part.trim());
+  if (
+    parts.length === 0 ||
+    parts.some((part) => part.length === 0 || !isSupportedIdentifierToken(part))
+  ) {
     return null;
   }
 
   return {
-    sourceNodeAlias: qualifiedMatch.groups.alias
-      ? stripIdentifierQuotes(qualifiedMatch.groups.alias)
-      : null,
-    sourceColumnName: stripIdentifierQuotes(qualifiedMatch.groups.column),
+    sourceNodeAlias:
+      parts.length >= 2 ? stripIdentifierQuotes(parts[parts.length - 2] ?? "") : null,
+    sourceColumnName: stripIdentifierQuotes(parts[parts.length - 1] ?? ""),
   };
 }
 
@@ -531,14 +887,16 @@ function parseWildcardExpression(expression: string): {
   if (trimmed === "*") {
     return { sourceNodeAlias: null };
   }
-  const aliasMatch = trimmed.match(
-    /^(?<alias>"[^"]+"|`[^`]+`|\[[^\]]+\]|[A-Za-z_][\w$]*)\s*\.\s*\*$/u
-  );
-  if (!aliasMatch?.groups?.alias) {
+  const parts = splitTopLevel(trimmed, ".").map((part) => part.trim());
+  if (
+    parts.length < 2 ||
+    parts[parts.length - 1] !== "*" ||
+    parts.slice(0, -1).some((part) => part.length === 0 || !isSupportedIdentifierToken(part))
+  ) {
     return null;
   }
   return {
-    sourceNodeAlias: stripIdentifierQuotes(aliasMatch.groups.alias),
+    sourceNodeAlias: stripIdentifierQuotes(parts[parts.length - 2] ?? ""),
   };
 }
 
@@ -546,9 +904,9 @@ function listToQuestion(values: string[]): string {
   return values.join(", ");
 }
 
-function parseSqlSelectItems(sql: string, refs: ResolvedSqlRef[]): SqlParseResult {
+function parseSqlSelectItems(sql: string, refs: ParsedSqlSourceRef[]): SqlParseResult {
   const warnings: string[] = [];
-  const refsByAlias = new Map<string, ResolvedSqlRef>();
+  const refsByAlias = new Map<string, ParsedSqlSourceRef>();
   for (const ref of refs) {
     refsByAlias.set(normalizeSqlIdentifier(ref.alias ?? ref.nodeName), ref);
   }
@@ -757,9 +1115,9 @@ function getNodeLocationName(node: Record<string, unknown>): string | null {
 async function resolveSqlRefsToWorkspaceNodes(
   client: CoalesceClient,
   workspaceID: string,
-  refs: ResolvedSqlRef[]
+  refs: ParsedSqlSourceRef[]
 ): Promise<{
-  refs: ResolvedSqlRef[];
+  refs: ParsedSqlSourceRef[];
   openQuestions: string[];
   warnings: string[];
   predecessorNodes: Record<string, Record<string, unknown>>;
@@ -770,7 +1128,7 @@ async function resolveSqlRefsToWorkspaceNodes(
 
   if (refs.length === 0) {
     openQuestions.push(
-      "Which upstream Coalesce node(s) should this pipeline build from? Add {{ ref('LOCATION', 'NODE') }} references to the SQL or provide sourceNodeIDs."
+      "Which upstream Coalesce node(s) should this pipeline build from? Use a top-level FROM/JOIN that names existing workspace nodes (raw table names or {{ ref('LOCATION', 'NODE') }} syntax), or provide sourceNodeIDs."
     );
     return { refs, openQuestions, warnings, predecessorNodes };
   }
@@ -789,25 +1147,43 @@ async function resolveSqlRefsToWorkspaceNodes(
       nodesByNormalizedName.get(normalizeSqlIdentifier(ref.nodeName)) ?? [];
     if (matches.length === 0) {
       openQuestions.push(
-        `Could not resolve the SQL ref ${ref.locationName}.${ref.nodeName} to a workspace node ID in workspace ${workspaceID}.`
+        `Could not resolve the SQL source ${ref.nodeName} to a workspace node ID in workspace ${workspaceID}.`
       );
       continue;
     }
 
-    const matchingLocationEntries = matches.filter(
-      (entry) =>
-        entry.locationName &&
-        normalizeSqlIdentifier(entry.locationName) ===
-          normalizeSqlIdentifier(ref.locationName)
-    );
-    if (matchingLocationEntries.length === 1) {
-      ref.nodeID = matchingLocationEntries[0]?.id ?? null;
+    const locationHints = [
+      ...(ref.locationName ? [ref.locationName] : []),
+      ...ref.locationCandidates,
+    ].map(normalizeSqlIdentifier);
+    const hintedMatches =
+      locationHints.length > 0
+        ? matches.filter(
+            (entry) =>
+              entry.locationName &&
+              locationHints.includes(normalizeSqlIdentifier(entry.locationName))
+          )
+        : [];
+
+    if (hintedMatches.length === 1) {
+      ref.nodeID = hintedMatches[0]?.id ?? null;
+      if (!ref.locationName && hintedMatches[0]?.locationName) {
+        ref.locationName = hintedMatches[0].locationName;
+      }
       continue;
     }
-    if (matchingLocationEntries.length > 1) {
+    if (hintedMatches.length > 1) {
       openQuestions.push(
-        `Multiple workspace nodes matched the SQL ref ${ref.locationName}.${ref.nodeName}. Resolve the exact node before creation.`
+        `Multiple workspace nodes matched the SQL source ${ref.nodeName}. Resolve the exact node before creation.`
       );
+      continue;
+    }
+
+    if (matches.length === 1) {
+      ref.nodeID = matches[0]?.id ?? null;
+      if (!ref.locationName && matches[0]?.locationName) {
+        ref.locationName = matches[0].locationName;
+      }
       continue;
     }
 
@@ -824,30 +1200,43 @@ async function resolveSqlRefsToWorkspaceNodes(
           };
         })
       );
-      const exactLocationMatches = detailedMatches.filter(
-        (candidate) =>
-          candidate.node &&
-          getNodeLocationName(candidate.node) &&
-          normalizeSqlIdentifier(getNodeLocationName(candidate.node) ?? "") ===
-            normalizeSqlIdentifier(ref.locationName)
-      );
+      const exactLocationMatches =
+        locationHints.length > 0
+          ? detailedMatches.filter(
+              (candidate) =>
+                candidate.node &&
+                getNodeLocationName(candidate.node) &&
+                locationHints.includes(
+                  normalizeSqlIdentifier(getNodeLocationName(candidate.node) ?? "")
+                )
+            )
+          : [];
       if (exactLocationMatches.length === 1) {
         ref.nodeID = exactLocationMatches[0]?.match.id ?? null;
+        if (!ref.locationName) {
+          ref.locationName = getNodeLocationName(exactLocationMatches[0]?.node ?? {}) ?? "";
+        }
         continue;
       }
       if (exactLocationMatches.length > 1) {
         openQuestions.push(
-          `Multiple workspace nodes matched the SQL ref ${ref.locationName}.${ref.nodeName}. Resolve the exact node before creation.`
+          `Multiple workspace nodes matched the SQL source ${ref.nodeName}. Resolve the exact node before creation.`
+        );
+        continue;
+      }
+
+      if (ref.sourceStyle === "coalesce_ref" && ref.locationName) {
+        openQuestions.push(
+          `Workspace nodes named ${ref.nodeName} were found, but none matched the requested location ${ref.locationName}.`
         );
         continue;
       }
 
       openQuestions.push(
-        `Workspace nodes named ${ref.nodeName} were found, but none matched the requested location ${ref.locationName}.`
+        `Multiple workspace nodes named ${ref.nodeName} were found. Qualify the SQL source more clearly or provide sourceNodeIDs before creation.`
       );
       continue;
     }
-    ref.nodeID = matches[0]?.id ?? null;
   }
 
   for (const ref of refs) {
@@ -864,6 +1253,7 @@ async function resolveSqlRefsToWorkspaceNodes(
     }
     const predecessorLocationName = getNodeLocationName(predecessor);
     if (
+      ref.sourceStyle === "coalesce_ref" &&
       predecessorLocationName &&
       normalizeSqlIdentifier(predecessorLocationName) !==
         normalizeSqlIdentifier(ref.locationName)
@@ -874,10 +1264,36 @@ async function resolveSqlRefsToWorkspaceNodes(
       );
       continue;
     }
+    if (!ref.locationName && predecessorLocationName) {
+      ref.locationName = predecessorLocationName;
+    }
     predecessorNodes[ref.nodeID] = predecessor;
   }
 
   return { refs, openQuestions, warnings, predecessorNodes };
+}
+
+function buildJoinConditionFromSql(
+  sql: string,
+  refs: ParsedSqlSourceRef[]
+): string | null {
+  const fromClause = extractFromClause(sql);
+  if (!fromClause) {
+    return null;
+  }
+
+  let joinCondition = fromClause;
+  for (const ref of [...refs]
+    .filter((candidate) => candidate.sourceStyle === "table_name" && candidate.locationName)
+    .sort((left, right) => right.relationStart - left.relationStart)) {
+    const replacement = `{{ ref('${ref.locationName}', '${ref.nodeName}') }}`;
+    joinCondition =
+      joinCondition.slice(0, ref.relationStart) +
+      replacement +
+      joinCondition.slice(ref.relationEnd);
+  }
+
+  return joinCondition;
 }
 
 export function getColumnNamesFromNode(node: Record<string, unknown>): string[] {
@@ -1306,7 +1722,7 @@ function buildPlanFromSql(
           alias: ref.alias,
           nodeID: ref.nodeID,
         })),
-        joinCondition: extractFromClause(params.sql),
+        joinCondition: buildJoinConditionFromSql(params.sql, parseResult.refs),
         location: params.location ?? {},
         requiresFullSetNode: true,
         ...(params.selectedNodeType?.templateDefaults
@@ -1895,7 +2311,7 @@ export async function planPipeline(
       return ctePlan;
     }
 
-    const parseResult = parseSqlSelectItems(params.sql, parseRefCalls(params.sql));
+    const parseResult = parseSqlSelectItems(params.sql, parseSqlSourceRefs(params.sql));
     const {
       refs,
       predecessorNodes,
