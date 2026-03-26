@@ -338,4 +338,77 @@ describe("MCP Protocol Surface", () => {
       await harness.close();
     }
   });
+
+  it("executes create-pipeline-from-sql over the real MCP harness when confirmed=true", async () => {
+    const executionModule = await import("../src/services/pipelines/execution.js");
+    const previewPlan = {
+      version: 1,
+      intent: "sql",
+      status: "ready",
+      workspaceID: "ws-1",
+      platform: null,
+      goal: null,
+      sql: "select 1 as customer_id",
+      nodes: [{ name: "STG_CUSTOMER", nodeType: "Stage" }],
+      assumptions: [],
+      openQuestions: [],
+      warnings: [],
+      supportedNodeTypes: ["Stage"],
+    };
+    const previewSpy = vi
+      .spyOn(executionModule, "createPipelineFromSql")
+      .mockResolvedValue({
+        created: false,
+        plan: previewPlan,
+      });
+    const executeSpy = vi
+      .spyOn(executionModule, "createPipelineFromPlan")
+      .mockResolvedValue({
+        created: true,
+        workspaceID: "ws-1",
+        nodeCount: 1,
+      });
+
+    const harness = await createConnectedMcpHarness(createMockApiClient());
+
+    try {
+      const elicitSpy = vi.spyOn(harness.server.server, "elicitInput");
+
+      const result = await harness.client.callTool({
+        name: "create-pipeline-from-sql",
+        arguments: {
+          workspaceID: "ws-1",
+          sql: "select 1 as customer_id",
+          confirmed: true,
+        },
+      });
+
+      expect(result.isError).toBeUndefined();
+      expect(result.structuredContent).toMatchObject({
+        created: true,
+        workspaceID: "ws-1",
+        nodeCount: 1,
+        plan: expect.objectContaining({
+          status: "ready",
+          sql: "select 1 as customer_id",
+        }),
+      });
+      expect(result.structuredContent).not.toHaveProperty("STOP_AND_CONFIRM");
+      expect(elicitSpy).not.toHaveBeenCalled();
+      expect(previewSpy).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          workspaceID: "ws-1",
+          sql: "select 1 as customer_id",
+          confirmed: false,
+        })
+      );
+      expect(executeSpy).toHaveBeenCalledWith(expect.any(Object), {
+        workspaceID: "ws-1",
+        plan: previewPlan,
+      });
+    } finally {
+      await harness.close();
+    }
+  });
 });
