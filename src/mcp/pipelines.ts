@@ -24,10 +24,80 @@ import {
 } from "../coalesce/types.js";
 import { isPlainObject } from "../utils.js";
 
+function sortJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortJsonValue);
+  }
+  if (!isPlainObject(value)) {
+    return value;
+  }
+
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(value).sort()) {
+    const nested = sortJsonValue(value[key]);
+    if (nested !== undefined) {
+      sorted[key] = nested;
+    }
+  }
+  return sorted;
+}
+
+function normalizePlanFingerprintSelection(selection: unknown): Record<string, unknown> | null {
+  if (!isPlainObject(selection)) {
+    return null;
+  }
+
+  return {
+    strategy: typeof selection.strategy === "string" ? selection.strategy : null,
+    selectedNodeType:
+      typeof selection.selectedNodeType === "string" ? selection.selectedNodeType : null,
+    selectedDisplayName:
+      typeof selection.selectedDisplayName === "string"
+        ? selection.selectedDisplayName
+        : null,
+    selectedShortName:
+      typeof selection.selectedShortName === "string" ? selection.selectedShortName : null,
+    selectedFamily:
+      typeof selection.selectedFamily === "string" ? selection.selectedFamily : null,
+    confidence: typeof selection.confidence === "string" ? selection.confidence : null,
+    autoExecutable: selection.autoExecutable === true,
+    repoPath: typeof selection.repoPath === "string" ? selection.repoPath : null,
+    resolvedRepoPath:
+      typeof selection.resolvedRepoPath === "string" ? selection.resolvedRepoPath : null,
+    supportedNodeTypes: Array.isArray(selection.supportedNodeTypes)
+      ? selection.supportedNodeTypes.filter((value): value is string => typeof value === "string")
+      : [],
+    consideredNodeTypes: Array.isArray(selection.consideredNodeTypes)
+      ? selection.consideredNodeTypes
+          .filter(isPlainObject)
+          .map((candidate) => ({
+            nodeType: typeof candidate.nodeType === "string" ? candidate.nodeType : null,
+            displayName:
+              typeof candidate.displayName === "string" ? candidate.displayName : null,
+            shortName:
+              typeof candidate.shortName === "string" ? candidate.shortName : null,
+            family: typeof candidate.family === "string" ? candidate.family : null,
+            usageCount:
+              typeof candidate.usageCount === "number" ? candidate.usageCount : null,
+            workspaceUsageCount:
+              typeof candidate.workspaceUsageCount === "number"
+                ? candidate.workspaceUsageCount
+                : null,
+            observedInWorkspace: candidate.observedInWorkspace === true,
+            autoExecutable: candidate.autoExecutable === true,
+            score: typeof candidate.score === "number" ? candidate.score : null,
+            reasons: Array.isArray(candidate.reasons)
+              ? candidate.reasons.filter((value): value is string => typeof value === "string")
+              : [],
+          }))
+      : [],
+  };
+}
+
 function buildPlanFingerprint(
   workspaceID: string,
-  repoPath: string | null,
-  workspaceNodeTypes: string[],
+  selection: unknown,
+  supportedNodeTypes: string[],
   requestInputs?: {
     goal?: string;
     sql?: string;
@@ -35,16 +105,20 @@ function buildPlanFingerprint(
     targetNodeType?: string;
   }
 ): string {
-  const input = [
-    `workspace:${workspaceID}`,
-    `repo:${repoPath ?? "none"}`,
-    `types:${[...workspaceNodeTypes].sort().join(",")}`,
-    `goal:${requestInputs?.goal ?? ""}`,
-    `sql:${requestInputs?.sql ?? ""}`,
-    `sources:${requestInputs?.sourceNodeIDs ? [...requestInputs.sourceNodeIDs].sort().join(",") : ""}`,
-    `targetType:${requestInputs?.targetNodeType ?? ""}`,
-  ].join("|");
-  return createHash("sha256").update(input).digest("hex").slice(0, 16);
+  const payload = sortJsonValue({
+    workspaceID,
+    requestInputs: {
+      goal: requestInputs?.goal ?? null,
+      sql: requestInputs?.sql ?? null,
+      sourceNodeIDs: requestInputs?.sourceNodeIDs
+        ? [...requestInputs.sourceNodeIDs].sort()
+        : [],
+      targetNodeType: requestInputs?.targetNodeType ?? null,
+    },
+    supportedNodeTypes: [...supportedNodeTypes],
+    selection: normalizePlanFingerprintSelection(selection),
+  });
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex").slice(0, 16);
 }
 
 function getPlanSummaryDir(): string {
@@ -101,9 +175,10 @@ function writePlanSummary(plan: unknown, fingerprint: string): string | null {
     `Fingerprint: ${fingerprint}`,
     `Generated: ${new Date().toISOString()}`,
     ``,
-    `This file is automatically invalidated when the repo node types or workspace`,
-    `node types change. If you install new packages or commit new node type`,
-    `definitions, call plan-pipeline again to refresh.`,
+    `This file is automatically invalidated when repo-backed ranking inputs or`,
+    `workspace node types change enough to alter the planner's ranked guidance.`,
+    `If you install new packages, commit new node type definitions, or otherwise`,
+    `change ranking-relevant repo content, call plan-pipeline again to refresh.`,
     ``,
     `## Ranked Node Types`,
     ``,
@@ -298,18 +373,14 @@ export function registerPipelineTools(
       try {
         const result = await planPipeline(client, params);
 
-        // Build fingerprint from workspace + repo + observed types
+        // Build fingerprint from the actual ranked node-type output used in the summary.
         const selection = isPlainObject(result.nodeTypeSelection) ? result.nodeTypeSelection : null;
-        const workspaceNodeTypes = Array.isArray(selection?.workspaceObservedNodeTypes)
-          ? (selection.workspaceObservedNodeTypes as string[])
-          : [];
-        const repoPath = typeof selection?.resolvedRepoPath === "string"
-          ? selection.resolvedRepoPath
-          : null;
         const fingerprint = buildPlanFingerprint(
           params.workspaceID,
-          repoPath,
-          workspaceNodeTypes,
+          selection,
+          Array.isArray(result.supportedNodeTypes)
+            ? result.supportedNodeTypes.filter((value): value is string => typeof value === "string")
+            : [],
           {
             goal: params.goal,
             sql: params.sql,
@@ -343,8 +414,8 @@ export function registerPipelineTools(
               planSummaryUri: summaryPath,
               planCached: !!cached,
               instruction: cached
-                ? `Cached node type rankings found at planSummaryUri (fingerprint unchanged). Reference this resource for all subsequent node creations — no need to call plan-pipeline again unless you install new packages or commit new node type definitions.`
-                : `Node type rankings saved to planSummaryUri. Reference this resource for all subsequent node creations in this pipeline. The cache auto-invalidates when repo or workspace node types change.`,
+                ? `Cached node type rankings found at planSummaryUri (ranking fingerprint unchanged). Reference this resource for all subsequent node creations — no need to call plan-pipeline again unless repo-backed ranking inputs or workspace node types change enough to alter the planner's ranking.`
+                : `Node type rankings saved to planSummaryUri. Reference this resource for all subsequent node creations in this pipeline. The cache auto-invalidates when repo-backed ranking inputs or workspace node types change enough to alter the planner's ranking.`,
             }
           : {
               ...(selectedNodeType ? {

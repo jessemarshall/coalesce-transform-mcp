@@ -1,7 +1,10 @@
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CoalesceApiError } from "../../src/client.js";
+import { resolveCacheResourceUri } from "../../src/cache-dir.js";
 import { planPipeline } from "../../src/services/pipelines/planning.js";
 import {
   createPipelineFromPlan,
@@ -29,10 +32,14 @@ vi.mock("../../src/services/config/intelligent.js", () => ({
 
 const fixtureRepoPath = resolve("tests/fixtures/repo-backed-coalesce");
 const originalEnv = process.env;
+const tempDirs: string[] = [];
 
 afterEach(() => {
   vi.restoreAllMocks();
   process.env = originalEnv;
+  for (const tempDir of tempDirs.splice(0, tempDirs.length)) {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 function createMockClient() {
@@ -228,6 +235,100 @@ describe("Pipeline Tools", () => {
     expect((result as any).isError).toBeUndefined();
     expect(client.post).not.toHaveBeenCalled();
     expect(client.put).not.toHaveBeenCalled();
+  });
+
+  it("plan-pipeline refreshes the cached summary when repo-backed rankings change at the same path", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "coalesce-plan-summary-"));
+    tempDirs.push(tempDir);
+    const repoCopyPath = join(tempDir, "repo-copy");
+    cpSync(fixtureRepoPath, repoCopyPath, { recursive: true });
+    vi.spyOn(process, "cwd").mockReturnValue(tempDir);
+
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "tool");
+    const client = createMockClient();
+
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [
+            { nodeType: "package-alpha:::65" },
+            { nodeType: "Stage" },
+            { nodeType: "Source" },
+          ],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(buildSourceNode("source-1", "CUSTOMER", "RAW"));
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
+
+    registerPipelineTools(server, client as any);
+
+    const planToolCall = toolSpy.mock.calls.find(
+      (call) => call[0] === "plan-pipeline"
+    );
+    const handler = planToolCall?.[4] as
+      | ((params: {
+          workspaceID: string;
+          goal: string;
+          sourceNodeIDs: string[];
+          repoPath: string;
+        }) => Promise<{
+          structuredContent?: Record<string, unknown>;
+        }>)
+      | undefined;
+
+    expect(typeof handler).toBe("function");
+
+    const firstResult = await handler!({
+      workspaceID: "ws-1",
+      goal: "Build a customer work node",
+      sourceNodeIDs: ["source-1"],
+      repoPath: repoCopyPath,
+    });
+    const firstStructured = (firstResult as any).structuredContent as Record<string, unknown>;
+    const firstSummaryUri = firstStructured.planSummaryUri as string;
+    const firstSummaryPath = resolveCacheResourceUri(firstSummaryUri, tempDir)?.filePath;
+
+    expect(firstStructured.planCached).toBe(false);
+    expect(firstSummaryPath).toBeDefined();
+    expect(readFileSync(firstSummaryPath!, "utf8")).toContain("Custom Work");
+
+    const secondResult = await handler!({
+      workspaceID: "ws-1",
+      goal: "Build a customer work node",
+      sourceNodeIDs: ["source-1"],
+      repoPath: repoCopyPath,
+    });
+    const secondStructured = (secondResult as any).structuredContent as Record<string, unknown>;
+
+    expect(secondStructured.planCached).toBe(true);
+    expect(secondStructured.planSummaryUri).toBe(firstSummaryUri);
+
+    const definitionPath = join(repoCopyPath, "nodeTypes", "Custom-65", "definition.yml");
+    writeFileSync(
+      definitionPath,
+      readFileSync(definitionPath, "utf8").replace(/Custom Work/g, "Custom Work Reloaded"),
+      "utf8"
+    );
+
+    const refreshedResult = await handler!({
+      workspaceID: "ws-1",
+      goal: "Build a customer work node",
+      sourceNodeIDs: ["source-1"],
+      repoPath: repoCopyPath,
+    });
+    const refreshedStructured = (refreshedResult as any).structuredContent as Record<string, unknown>;
+    const refreshedSummaryPath = resolveCacheResourceUri(
+      refreshedStructured.planSummaryUri as string,
+      tempDir
+    )?.filePath;
+
+    expect(refreshedStructured.planCached).toBe(false);
+    expect(refreshedSummaryPath).toBeDefined();
+    expect(readFileSync(refreshedSummaryPath!, "utf8")).toContain("Custom Work Reloaded");
   });
 
   it("create-pipeline-from-sql tool accepts ref-based SQL unchanged", async () => {
