@@ -23,6 +23,18 @@ import {
 } from "../coalesce/types.js";
 import { isPlainObject } from "../utils.js";
 
+/**
+ * Recursively sorts JSON values to ensure deterministic serialization.
+ *
+ * Object keys are sorted alphabetically to guarantee that structurally
+ * identical objects produce identical JSON strings when serialized.
+ * This is essential for generating consistent confirmation tokens via
+ * hashing, where the same plan content must always yield the same hash
+ * regardless of key insertion order.
+ *
+ * @param value - The value to sort (arrays, objects, or primitives)
+ * @returns A deep copy with all object keys sorted alphabetically
+ */
 function sortJsonValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sortJsonValue);
@@ -279,6 +291,23 @@ function buildPlanSummaryForElicitation(plan: unknown): string {
   return lines.join("\n");
 }
 
+/**
+ * Generates a confirmation token for a pipeline plan to prevent bypass of user approval.
+ *
+ * The token is a SHA256 hash (truncated to 16 hex chars) of the canonicalized plan JSON.
+ * AI agents must provide this token when calling pipeline creation tools with `confirmed=true`,
+ * proving they received and can reference the exact plan that should have been presented to the user.
+ *
+ * **Important limitations:**
+ * - The token proves the agent received the correct plan (plan integrity)
+ * - It does NOT verify the agent presented the plan accurately to the user
+ * - An agent could theoretically show incomplete/misleading info but still provide the valid token
+ * - This is an acceptable tradeoff: the token prevents accidental bypass and honest mistakes,
+ *   while deliberate deception by a malicious agent is out of scope
+ *
+ * @param plan - The pipeline plan object to fingerprint
+ * @returns A 16-character hex token uniquely identifying this plan's content
+ */
 export function buildPlanConfirmationToken(plan: unknown): string {
   return createHash("sha256")
     .update(JSON.stringify(sortJsonValue(plan)))
@@ -295,6 +324,9 @@ async function requirePipelineCreationApproval(
   payload: Record<string, unknown> = {}
 ): Promise<JsonToolResponse | null> {
   if (confirmed === true) {
+    // Verify the agent has the exact plan by comparing confirmation tokens.
+    // This prevents bypass where an agent sets confirmed=true without actually
+    // presenting the plan, but doesn't guarantee the agent presented it accurately.
     const expected = buildPlanConfirmationToken(plan);
     if (confirmationToken !== expected) {
       return buildJsonToolResponse(toolName, {
