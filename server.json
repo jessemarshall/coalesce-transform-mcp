@@ -1,0 +1,71 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.jessemarshall/coalesce-transform",
+  "description": "MCP server for managing Coalesce Transform workspaces, nodes, pipelines, and runs.",
+  "repository": {
+    "url": "https://github.com/jessemarshall/coalesce-transform-mcp",
+    "source": "github"
+  },
+  "version": "0.1.2",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "coalesce-transform-mcp",
+      "version": "0.1.2",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "description": "Bearer token from Coalesce Deploy tab",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true,
+          "name": "COALESCE_ACCESS_TOKEN"
+        },
+        {
+          "description": "Region-specific Coalesce base URL",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_BASE_URL"
+        },
+        {
+          "description": "Snowflake account username (required for run tools)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "SNOWFLAKE_USERNAME"
+        },
+        {
+          "description": "Path to PEM-encoded Snowflake private key (required for run tools)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "SNOWFLAKE_KEY_PAIR_KEY"
+        },
+        {
+          "description": "Password for encrypted Snowflake private key",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true,
+          "name": "SNOWFLAKE_KEY_PAIR_PASS"
+        },
+        {
+          "description": "Snowflake compute warehouse (required for run tools)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "SNOWFLAKE_WAREHOUSE"
+        },
+        {
+          "description": "Snowflake user role (required for run tools)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "SNOWFLAKE_ROLE"
+        }
+      ]
+    }
+  ]
+}
