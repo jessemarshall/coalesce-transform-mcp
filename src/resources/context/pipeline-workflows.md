@@ -12,7 +12,7 @@
 | "build an incremental pipeline" | `Incremental Load` | See "Incremental Pipeline Setup" below |
 | "create an empty node" | Any | `create-workspace-node-from-scratch` with `name` and `metadata.columns` |
 
-When the user specifies the node type or the intent maps clearly, skip discovery and create directly. Use the full workflow only when the intent is ambiguous or involves multiple layers.
+Use this table as a heuristic for likely node families, but still call `plan-pipeline` before creating anything so the exact `nodeType` is confirmed from the repo/workspace context. Use the full workflow whenever the request is ambiguous or involves multiple layers.
 
 ## Choosing the Right Node Type
 

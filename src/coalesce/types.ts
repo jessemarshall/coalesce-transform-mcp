@@ -8,6 +8,7 @@ import {
 } from "../cache-dir.js";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { CoalesceApiError } from "../client.js";
 
 const SESSION_START_TIME = new Date();
 
@@ -77,18 +78,339 @@ export const DESTRUCTIVE_ANNOTATIONS = {
 const DEFAULT_AUTO_CACHE_MAX_BYTES = 32 * 1024;
 const JSON_TOOL_OUTPUT_SCHEMA_PATCHED = Symbol("jsonToolOutputSchemaPatched");
 
-export const JsonToolOutputSchema = z
-  .object({})
-  .passthrough()
-  .describe(
-    "Tool-specific JSON object output. Oversized responses may be replaced with cache metadata including resourceUri."
-  );
+const JsonObjectSchema = z.object({}).passthrough();
 
+const JsonToolErrorSchema = z.object({
+  message: z.string(),
+  status: z.number().optional(),
+  detail: z.unknown().optional(),
+}).passthrough();
+
+const ListToolOutputSchema = z.object({
+  data: z.array(z.unknown()).optional(),
+  next: z.string().optional(),
+  total: z.number().optional(),
+}).passthrough();
+
+const EntityToolOutputSchema = z.object({
+  id: z.union([z.string(), z.number()]).optional(),
+  name: z.string().optional(),
+  message: z.string().optional(),
+}).passthrough();
+
+const WorkspaceNodeMutationOutputSchema = z.object({
+  nodeID: z.string().optional(),
+  created: z.boolean().optional(),
+  warning: z.string().optional(),
+  validation: JsonObjectSchema.optional(),
+  nextSteps: z.array(z.string()).optional(),
+  joinSuggestions: z.array(z.unknown()).optional(),
+  configCompletion: JsonObjectSchema.optional(),
+  configCompletionSkipped: z.string().optional(),
+  nodeTypeValidation: JsonObjectSchema.optional(),
+}).passthrough();
+
+const WorkspaceAnalysisOutputSchema = z.object({
+  workspaceID: z.string(),
+  analyzedAt: z.string(),
+  nodeCount: z.number(),
+  packageAdoption: JsonObjectSchema,
+  layerPatterns: JsonObjectSchema,
+  methodology: z.string(),
+  recommendations: JsonObjectSchema,
+}).passthrough();
+
+const WorkspaceNodeTypesOutputSchema = z.object({
+  workspaceID: z.string(),
+  basis: z.literal("observed_nodes"),
+  nodeTypes: z.array(z.string()),
+  counts: z.record(z.number()),
+  total: z.number(),
+}).passthrough();
+
+const RunSchedulerOutputSchema = z.object({
+  runCounter: z.number().optional(),
+  runStatus: z.string().optional(),
+  message: z.string().optional(),
+}).passthrough();
+
+const RunDetailsOutputSchema = z.object({
+  run: z.unknown(),
+  results: z.unknown(),
+  resultsError: z.string().optional(),
+}).passthrough();
+
+const RunWaitOutputSchema = z.object({
+  status: z.unknown().optional(),
+  results: z.unknown().optional(),
+  resultsError: JsonToolErrorSchema.optional(),
+  incomplete: z.boolean().optional(),
+  timedOut: z.boolean().optional(),
+}).passthrough();
+
+const EnvironmentOverviewOutputSchema = z.object({
+  environment: z.unknown(),
+  nodes: z.array(z.unknown()),
+}).passthrough();
+
+const CacheArtifactOutputSchema = z.object({
+  workspaceID: z.string().optional(),
+  environmentID: z.string().optional(),
+  runType: z.enum(["deploy", "refresh"]).optional(),
+  runStatus: z
+    .enum(["completed", "failed", "canceled", "running", "waitingToRun"])
+    .optional(),
+  detail: z.boolean().optional(),
+  totalNodes: z.number().optional(),
+  totalRuns: z.number().optional(),
+  totalUsers: z.number().optional(),
+  pageCount: z.number().optional(),
+  pageSize: z.number().optional(),
+  orderBy: z.string().optional(),
+  orderByDirection: z.enum(["asc", "desc"]).optional(),
+  fileUri: z.string().optional(),
+  metaUri: z.string().optional(),
+  cachedAt: z.string().optional(),
+  autoCached: z.boolean().optional(),
+  resourceUri: z.string().optional(),
+  toolName: z.string().optional(),
+  message: z.string().optional(),
+  sizeBytes: z.number().optional(),
+  maxInlineBytes: z.number().optional(),
+}).passthrough();
+
+const ClearCacheOutputSchema = z.object({
+  deleted: z.boolean(),
+  fileCount: z.number().optional(),
+  totalBytes: z.number().optional(),
+  sizeMB: z.string().optional(),
+  message: z.string(),
+}).passthrough();
+
+const RepoPackagesOutputSchema = z.object({
+  summary: JsonObjectSchema,
+  packages: z.array(JsonObjectSchema),
+}).passthrough();
+
+const RepoNodeTypesOutputSchema = z.object({
+  summary: JsonObjectSchema,
+  nodeTypes: z.array(JsonObjectSchema),
+}).passthrough();
+
+const RepoNodeTypeDefinitionOutputSchema = z.object({
+  repoPath: z.string(),
+  resolvedRepoPath: z.string(),
+  repoWarnings: z.array(z.string()),
+  requestedNodeType: z.string(),
+  resolvedNodeType: z.string(),
+  resolution: JsonObjectSchema,
+  outerDefinition: JsonObjectSchema,
+  nodeMetadataSpecYaml: z.string().nullable().optional(),
+  nodeDefinition: z.unknown(),
+  parseError: z.string().nullable().optional(),
+  filePaths: JsonObjectSchema,
+  usageSummary: JsonObjectSchema,
+  warnings: z.array(z.string()),
+}).passthrough();
+
+const WorkspaceNodeTemplateOutputSchema = z.object({
+  warnings: z.array(z.string()).optional(),
+  setWorkspaceNodeBodyTemplate: JsonObjectSchema.optional(),
+  setWorkspaceNodeBodyTemplateYaml: z.string().optional(),
+  nodeDefinition: z.unknown().optional(),
+  nodeMetadataSpecYaml: z.string().nullable().optional(),
+  comparison: JsonObjectSchema.optional(),
+}).passthrough();
+
+const CorpusSearchOutputSchema = z.object({
+  summary: JsonObjectSchema,
+  matchedCount: z.number().optional(),
+  returnedCount: z.number().optional(),
+  matches: z.array(JsonObjectSchema).optional(),
+  totalMatches: z.number().optional(),
+}).passthrough();
+
+const CorpusVariantOutputSchema = z.object({
+  variantKey: z.string().optional(),
+  supportStatus: z.string().optional(),
+  nodeDefinition: z.unknown().optional(),
+  nodeMetadataSpec: z.string().optional(),
+  warnings: z.array(z.string()).optional(),
+}).passthrough();
+
+const PipelinePlanOutputSchema = z.object({
+  status: z.string().optional(),
+  warning: z.string().optional(),
+  warnings: z.array(z.string()).optional(),
+  openQuestions: z.array(z.unknown()).optional(),
+  nodes: z.array(z.unknown()).optional(),
+  cteNodeSummary: z.array(z.unknown()).optional(),
+  supportedNodeTypes: z.array(z.string()).optional(),
+  nodeTypeSelection: JsonObjectSchema.optional(),
+  USE_THIS_NODE_TYPE: z.string().optional(),
+  nodeTypeDisplayName: z.string().optional(),
+  nodeTypeInstruction: z.string().optional(),
+  planSummaryUri: z.string().optional(),
+  planCached: z.boolean().optional(),
+  instruction: z.string().optional(),
+}).passthrough();
+
+const PipelineCreateOutputSchema = z.object({
+  created: z.boolean().optional(),
+  cancelled: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+  STOP_AND_CONFIRM: z.string().optional(),
+  reason: z.string().optional(),
+  warning: z.string().optional(),
+  plan: z.unknown().optional(),
+  createdNodes: z.array(z.unknown()).optional(),
+  cleanupFailedNodeIDs: z.array(z.string()).optional(),
+  cleanupFailures: z.array(
+    z.object({
+      nodeID: z.string(),
+      message: z.string(),
+      status: z.number().optional(),
+      detail: z.unknown().optional(),
+    }).passthrough()
+  ).optional(),
+  error: JsonToolErrorSchema.optional(),
+}).passthrough();
+
+const LIST_TOOL_NAMES = new Set([
+  "list-environments",
+  "list-projects",
+  "list-jobs",
+  "list-runs",
+  "list-environment-nodes",
+  "list-workspace-nodes",
+  "list-org-users",
+  "list-user-roles",
+  "list-git-accounts",
+]);
+
+const ENTITY_TOOL_NAMES = new Set([
+  "get-environment",
+  "create-environment",
+  "delete-environment",
+  "get-project",
+  "create-project",
+  "update-project",
+  "delete-project",
+  "get-job",
+  "create-workspace-job",
+  "update-workspace-job",
+  "delete-workspace-job",
+  "get-run",
+  "get-run-results",
+  "get-environment-node",
+  "get-workspace-node",
+  "get-user-roles",
+  "set-org-role",
+  "set-project-role",
+  "delete-project-role",
+  "set-env-role",
+  "delete-env-role",
+  "get-git-account",
+  "create-git-account",
+  "update-git-account",
+  "delete-git-account",
+  "get-workspace-subgraph",
+  "create-workspace-subgraph",
+  "update-workspace-subgraph",
+  "delete-workspace-subgraph",
+]);
+
+const WORKSPACE_NODE_MUTATION_TOOL_NAMES = new Set([
+  "create-workspace-node-from-scratch",
+  "set-workspace-node",
+  "update-workspace-node",
+  "replace-workspace-node-columns",
+  "convert-join-to-aggregation",
+  "apply-join-condition",
+  "create-workspace-node-from-predecessor",
+  "delete-workspace-node",
+  "complete-node-configuration",
+]);
+
+const CACHE_TOOL_NAMES = new Set([
+  "cache-workspace-nodes",
+  "cache-environment-nodes",
+  "cache-runs",
+  "cache-org-users",
+]);
+
+export const JsonToolOutputSchema = JsonObjectSchema.describe(
+  "Tool-specific JSON object output. Oversized responses may be replaced with cache metadata including resourceUri."
+);
+
+function getToolOutputSchema(toolName: string) {
+  if (LIST_TOOL_NAMES.has(toolName)) {
+    return ListToolOutputSchema;
+  }
+  if (ENTITY_TOOL_NAMES.has(toolName)) {
+    return EntityToolOutputSchema;
+  }
+  if (WORKSPACE_NODE_MUTATION_TOOL_NAMES.has(toolName)) {
+    return WorkspaceNodeMutationOutputSchema;
+  }
+  if (CACHE_TOOL_NAMES.has(toolName)) {
+    return CacheArtifactOutputSchema;
+  }
+
+  switch (toolName) {
+    case "clear_coalesce_transform_mcp_data_cache":
+      return ClearCacheOutputSchema;
+    case "analyze-workspace-patterns":
+      return WorkspaceAnalysisOutputSchema;
+    case "list-workspace-node-types":
+      return WorkspaceNodeTypesOutputSchema;
+    case "run-status":
+    case "start-run":
+    case "retry-run":
+    case "cancel-run":
+      return RunSchedulerOutputSchema;
+    case "get-run-details":
+      return RunDetailsOutputSchema;
+    case "run-and-wait":
+    case "retry-and-wait":
+      return RunWaitOutputSchema;
+    case "get-environment-overview":
+      return EnvironmentOverviewOutputSchema;
+    case "list-repo-packages":
+      return RepoPackagesOutputSchema;
+    case "list-repo-node-types":
+      return RepoNodeTypesOutputSchema;
+    case "get-repo-node-type-definition":
+      return RepoNodeTypeDefinitionOutputSchema;
+    case "generate-set-workspace-node-template":
+    case "generate-set-workspace-node-template-from-variant":
+      return WorkspaceNodeTemplateOutputSchema;
+    case "search-node-type-variants":
+      return CorpusSearchOutputSchema;
+    case "get-node-type-variant":
+      return CorpusVariantOutputSchema;
+    case "plan-pipeline":
+      return PipelinePlanOutputSchema;
+    case "create-pipeline-from-plan":
+    case "create-pipeline-from-sql":
+      return PipelineCreateOutputSchema;
+    default:
+      return JsonToolOutputSchema;
+  }
+}
 type TextContent = { type: "text"; text: string };
 
 export type JsonToolResponse = {
   content: Array<TextContent | CacheResourceLink>;
   structuredContent?: Record<string, unknown>;
+};
+
+type JsonToolErrorResponse = {
+  isError: true;
+  content: { type: "text"; text: string }[];
+  structuredContent: {
+    error: z.infer<typeof JsonToolErrorSchema>;
+  };
 };
 
 type JsonToolResponseOptions = {
@@ -487,11 +809,24 @@ export function validatePathSegment(value: string, name: string): string {
 
 export function handleToolError(
   error: unknown
-): { isError: true; content: { type: "text"; text: string }[] } {
-  const message = error instanceof Error ? error.message : String(error);
+): JsonToolErrorResponse {
+  const normalized =
+    error instanceof CoalesceApiError
+      ? {
+          message: error.message,
+          status: error.status,
+          ...(error.detail !== undefined ? { detail: error.detail } : {}),
+        }
+      : error instanceof Error
+        ? { message: error.message }
+        : { message: String(error) };
+
   return {
     isError: true,
-    content: [{ type: "text" as const, text: message }],
+    content: [{ type: "text" as const, text: normalized.message }],
+    structuredContent: {
+      error: normalized,
+    },
   };
 }
 
@@ -530,7 +865,7 @@ export function ensureJsonToolOutputSchemas(server: McpServer): void {
 
     const configArgs = [...rest.slice(0, -1)];
     const config: Record<string, unknown> = {
-      outputSchema: JsonToolOutputSchema,
+      outputSchema: getToolOutputSchema(name),
     };
 
     if (typeof configArgs[0] === "string") {
