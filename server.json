@@ -31,6 +31,34 @@
           "name": "COALESCE_BASE_URL"
         },
         {
+          "description": "Fallback organization ID used by cancel-run when orgID is omitted",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_ORG_ID"
+        },
+        {
+          "description": "Local Coalesce repo root for repo-backed tools and pipeline planning",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_REPO_PATH"
+        },
+        {
+          "description": "JSON byte threshold for auto-caching oversized tool responses to disk (default: 32768)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_MCP_AUTO_CACHE_MAX_BYTES"
+        },
+        {
+          "description": "Maximum outbound API request body size in bytes (default: 524288)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_MCP_MAX_REQUEST_BODY_BYTES"
+        },
+        {
           "description": "Snowflake account username (required for run tools)",
           "isRequired": false,
           "format": "string",
