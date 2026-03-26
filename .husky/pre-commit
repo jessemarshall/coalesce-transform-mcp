@@ -1,0 +1,20 @@
+# Secret scanning - block commits with tokens/keys
+SECRETS_PATTERN='(-----BEGIN.*PRIVATE KEY|eyJhbG[A-Za-z0-9_-]+\.|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|npm_[A-Za-z0-9]{36})'
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -vE '(\.md$|\.husky/)' || true)
+
+if [ -n "$STAGED_FILES" ]; then
+  MATCHES=$(echo "$STAGED_FILES" | xargs grep -lE "$SECRETS_PATTERN" 2>/dev/null || true)
+  if [ -n "$MATCHES" ]; then
+    echo "ERROR: Potential secrets detected in staged files:"
+    echo "$MATCHES"
+    echo ""
+    echo "If this is a false positive, use: git commit --no-verify"
+    exit 1
+  fi
+fi
+
+# Type check
+npx tsc --noEmit
+
+# Tests
+npm test
