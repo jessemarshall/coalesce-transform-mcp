@@ -27,11 +27,11 @@
             max-width: 980px;
             margin: 0 auto;
             padding: 45px;
-            background-color: #0d1117;
+            background-color: #ffffff;
         }
         .markdown-body {
-            background-color: #0d1117;
-            color: #e6edf3;
+            background-color: #ffffff;
+            color: #24292e;
         }
         @media (max-width: 767px) {
             body {
@@ -46,7 +46,7 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
-        fetch('https://raw.githubusercontent.com/jessemarshall/coalesce-transform-mcp/develop/README.md')
+        fetch('https://raw.githubusercontent.com/jessemarshall/coalesce-transform-mcp/main/README.md')
             .then(response => response.text())
             .then(text => {
                 document.getElementById('content').innerHTML = marked.parse(text);
