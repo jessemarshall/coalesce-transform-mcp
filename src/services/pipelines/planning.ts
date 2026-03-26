@@ -370,9 +370,19 @@ function findTopLevelKeywordIndex(sql: string, keyword: string, startIndex = 0):
   return -1;
 }
 
-function splitTopLevel(value: string, delimiter: string): string[] {
-  const parts: string[] = [];
-  let current = "";
+/**
+ * Iterates through a SQL string character-by-character, tracking quoting and
+ * parenthesis depth.  For each top-level (unquoted, depth-0) character the
+ * callback receives the character, its index, and the current paren depth.
+ * The callback returns `true` to continue or `false` to stop early.
+ *
+ * The scanner handles: single-quoted strings (with '' escapes), double-quoted
+ * identifiers, backtick-quoted identifiers, and bracket-quoted identifiers.
+ */
+function scanTopLevel(
+  value: string,
+  callback: (char: string, index: number, parenDepth: number) => boolean
+): void {
   let parenDepth = 0;
   let inSingleQuote = false;
   let inDoubleQuote = false;
@@ -380,13 +390,11 @@ function splitTopLevel(value: string, delimiter: string): string[] {
   let inBracket = false;
 
   for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
+    const char = value[index]!;
     const next = value[index + 1];
 
     if (inSingleQuote) {
-      current += char;
       if (char === "'" && next === "'") {
-        current += next;
         index += 1;
       } else if (char === "'") {
         inSingleQuote = false;
@@ -394,163 +402,76 @@ function splitTopLevel(value: string, delimiter: string): string[] {
       continue;
     }
     if (inDoubleQuote) {
-      current += char;
-      if (char === '"') {
-        inDoubleQuote = false;
-      }
+      if (char === '"') inDoubleQuote = false;
       continue;
     }
     if (inBacktick) {
-      current += char;
-      if (char === "`") {
-        inBacktick = false;
-      }
+      if (char === "`") inBacktick = false;
       continue;
     }
     if (inBracket) {
-      current += char;
-      if (char === "]") {
-        inBracket = false;
-      }
+      if (char === "]") inBracket = false;
       continue;
     }
 
-    if (char === "'") {
-      inSingleQuote = true;
-      current += char;
-      continue;
+    if (char === "'") { inSingleQuote = true; continue; }
+    if (char === '"') { inDoubleQuote = true; continue; }
+    if (char === "`") { inBacktick = true; continue; }
+    if (char === "[") { inBracket = true; continue; }
+    if (char === "(") { parenDepth += 1; continue; }
+    if (char === ")" && parenDepth > 0) { parenDepth -= 1; continue; }
+
+    if (!callback(char, index, parenDepth)) {
+      return;
     }
-    if (char === '"') {
-      inDoubleQuote = true;
-      current += char;
-      continue;
-    }
-    if (char === "`") {
-      inBacktick = true;
-      current += char;
-      continue;
-    }
-    if (char === "[") {
-      inBracket = true;
-      current += char;
-      continue;
-    }
-    if (char === "(") {
-      parenDepth += 1;
-      current += char;
-      continue;
-    }
-    if (char === ")" && parenDepth > 0) {
-      parenDepth -= 1;
-      current += char;
-      continue;
-    }
+  }
+}
+
+function splitTopLevel(value: string, delimiter: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+
+  scanTopLevel(value, (char, index, parenDepth) => {
     if (char === delimiter && parenDepth === 0) {
-      parts.push(current.trim());
-      current = "";
-      continue;
+      parts.push(value.slice(start, index).trim());
+      start = index + 1;
     }
+    return true;
+  });
 
-    current += char;
+  const tail = value.slice(start).trim();
+  if (tail.length > 0) {
+    parts.push(tail);
   }
-
-  if (current.trim().length > 0) {
-    parts.push(current.trim());
-  }
-
   return parts;
 }
 
 function splitTopLevelWhitespace(value: string): string[] {
   const parts: string[] = [];
-  let current = "";
-  let parenDepth = 0;
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inBacktick = false;
-  let inBracket = false;
+  let start = 0;
+  let inWhitespace = true;
 
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    const next = value[index + 1];
-
-    if (inSingleQuote) {
-      current += char;
-      if (char === "'" && next === "'") {
-        current += next;
-        index += 1;
-      } else if (char === "'") {
-        inSingleQuote = false;
-      }
-      continue;
-    }
-    if (inDoubleQuote) {
-      current += char;
-      if (char === '"') {
-        inDoubleQuote = false;
-      }
-      continue;
-    }
-    if (inBacktick) {
-      current += char;
-      if (char === "`") {
-        inBacktick = false;
-      }
-      continue;
-    }
-    if (inBracket) {
-      current += char;
-      if (char === "]") {
-        inBracket = false;
-      }
-      continue;
-    }
-
-    if (char === "'") {
-      inSingleQuote = true;
-      current += char;
-      continue;
-    }
-    if (char === '"') {
-      inDoubleQuote = true;
-      current += char;
-      continue;
-    }
-    if (char === "`") {
-      inBacktick = true;
-      current += char;
-      continue;
-    }
-    if (char === "[") {
-      inBracket = true;
-      current += char;
-      continue;
-    }
-    if (char === "(") {
-      parenDepth += 1;
-      current += char;
-      continue;
-    }
-    if (char === ")" && parenDepth > 0) {
-      parenDepth -= 1;
-      current += char;
-      continue;
-    }
+  scanTopLevel(value, (char, index, parenDepth) => {
     if (/\s/u.test(char) && parenDepth === 0) {
-      if (current.trim().length > 0) {
-        parts.push(current.trim());
-        current = "";
+      if (!inWhitespace) {
+        parts.push(value.slice(start, index).trim());
+        inWhitespace = true;
       }
-      continue;
+    } else {
+      if (inWhitespace) {
+        start = index;
+        inWhitespace = false;
+      }
     }
+    return true;
+  });
 
-    current += char;
+  if (!inWhitespace) {
+    const tail = value.slice(start).trim();
+    if (tail.length > 0) {
+      parts.push(tail);
+    }
   }
-
-  if (current.trim().length > 0) {
-    parts.push(current.trim());
-  }
-
   return parts;
 }
 
@@ -597,15 +518,27 @@ function extractFromClause(sql: string): string | null {
     .replace(/;+\s*$/u, "");
 }
 
+/** Keywords that terminate a source segment in a FROM clause. */
+const SOURCE_SEGMENT_TERMINATORS = [
+  "join", "left", "right", "inner", "full", "cross", "natural", "lateral",
+  "on", "using",
+  "where", "group", "order", "having", "limit", "qualify",
+  "union", "intersect", "except", "window", "fetch",
+];
+
+function findTerminatorKeyword(value: string, index: number): string | null {
+  for (const keyword of SOURCE_SEGMENT_TERMINATORS) {
+    if (matchesKeywordAt(value, index, keyword)) {
+      return keyword;
+    }
+  }
+  return null;
+}
+
 function extractTopLevelSourceSegments(
   fromClause: string
 ): Array<{ text: string; relationStart: number; relationEnd: number }> {
   const segments: Array<{ text: string; relationStart: number; relationEnd: number }> = [];
-  let parenDepth = 0;
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inBacktick = false;
-  let inBracket = false;
   let captureStart: number | null = null;
 
   const pushSegment = (endIndex: number) => {
@@ -625,134 +558,39 @@ function extractTopLevelSourceSegments(
     }
   };
 
-  for (let index = 0; index < fromClause.length; index += 1) {
-    const char = fromClause[index];
-    const next = fromClause[index + 1];
-
-    if (inSingleQuote) {
-      if (char === "'" && next === "'") {
-        index += 1;
-      } else if (char === "'") {
-        inSingleQuote = false;
-      }
-      continue;
-    }
-    if (inDoubleQuote) {
-      if (char === '"') {
-        inDoubleQuote = false;
-      }
-      continue;
-    }
-    if (inBacktick) {
-      if (char === "`") {
-        inBacktick = false;
-      }
-      continue;
-    }
-    if (inBracket) {
-      if (char === "]") {
-        inBracket = false;
-      }
-      continue;
-    }
-
-    if (char === "'") {
-      inSingleQuote = true;
-      continue;
-    }
-    if (char === '"') {
-      inDoubleQuote = true;
-      continue;
-    }
-    if (char === "`") {
-      inBacktick = true;
-      continue;
-    }
-    if (char === "[") {
-      inBracket = true;
-      continue;
-    }
-    if (char === "(") {
-      parenDepth += 1;
-      continue;
-    }
-    if (char === ")" && parenDepth > 0) {
-      parenDepth -= 1;
-      continue;
-    }
+  scanTopLevel(fromClause, (char, index, parenDepth) => {
     if (parenDepth !== 0) {
-      continue;
+      return true;
     }
 
     if (captureStart === null) {
       if (matchesKeywordAt(fromClause, index, "from")) {
         captureStart = skipWhitespace(fromClause, index + 4);
-        index += 3;
-        continue;
-      }
-      if (matchesKeywordAt(fromClause, index, "join")) {
+      } else if (matchesKeywordAt(fromClause, index, "join")) {
         captureStart = skipWhitespace(fromClause, index + 4);
-        index += 3;
-        continue;
-      }
-      if (char === ",") {
+      } else if (char === ",") {
         captureStart = skipWhitespace(fromClause, index + 1);
       }
-      continue;
+      return true;
     }
 
     if (char === ",") {
       pushSegment(index);
       captureStart = skipWhitespace(fromClause, index + 1);
-      continue;
+      return true;
     }
 
-    const terminator =
-      matchesKeywordAt(fromClause, index, "join")
-        ? "join"
-        : matchesKeywordAt(fromClause, index, "left")
-          ? "left"
-          : matchesKeywordAt(fromClause, index, "right")
-            ? "right"
-            : matchesKeywordAt(fromClause, index, "inner")
-              ? "inner"
-              : matchesKeywordAt(fromClause, index, "full")
-                ? "full"
-                : matchesKeywordAt(fromClause, index, "cross")
-                  ? "cross"
-                  : matchesKeywordAt(fromClause, index, "natural")
-                    ? "natural"
-                    : matchesKeywordAt(fromClause, index, "on")
-                      ? "on"
-                      : matchesKeywordAt(fromClause, index, "using")
-                        ? "using"
-                        : matchesKeywordAt(fromClause, index, "where")
-                          ? "where"
-                          : matchesKeywordAt(fromClause, index, "group")
-                            ? "group"
-                            : matchesKeywordAt(fromClause, index, "order")
-                              ? "order"
-                              : matchesKeywordAt(fromClause, index, "having")
-                                ? "having"
-                                : matchesKeywordAt(fromClause, index, "limit")
-                                  ? "limit"
-                                  : matchesKeywordAt(fromClause, index, "qualify")
-                                    ? "qualify"
-                                    : matchesKeywordAt(fromClause, index, "union")
-                                      ? "union"
-                                      : null;
-
-    if (!terminator) {
-      continue;
+    const terminator = findTerminatorKeyword(fromClause, index);
+    if (terminator) {
+      pushSegment(index);
+      captureStart =
+        terminator === "join"
+          ? skipWhitespace(fromClause, index + terminator.length)
+          : null;
     }
 
-    pushSegment(index);
-    captureStart =
-      terminator === "join"
-        ? skipWhitespace(fromClause, index + terminator.length)
-        : null;
-    index += terminator.length - 1;
-  }
+    return true;
+  });
 
   pushSegment(fromClause.length);
   return segments;
@@ -843,15 +681,22 @@ function parseSqlSourceSegment(
   };
 }
 
-function parseSqlSourceRefs(sql: string): ParsedSqlSourceRef[] {
+type SqlSourceParseResult = {
+  fromClause: string;
+  refs: ParsedSqlSourceRef[];
+};
+
+function parseSqlSourceRefs(sql: string): SqlSourceParseResult {
   const fromClause = extractFromClause(sql);
   if (!fromClause) {
-    return [];
+    return { fromClause: "", refs: [] };
   }
 
-  return extractTopLevelSourceSegments(fromClause)
+  const refs = extractTopLevelSourceSegments(fromClause)
     .map(parseSqlSourceSegment)
     .filter((ref): ref is ParsedSqlSourceRef => ref !== null);
+
+  return { fromClause, refs };
 }
 
 function splitExpressionAlias(rawItem: string): { expression: string; outputName: string | null } {
@@ -2339,7 +2184,8 @@ export async function planPipeline(
       return ctePlan;
     }
 
-    const parseResult = parseSqlSelectItems(params.sql, parseSqlSourceRefs(params.sql));
+    const sourceParseResult = parseSqlSourceRefs(params.sql);
+    const parseResult = parseSqlSelectItems(params.sql, sourceParseResult.refs);
     const {
       refs,
       predecessorNodes,
@@ -2829,92 +2675,6 @@ function buildStageNodeBodyFromPlan(
   };
 
   return renameSourceMappingEntries(updatedNode, nodePlan.name);
-}
-
-function getSavedNodeColumnNames(node: Record<string, unknown>): string[] {
-  return getColumnNamesFromNode(node);
-}
-
-function validateSavedStageNode(
-  node: Record<string, unknown>,
-  nodePlan: PlannedPipelineNode
-) {
-  const savedColumnNames = getSavedNodeColumnNames(node);
-  const expectedColumnNames = nodePlan.outputColumnNames;
-  const normalizedSaved = savedColumnNames.map(normalizeSqlIdentifier);
-  const normalizedExpected = expectedColumnNames.map(normalizeSqlIdentifier);
-  const referencedPredecessorNodeIDs = new Set<string>();
-  const metadata = isPlainObject(node.metadata) ? node.metadata : undefined;
-  const sourceMappingEntry =
-    metadata && Array.isArray(metadata.sourceMapping)
-      ? metadata.sourceMapping.find(isPlainObject)
-      : undefined;
-  const savedDependencies =
-    isPlainObject(sourceMappingEntry) && Array.isArray(sourceMappingEntry.dependencies)
-      ? sourceMappingEntry.dependencies
-          .filter(isPlainObject)
-          .flatMap((dependency) => {
-            if (typeof dependency.nodeName !== "string") {
-              return [];
-            }
-            return [{
-              locationName:
-                typeof dependency.locationName === "string" ? dependency.locationName : null,
-              nodeName: dependency.nodeName,
-            }];
-          })
-      : [];
-  const expectedDependencies = getUniqueSourceDependencies(nodePlan.sourceRefs);
-  const actualDependencyKeys = uniqueInOrder(
-    savedDependencies.map((dependency) =>
-      buildSourceDependencyKey(dependency.locationName, dependency.nodeName)
-    )
-  );
-  const expectedDependencyKeys = expectedDependencies.map((dependency) =>
-    buildSourceDependencyKey(dependency.locationName, dependency.nodeName)
-  );
-  const expectedPredecessorNodeIDs = uniqueInOrder(nodePlan.predecessorNodeIDs);
-  const savedJoinCondition =
-    isPlainObject(sourceMappingEntry) &&
-    isPlainObject(sourceMappingEntry.join) &&
-    typeof sourceMappingEntry.join.joinCondition === "string"
-      ? normalizeWhitespace(sourceMappingEntry.join.joinCondition)
-      : "";
-
-  for (const column of getNodeColumnArray(node)) {
-    for (const nodeID of getColumnSourceNodeIDs(column)) {
-      referencedPredecessorNodeIDs.add(nodeID);
-    }
-  }
-
-  return {
-    nodeNameSatisfied: node.name === nodePlan.name,
-    expectedColumnCount: expectedColumnNames.length,
-    actualColumnCount: savedColumnNames.length,
-    outputColumnsSatisfied:
-      normalizedExpected.length === normalizedSaved.length &&
-      normalizedExpected.every((name, index) => normalizedSaved[index] === name),
-    expectedColumnNames,
-    actualColumnNames: savedColumnNames,
-    sourceMappingDependenciesSatisfied:
-      actualDependencyKeys.length === expectedDependencyKeys.length &&
-      expectedDependencyKeys.every((key) => actualDependencyKeys.includes(key)),
-    expectedDependencyNodeNames: expectedDependencies.map((dependency) => dependency.nodeName),
-    actualDependencyNodeNames: uniqueInOrder(
-      savedDependencies.map((dependency) => dependency.nodeName)
-    ),
-    joinConditionSatisfied:
-      (nodePlan.joinCondition === null && savedJoinCondition.length === 0) ||
-      savedJoinCondition === normalizeWhitespace(nodePlan.joinCondition ?? ""),
-    expectedJoinCondition: nodePlan.joinCondition,
-    actualJoinCondition:
-      savedJoinCondition.length > 0 ? savedJoinCondition : null,
-    predecessorCoverageSatisfied: expectedPredecessorNodeIDs.every((nodeID) =>
-      referencedPredecessorNodeIDs.has(nodeID)
-    ),
-    predecessorNodeIDs: expectedPredecessorNodeIDs,
-    referencedPredecessorNodeIDs: Array.from(referencedPredecessorNodeIDs),
-  };
 }
 
 async function deleteWorkspaceNode(

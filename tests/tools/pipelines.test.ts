@@ -10,7 +10,7 @@ import {
   createPipelineFromPlan,
   createPipelineFromSql,
 } from "../../src/services/pipelines/execution.js";
-import { registerPipelineTools } from "../../src/mcp/pipelines.js";
+import { registerPipelineTools, buildPlanConfirmationToken } from "../../src/mcp/pipelines.js";
 
 // Mock completeNodeConfiguration so pipeline tests don't need corpus/repo files
 vi.mock("../../src/services/config/intelligent.js", () => ({
@@ -375,6 +375,7 @@ describe("Pipeline Tools", () => {
     expect(result).toMatchObject({
       structuredContent: {
         created: false,
+        confirmationToken: expect.any(String),
         plan: expect.objectContaining({
           status: "ready",
         }),
@@ -1235,8 +1236,9 @@ describe("Pipeline Tools", () => {
     const client = createMockClient();
     registerPipelineTools(server, client as any);
 
+    const planningModule = await import("../../src/services/pipelines/planning.js");
     const executionModule = await import("../../src/services/pipelines/execution.js");
-    const previewPlan = {
+    const readyPlan = {
       version: 1,
       intent: "sql",
       status: "ready",
@@ -1250,12 +1252,9 @@ describe("Pipeline Tools", () => {
       warnings: [],
       supportedNodeTypes: ["Stage"],
     };
-    const previewSpy = vi
-      .spyOn(executionModule, "createPipelineFromSql")
-      .mockResolvedValue({
-        created: false,
-        plan: previewPlan,
-      });
+    const planSpy = vi
+      .spyOn(planningModule, "planPipeline")
+      .mockResolvedValue(readyPlan as any);
     const executeSpy = vi
       .spyOn(executionModule, "createPipelineFromPlan")
       .mockResolvedValue({
@@ -1269,7 +1268,7 @@ describe("Pipeline Tools", () => {
       (call) => call[0] === "create-pipeline-from-sql"
     );
     const handler = createToolCall?.[4] as
-      | ((params: { workspaceID: string; sql: string; confirmed?: boolean }) => Promise<{
+      | ((params: { workspaceID: string; sql: string; confirmed?: boolean; confirmationToken?: string }) => Promise<{
           structuredContent?: Record<string, unknown>;
         }>)
       | undefined;
@@ -1280,6 +1279,7 @@ describe("Pipeline Tools", () => {
       workspaceID: "ws-1",
       sql: "select 1 as customer_id",
       confirmed: true,
+      confirmationToken: buildPlanConfirmationToken(readyPlan),
     });
 
     expect(result).toMatchObject({
@@ -1293,14 +1293,10 @@ describe("Pipeline Tools", () => {
       },
     });
     expect(elicitSpy).not.toHaveBeenCalled();
-    expect(previewSpy).toHaveBeenCalledWith(client, {
-      workspaceID: "ws-1",
-      sql: "select 1 as customer_id",
-      confirmed: false,
-    });
+    expect(planSpy).toHaveBeenCalledTimes(1);
     expect(executeSpy).toHaveBeenCalledWith(client, {
       workspaceID: "ws-1",
-      plan: previewPlan,
+      plan: readyPlan,
     });
   });
 

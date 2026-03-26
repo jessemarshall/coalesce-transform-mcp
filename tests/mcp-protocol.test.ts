@@ -451,7 +451,7 @@ describe("MCP Protocol Surface", () => {
     }
   });
 
-  it("executes create-pipeline-from-sql over the real MCP harness when confirmed=true", async () => {
+  it("executes create-pipeline-from-sql with confirmation token over MCP harness", async () => {
     const sourceNode = buildSourceNode("source-1", "CUSTOMER");
     const createdNode = buildCreatedStageNode("source-1");
     let savedBody: Record<string, unknown> | null = null;
@@ -493,14 +493,36 @@ describe("MCP Protocol Surface", () => {
     const harness = await createConnectedMcpHarness(apiClient);
 
     try {
-      const elicitSpy = vi.spyOn(harness.server.server, "elicitInput");
+      // Simulate a client that does not support elicitation
+      vi.spyOn(harness.server.server, "elicitInput").mockRejectedValue(
+        new Error("Client does not support elicitation")
+      );
 
+      // Step 1: call without confirmed — should return STOP_AND_CONFIRM with token
+      const preview = await harness.client.callTool({
+        name: "create-pipeline-from-sql",
+        arguments: {
+          workspaceID: "ws-1",
+          sql: "SELECT * FROM RAW.CUSTOMER",
+        },
+      });
+
+      expect(preview.isError).toBeUndefined();
+      const previewContent = preview.structuredContent as Record<string, unknown>;
+      expect(previewContent.created).toBe(false);
+      expect(previewContent.STOP_AND_CONFIRM).toBeDefined();
+      expect(typeof previewContent.confirmationToken).toBe("string");
+      expect(apiClient.post).not.toHaveBeenCalled();
+      expect(apiClient.put).not.toHaveBeenCalled();
+
+      // Step 2: call with confirmed=true and the matching token — should execute
       const result = await harness.client.callTool({
         name: "create-pipeline-from-sql",
         arguments: {
           workspaceID: "ws-1",
           sql: "SELECT * FROM RAW.CUSTOMER",
           confirmed: true,
+          confirmationToken: previewContent.confirmationToken as string,
         },
       });
 
@@ -520,13 +542,73 @@ describe("MCP Protocol Surface", () => {
         }),
       });
       expect(result.structuredContent).not.toHaveProperty("STOP_AND_CONFIRM");
-      expect(elicitSpy).not.toHaveBeenCalled();
       expect(apiClient.post).toHaveBeenCalledTimes(1);
       expect(apiClient.put).toHaveBeenCalledTimes(1);
       expect(savedBody).not.toBeNull();
       expect((savedBody as any).metadata.sourceMapping[0].join.joinCondition).toBe(
         "FROM {{ ref('RAW', 'CUSTOMER') }}"
       );
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("rejects create-pipeline-from-sql with confirmed=true but no token over MCP harness", async () => {
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+
+    const apiClient = createMockApiClient({
+      get: vi.fn(async (path: unknown, params?: Record<string, unknown>) => {
+        if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+          return {
+            data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+          };
+        }
+        if (path === "/api/v1/workspaces/ws-1/nodes") {
+          return {
+            data: [
+              {
+                id: "source-1",
+                name: "CUSTOMER",
+                nodeType: "Source",
+                locationName: "RAW",
+              },
+            ],
+          };
+        }
+        if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+          return sourceNode;
+        }
+        throw new Error(`Unexpected GET ${String(path)} ${JSON.stringify(params)}`);
+      }),
+      post: vi.fn(async () => ({ id: "new-node" })),
+      put: vi.fn(),
+    });
+
+    const harness = await createConnectedMcpHarness(apiClient);
+
+    try {
+      // Simulate a client that does not support elicitation
+      vi.spyOn(harness.server.server, "elicitInput").mockRejectedValue(
+        new Error("Client does not support elicitation")
+      );
+
+      // confirmed=true without a token should be rejected with STOP_AND_CONFIRM
+      const result = await harness.client.callTool({
+        name: "create-pipeline-from-sql",
+        arguments: {
+          workspaceID: "ws-1",
+          sql: "SELECT * FROM RAW.CUSTOMER",
+          confirmed: true,
+        },
+      });
+
+      expect(result.isError).toBeUndefined();
+      const content = result.structuredContent as Record<string, unknown>;
+      expect(content.created).toBe(false);
+      expect(content.STOP_AND_CONFIRM).toBeDefined();
+      expect(typeof content.confirmationToken).toBe("string");
+      expect(apiClient.post).not.toHaveBeenCalled();
+      expect(apiClient.put).not.toHaveBeenCalled();
     } finally {
       await harness.close();
     }
