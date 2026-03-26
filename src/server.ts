@@ -19,6 +19,7 @@ import { registerGetRunDetails } from "./workflows/get-run-details.js";
 import { registerGetEnvironmentOverview } from "./workflows/get-environment-overview.js";
 import { registerResources } from "./resources/index.js";
 import { registerPrompts } from "./prompts/index.js";
+import { ensureJsonToolOutputSchemas } from "./coalesce/types.js";
 
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json") as { version: string };
@@ -34,6 +35,7 @@ export const SERVER_INSTRUCTIONS = [
 ].join("\n");
 
 export function registerServerSurface(server: McpServer, client: CoalesceClient): void {
+  ensureJsonToolOutputSchemas(server);
   registerEnvironmentTools(server, client);
   registerNodeTools(server, client);
   registerPipelineTools(server, client);

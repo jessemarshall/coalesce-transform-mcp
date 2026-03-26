@@ -18,7 +18,7 @@ describe("Tool Registration", () => {
 
   beforeEach(() => {
     server = new McpServer({ name: "test", version: "0.0.1" });
-    toolSpy = vi.spyOn(server, "tool");
+    toolSpy = vi.spyOn(server, "registerTool");
   });
 
   it("registers all tools", async () => {
@@ -67,10 +67,12 @@ describe("Tool Registration", () => {
       (call: unknown[]) => call[0] === "clear_coalesce_transform_mcp_data_cache"
     );
     expect(clearCacheCall).toBeDefined();
-    expect(clearCacheCall?.[3]).toMatchObject({
+    expect(clearCacheCall?.[1]).toMatchObject({
+      annotations: {
       readOnlyHint: false,
       idempotentHint: false,
       destructiveHint: true,
+      },
     });
   });
 });

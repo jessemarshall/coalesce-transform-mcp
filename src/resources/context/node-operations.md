@@ -273,8 +273,8 @@ Create each CTE as a separate node bottom-up. Use `View` or `Work` for intermedi
 1. Identify table names in the SQL
 2. Match to workspace nodes via `list-workspace-nodes` (case-insensitive)
 3. Get each node's `locationName` via `get-workspace-node`
-4. Rewrite with `{{ ref('LOCATION', 'NODE') }}` syntax, preserving original aliases
-5. Pass to `plan-pipeline` or `create-pipeline-from-sql`
+4. Pass the user's exact SQL unchanged to `plan-pipeline` or `create-pipeline-from-sql`
+5. Do NOT rewrite table names into `{{ ref('LOCATION', 'NODE') }}` syntax for these pipeline tools — the planner resolves references automatically
 
 ### Large Queries (many columns)
 

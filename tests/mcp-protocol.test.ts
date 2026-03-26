@@ -48,6 +48,9 @@ describe("MCP Protocol Surface", () => {
         idempotentHint: true,
         destructiveHint: false,
       });
+      expect(setTool?.outputSchema).toMatchObject({
+        type: "object",
+      });
       expect(setTool?.inputSchema).toMatchObject({
         type: "object",
         properties: {
@@ -94,6 +97,11 @@ describe("MCP Protocol Surface", () => {
       );
       expect(clearCacheTool?.annotations).toMatchObject({
         destructiveHint: true,
+      });
+
+      const listRunsTool = result.tools.find((tool) => tool.name === "list-runs");
+      expect(listRunsTool?.outputSchema).toMatchObject({
+        type: "object",
       });
 
       const prompts = await harness.client.listPrompts();
@@ -172,6 +180,22 @@ describe("MCP Protocol Surface", () => {
           text: expect.stringContaining("Coalesce"),
         }),
       ]);
+
+      const nodeOperations = await harness.client.readResource({
+        uri: "coalesce://context/node-operations",
+      });
+      expect(nodeOperations.contents).toEqual([
+        expect.objectContaining({
+          uri: "coalesce://context/node-operations",
+          mimeType: "text/markdown",
+          text: expect.stringContaining(
+            "Pass the user's exact SQL unchanged to `plan-pipeline` or `create-pipeline-from-sql`"
+          ),
+        }),
+      ]);
+      expect(nodeOperations.contents[0]?.text).not.toContain(
+        "Rewrite with `{{ ref('LOCATION', 'NODE') }}` syntax, preserving original aliases"
+      );
 
       const cacheUri = buildCacheResourceUri(cacheFilePath, tempDir);
       expect(cacheUri).toBeTruthy();
