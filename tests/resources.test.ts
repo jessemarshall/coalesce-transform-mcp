@@ -345,4 +345,45 @@ describe("Resources", () => {
 
     cwdSpy.mockRestore();
   });
+
+  it("does not list or read backup cache files", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "coalesce-resource-backup-"));
+    tempDirs.push(tempDir);
+
+    const backupNdjsonPath = join(
+      tempDir,
+      "coalesce_transform_mcp_data_cache",
+      "nodes",
+      "workspace-ws-1-nodes.ndjson.bak-123"
+    );
+    mkdirSync(join(tempDir, "coalesce_transform_mcp_data_cache", "nodes"), {
+      recursive: true,
+    });
+    writeFileSync(backupNdjsonPath, '{"id":"backup"}\n', "utf8");
+
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(tempDir);
+    registerResources(server);
+
+    const cacheTemplateCall = resourceSpy.mock.calls.find(
+      (call) => typeof call[1] !== "string"
+    );
+    const template = cacheTemplateCall?.[1];
+    const readCallback = cacheTemplateCall?.[3];
+    const backupUri = buildCacheResourceUri(backupNdjsonPath, tempDir);
+
+    expect(backupUri).toBeTruthy();
+
+    const listResult = await template.listCallback({} as never);
+    expect(listResult.resources).not.toContainEqual(
+      expect.objectContaining({
+        uri: backupUri,
+      })
+    );
+
+    await expect(
+      readCallback?.(new URL(backupUri!), {} as never, {} as never)
+    ).rejects.toThrow(`Unknown cache resource: ${backupUri}`);
+
+    cwdSpy.mockRestore();
+  });
 });

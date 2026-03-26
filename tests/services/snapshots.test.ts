@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   fetchAllWorkspaceNodes,
+  promoteSnapshotArtifacts,
   streamAllPaginatedToDisk,
 } from "../../src/services/cache/snapshots.js";
 
@@ -158,6 +159,38 @@ describe("streamAllPaginatedToDisk", () => {
     await expect(
       streamAllPaginatedToDisk(fetchPage, {}, {}, { ndjsonPath, metaPath })
     ).rejects.toThrow("API failure");
+
+    expect(readFileSync(ndjsonPath, "utf8")).toBe('{"id":"existing"}\n');
+    expect(readFileSync(metaPath, "utf8")).toBe('{"totalItems":1}\n');
+  });
+
+  it("restores the previous snapshot pair if meta promotion fails after NDJSON promotion", () => {
+    const baseDir = createTempDir();
+    const ndjsonPath = join(baseDir, "data", "test.ndjson");
+    const metaPath = join(baseDir, "data", "test.meta.json");
+    const tempNdjsonPath = join(baseDir, "data", "test.ndjson.tmp");
+    const tempMetaPath = join(baseDir, "data", "test.meta.json.tmp");
+
+    mkdirSync(join(baseDir, "data"), { recursive: true });
+    writeFileSync(ndjsonPath, '{"id":"existing"}\n', "utf8");
+    writeFileSync(metaPath, '{"totalItems":1}\n', "utf8");
+    writeFileSync(tempNdjsonPath, '{"id":"fresh"}\n', "utf8");
+    writeFileSync(tempMetaPath, '{"totalItems":2}\n', "utf8");
+
+    const fsOps = {
+      existsSync,
+      renameSync: (from: string, to: string) => {
+        if (from === tempMetaPath && to === metaPath) {
+          throw new Error("meta promote failed");
+        }
+        return renameSync(from, to);
+      },
+      rmSync: (path: string, options?: { force?: boolean }) => rmSync(path, options),
+    };
+
+    expect(() =>
+      promoteSnapshotArtifacts(tempNdjsonPath, ndjsonPath, tempMetaPath, metaPath, fsOps)
+    ).toThrow("meta promote failed");
 
     expect(readFileSync(ndjsonPath, "utf8")).toBe('{"id":"existing"}\n');
     expect(readFileSync(metaPath, "utf8")).toBe('{"totalItems":1}\n');

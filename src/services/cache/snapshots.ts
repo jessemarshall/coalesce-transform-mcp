@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { appendFileSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { CoalesceClient, QueryParams } from "../../client.js";
 import { listEnvironmentNodes, listWorkspaceNodes } from "../../coalesce/api/nodes.js";
@@ -114,6 +114,69 @@ type StreamToDiskResult = {
   cachedAt: string;
 };
 
+type SnapshotPromotionFs = {
+  existsSync: typeof existsSync;
+  renameSync: typeof renameSync;
+  rmSync: typeof rmSync;
+};
+
+export function promoteSnapshotArtifacts(
+  tempNdjsonPath: string,
+  ndjsonPath: string,
+  tempMetaPath: string,
+  metaPath: string,
+  fsOps: SnapshotPromotionFs = {
+    existsSync,
+    renameSync,
+    rmSync,
+  }
+): void {
+  const { existsSync, renameSync, rmSync } = fsOps;
+  const backupSuffix = `.bak-${process.pid}-${randomUUID()}`;
+  const ndjsonBackupPath = `${ndjsonPath}${backupSuffix}`;
+  const metaBackupPath = `${metaPath}${backupSuffix}`;
+  const hadNdjson = existsSync(ndjsonPath);
+  const hadMeta = existsSync(metaPath);
+
+  try {
+    // Move any current pair out of the final location first so readers never see
+    // a mixed generation where one file is new and the other is stale.
+    if (hadNdjson) {
+      renameSync(ndjsonPath, ndjsonBackupPath);
+    }
+    if (hadMeta) {
+      renameSync(metaPath, metaBackupPath);
+    }
+
+    renameSync(tempNdjsonPath, ndjsonPath);
+    renameSync(tempMetaPath, metaPath);
+
+    if (hadNdjson) {
+      rmSync(ndjsonBackupPath, { force: true });
+    }
+    if (hadMeta) {
+      rmSync(metaBackupPath, { force: true });
+    }
+  } catch (error) {
+    // Remove any partially promoted new files before restoring the previous pair.
+    if (existsSync(ndjsonPath) && existsSync(ndjsonBackupPath)) {
+      rmSync(ndjsonPath, { force: true });
+    }
+    if (existsSync(metaPath) && existsSync(metaBackupPath)) {
+      rmSync(metaPath, { force: true });
+    }
+
+    if (existsSync(ndjsonBackupPath)) {
+      renameSync(ndjsonBackupPath, ndjsonPath);
+    }
+    if (existsSync(metaBackupPath)) {
+      renameSync(metaBackupPath, metaPath);
+    }
+
+    throw error;
+  }
+}
+
 export async function streamAllPaginatedToDisk(
   fetchPage: FetchPage,
   baseParams: QueryParams,
@@ -183,8 +246,7 @@ export async function streamAllPaginatedToDisk(
       cachedAt,
     };
     writeFileSync(tempMetaPath, JSON.stringify(meta, null, 2) + "\n", "utf8");
-    renameSync(tempNdjsonPath, ndjsonPath);
-    renameSync(tempMetaPath, metaPath);
+    promoteSnapshotArtifacts(tempNdjsonPath, ndjsonPath, tempMetaPath, metaPath);
 
     return meta;
   } catch (error) {

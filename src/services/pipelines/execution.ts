@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { CoalesceApiError, type CoalesceClient } from "../../client.js";
 import { validatePathSegment } from "../../coalesce/types.js";
+import { buildPlanConfirmationToken } from "./confirmation.js";
 import {
   PipelinePlanSchema,
   planPipeline,
@@ -222,6 +223,23 @@ function serializePipelineExecutionError(error: unknown): SerializedPipelineErro
   return { message: "Pipeline creation failed", detail: error };
 }
 
+function buildSqlPipelineConfirmationResponse(
+  plan: unknown,
+  reason: "missing" | "mismatch"
+): Record<string, unknown> {
+  const confirmationToken = buildPlanConfirmationToken(plan);
+
+  return {
+    created: false,
+    confirmationToken,
+    STOP_AND_CONFIRM:
+      reason === "mismatch"
+        ? "STOP. The confirmationToken is missing or does not match the current plan. Present the pipeline summary to the user in a table format and ask for confirmation BEFORE creating any nodes. For EACH node, display: name, the EXACT nodeType string (e.g. 'Coalesce-Base-Node-Types:::Stage'), transforms, and filters. Use the cteNodeSummary or nodes array — do NOT paraphrase or simplify the nodeType values. Do NOT proceed until the user explicitly approves. Once the user approves, call createPipelineFromSql again with confirmed=true and the confirmationToken from this response."
+        : "STOP. Present the pipeline summary to the user in a table format and ask for confirmation BEFORE creating any nodes. For EACH node, display: name, the EXACT nodeType string (e.g. 'Coalesce-Base-Node-Types:::Stage'), transforms, and filters. Use the cteNodeSummary or nodes array — do NOT paraphrase or simplify the nodeType values. Do NOT proceed until the user explicitly approves. Once the user approves, call createPipelineFromSql again with confirmed=true and the confirmationToken from this response.",
+    plan,
+  };
+}
+
 async function rollbackCreatedPipelineNodes(
   client: CoalesceClient,
   workspaceID: string,
@@ -412,18 +430,13 @@ export async function createPipelineFromSql(
     repoPath?: string;
     dryRun?: boolean;
     confirmed?: boolean;
+    confirmationToken?: string;
   }
 ): Promise<unknown> {
   const plan = await planPipeline(client, params);
-  if (plan.status !== "ready" || params.dryRun || params.confirmed !== true) {
+  if (plan.status !== "ready" || params.dryRun) {
     return {
       created: false,
-      ...(plan.status === "ready" && !params.dryRun
-        ? {
-            STOP_AND_CONFIRM:
-              "STOP. Present the pipeline summary to the user in a table format and ask for confirmation BEFORE creating any nodes. For EACH node, display: name, the EXACT nodeType string (e.g. 'Coalesce-Base-Node-Types:::Stage'), transforms, and filters. Use the cteNodeSummary or nodes array — do NOT paraphrase or simplify the nodeType values. Do NOT proceed until the user explicitly approves.",
-          }
-        : {}),
       ...(params.dryRun ? { dryRun: true } : {}),
       plan,
       ...(plan.status !== "ready"
@@ -433,6 +446,14 @@ export async function createPipelineFromSql(
           }
         : {}),
     };
+  }
+
+  if (params.confirmed !== true) {
+    return buildSqlPipelineConfirmationResponse(plan, "missing");
+  }
+
+  if (params.confirmationToken !== buildPlanConfirmationToken(plan)) {
+    return buildSqlPipelineConfirmationResponse(plan, "mismatch");
   }
 
   const execution = await createPipelineFromPlan(client, {

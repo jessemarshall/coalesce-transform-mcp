@@ -497,6 +497,139 @@ describe("Pipeline Tools", () => {
     ]);
   });
 
+  it("planPipeline ignores block hints before raw-table sources", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes") {
+        return Promise.resolve({
+          data: [{ id: "source-1", name: "CUSTOMER", nodeType: "Source", locationName: "RAW" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(sourceNode);
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
+
+    const result = await planPipeline(client as any, {
+      workspaceID: "ws-1",
+      sql: [
+        "SELECT CUSTOMER.CUSTOMER_ID",
+        "FROM /*+ hint */ RAW.CUSTOMER CUSTOMER",
+      ].join("\n"),
+      targetName: "STG_CUSTOMER",
+    });
+
+    expect(result.status).toBe("ready");
+    expect(result.nodes[0]?.sourceRefs).toEqual([
+      {
+        locationName: "RAW",
+        nodeName: "CUSTOMER",
+        alias: "CUSTOMER",
+        nodeID: "source-1",
+      },
+    ]);
+    expect(result.nodes[0]?.joinCondition).toBe(
+      "FROM /*+ hint */ {{ ref('RAW', 'CUSTOMER') }} CUSTOMER"
+    );
+  });
+
+  it("planPipeline ignores comments between raw-table sources and aliases", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes") {
+        return Promise.resolve({
+          data: [{ id: "source-1", name: "CUSTOMER", nodeType: "Source", locationName: "RAW" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(sourceNode);
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
+
+    const result = await planPipeline(client as any, {
+      workspaceID: "ws-1",
+      sql: [
+        "SELECT CUSTOMER.CUSTOMER_ID",
+        "FROM RAW.CUSTOMER /* trailing */ CUSTOMER",
+      ].join("\n"),
+      targetName: "STG_CUSTOMER",
+    });
+
+    expect(result.status).toBe("ready");
+    expect(result.nodes[0]?.sourceRefs).toEqual([
+      {
+        locationName: "RAW",
+        nodeName: "CUSTOMER",
+        alias: "CUSTOMER",
+        nodeID: "source-1",
+      },
+    ]);
+    expect(result.nodes[0]?.joinCondition).toBe(
+      "FROM {{ ref('RAW', 'CUSTOMER') }} /* trailing */ CUSTOMER"
+    );
+  });
+
+  it("planPipeline ignores line comments between FROM and raw-table sources", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes") {
+        return Promise.resolve({
+          data: [{ id: "source-1", name: "CUSTOMER", nodeType: "Source", locationName: "RAW" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(sourceNode);
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
+
+    const result = await planPipeline(client as any, {
+      workspaceID: "ws-1",
+      sql: [
+        "SELECT CUSTOMER.CUSTOMER_ID",
+        "FROM -- source hint",
+        "RAW.CUSTOMER CUSTOMER",
+      ].join("\n"),
+      targetName: "STG_CUSTOMER",
+    });
+
+    expect(result.status).toBe("ready");
+    expect(result.nodes[0]?.sourceRefs).toEqual([
+      {
+        locationName: "RAW",
+        nodeName: "CUSTOMER",
+        alias: "CUSTOMER",
+        nodeID: "source-1",
+      },
+    ]);
+    expect(result.nodes[0]?.joinCondition).toBe(
+      "FROM -- source hint\n{{ ref('RAW', 'CUSTOMER') }} CUSTOMER"
+    );
+  });
+
   it("planPipeline keeps self-join aliases while deduping predecessor node IDs", async () => {
     const client = createMockClient();
     const sourceNode = buildSourceNode("source-1", "CUSTOMER");
@@ -550,6 +683,61 @@ describe("Pipeline Tools", () => {
     expect(result.nodes[0]?.joinCondition).toContain("FROM {{ ref('RAW', 'CUSTOMER') }} c1");
     expect(result.nodes[0]?.joinCondition).toContain(
       "INNER JOIN {{ ref('RAW', 'CUSTOMER') }} c2 ON c1.CUSTOMER_ID = c2.CUSTOMER_ID"
+    );
+  });
+
+  it("planPipeline ignores comments before JOIN keywords in raw-table self-joins", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes") {
+        return Promise.resolve({
+          data: [{ id: "source-1", name: "CUSTOMER", nodeType: "Source", locationName: "RAW" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(sourceNode);
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
+
+    const result = await planPipeline(client as any, {
+      workspaceID: "ws-1",
+      sql: [
+        "SELECT CUSTOMER.CUSTOMER_ID AS LEFT_CUSTOMER_ID, C2.CUSTOMER_NAME AS RIGHT_CUSTOMER_NAME",
+        "FROM RAW.CUSTOMER CUSTOMER /* join note */",
+        "INNER JOIN RAW.CUSTOMER C2 ON CUSTOMER.CUSTOMER_ID = C2.CUSTOMER_ID",
+      ].join("\n"),
+      targetName: "STG_CUSTOMER_SELF_JOIN",
+    });
+
+    expect(result.status).toBe("ready");
+    expect(result.nodes[0]?.predecessorNodeIDs).toEqual(["source-1"]);
+    expect(result.nodes[0]?.sourceRefs).toEqual([
+      {
+        locationName: "RAW",
+        nodeName: "CUSTOMER",
+        alias: "CUSTOMER",
+        nodeID: "source-1",
+      },
+      {
+        locationName: "RAW",
+        nodeName: "CUSTOMER",
+        alias: "C2",
+        nodeID: "source-1",
+      },
+    ]);
+    expect(result.nodes[0]?.joinCondition).toContain(
+      "FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER /* join note */"
+    );
+    expect(result.nodes[0]?.joinCondition).toContain(
+      "INNER JOIN {{ ref('RAW', 'CUSTOMER') }} C2 ON CUSTOMER.CUSTOMER_ID = C2.CUSTOMER_ID"
     );
   });
 
@@ -1223,11 +1411,106 @@ describe("Pipeline Tools", () => {
 
     expect(result).toMatchObject({
       created: false,
+      confirmationToken: expect.any(String),
       STOP_AND_CONFIRM: expect.stringContaining("Present the pipeline summary"),
     });
     expect((result as any).plan.status).toBe("ready");
     expect(client.post).not.toHaveBeenCalled();
     expect(client.put).not.toHaveBeenCalled();
+  });
+
+  it("createPipelineFromSql rejects confirmed=true without a matching confirmation token", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes") {
+        return Promise.resolve({
+          data: [{ id: "source-1", name: "CUSTOMER", nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(sourceNode);
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
+
+    const result = await createPipelineFromSql(client as any, {
+      workspaceID: "ws-1",
+      sql: "SELECT * FROM RAW.CUSTOMER",
+      confirmed: true,
+    });
+
+    expect(result).toMatchObject({
+      created: false,
+      confirmationToken: expect.any(String),
+      STOP_AND_CONFIRM: expect.stringContaining("confirmationToken is missing or does not match"),
+    });
+    expect((result as any).plan.status).toBe("ready");
+    expect(client.post).not.toHaveBeenCalled();
+    expect(client.put).not.toHaveBeenCalled();
+  });
+
+  it("createPipelineFromSql executes when confirmed=true with a matching confirmation token", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+    const createdNode = buildCreatedStageNode("source-1");
+    let savedBody: Record<string, unknown> | null = null;
+
+    client.post.mockResolvedValue({ id: "new-node" });
+    client.put.mockImplementation((_path: string, body: Record<string, unknown>) => {
+      savedBody = body;
+      return Promise.resolve(body);
+    });
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes") {
+        return Promise.resolve({
+          data: [{ id: "source-1", name: "CUSTOMER", nodeType: "Source", locationName: "RAW" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(sourceNode);
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/new-node") {
+        return Promise.resolve(savedBody ?? createdNode);
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
+
+    const readyPlan = await planPipeline(client as any, {
+      workspaceID: "ws-1",
+      sql: "SELECT CUSTOMER.CUSTOMER_ID FROM RAW.CUSTOMER CUSTOMER",
+    });
+
+    expect(readyPlan.status).toBe("ready");
+
+    const result = await createPipelineFromSql(client as any, {
+      workspaceID: "ws-1",
+      sql: "SELECT CUSTOMER.CUSTOMER_ID FROM RAW.CUSTOMER CUSTOMER",
+      confirmed: true,
+      confirmationToken: buildPlanConfirmationToken(readyPlan),
+    });
+
+    expect(result).toMatchObject({
+      created: true,
+      workspaceID: "ws-1",
+      nodeCount: 1,
+      plan: expect.objectContaining({
+        status: "ready",
+      }),
+    });
+    expect(client.post).toHaveBeenCalledTimes(1);
+    expect(client.put).toHaveBeenCalledTimes(1);
   });
 
   it("create-pipeline-from-sql tool executes when confirmed=true without elicitation", async () => {

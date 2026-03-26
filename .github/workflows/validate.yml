@@ -1,4 +1,4 @@
-name: CI
+name: Validate
 
 on:
   pull_request:
@@ -6,14 +6,22 @@ on:
     branches:
       - develop
 
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  ci:
+  validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         node-version:
-          - 24
+          - 22
 
     steps:
       - name: Check out repository
