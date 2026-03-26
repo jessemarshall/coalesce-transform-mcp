@@ -263,4 +263,86 @@ describe("Resources", () => {
 
     cwdSpy.mockRestore();
   });
+
+  it("does not list or read orphaned snapshot metadata without matching NDJSON", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "coalesce-resource-orphan-meta-"));
+    tempDirs.push(tempDir);
+
+    const orphanMetaPath = join(
+      tempDir,
+      "coalesce_transform_mcp_data_cache",
+      "nodes",
+      "workspace-ws-1-nodes.meta.json"
+    );
+    mkdirSync(join(tempDir, "coalesce_transform_mcp_data_cache", "nodes"), {
+      recursive: true,
+    });
+    writeFileSync(orphanMetaPath, JSON.stringify({ totalItems: 1 }, null, 2), "utf8");
+
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(tempDir);
+    registerResources(server);
+
+    const cacheTemplateCall = resourceSpy.mock.calls.find(
+      (call) => typeof call[1] !== "string"
+    );
+    const template = cacheTemplateCall?.[1];
+    const readCallback = cacheTemplateCall?.[3];
+    const orphanUri = buildCacheResourceUri(orphanMetaPath, tempDir);
+
+    expect(orphanUri).toBeTruthy();
+
+    const listResult = await template.listCallback({} as never);
+    expect(listResult.resources).not.toContainEqual(
+      expect.objectContaining({
+        uri: orphanUri,
+      })
+    );
+
+    await expect(
+      readCallback?.(new URL(orphanUri!), {} as never, {} as never)
+    ).rejects.toThrow(`Unknown cache resource: ${orphanUri}`);
+
+    cwdSpy.mockRestore();
+  });
+
+  it("does not list or read temporary cache files", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "coalesce-resource-temp-"));
+    tempDirs.push(tempDir);
+
+    const tempNdjsonPath = join(
+      tempDir,
+      "coalesce_transform_mcp_data_cache",
+      "nodes",
+      "workspace-ws-1-nodes.ndjson.tmp-123"
+    );
+    mkdirSync(join(tempDir, "coalesce_transform_mcp_data_cache", "nodes"), {
+      recursive: true,
+    });
+    writeFileSync(tempNdjsonPath, '{"id":"partial"}\n', "utf8");
+
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(tempDir);
+    registerResources(server);
+
+    const cacheTemplateCall = resourceSpy.mock.calls.find(
+      (call) => typeof call[1] !== "string"
+    );
+    const template = cacheTemplateCall?.[1];
+    const readCallback = cacheTemplateCall?.[3];
+    const tempUri = buildCacheResourceUri(tempNdjsonPath, tempDir);
+
+    expect(tempUri).toBeTruthy();
+
+    const listResult = await template.listCallback({} as never);
+    expect(listResult.resources).not.toContainEqual(
+      expect.objectContaining({
+        uri: tempUri,
+      })
+    );
+
+    await expect(
+      readCallback?.(new URL(tempUri!), {} as never, {} as never)
+    ).rejects.toThrow(`Unknown cache resource: ${tempUri}`);
+
+    cwdSpy.mockRestore();
+  });
 });
