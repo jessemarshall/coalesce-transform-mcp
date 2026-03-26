@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { registerServerSurface } from "../src/server.js";
 
 function createMockClient() {
   return {
@@ -22,60 +23,7 @@ describe("Tool Registration", () => {
 
   it("registers all tools", async () => {
     const client = createMockClient();
-
-    const { registerEnvironmentTools } = await import(
-      "../src/mcp/environments.js"
-    );
-    const { registerNodeTools } = await import("../src/mcp/nodes.js");
-    const { registerPipelineTools } = await import("../src/mcp/pipelines.js");
-    const { registerRunTools } = await import("../src/mcp/runs.js");
-    const { registerProjectTools } = await import("../src/mcp/projects.js");
-    const { registerGitAccountTools } = await import(
-      "../src/mcp/git-accounts.js"
-    );
-    const { registerUserTools } = await import("../src/mcp/users.js");
-    const { registerNodeTypeCorpusTools } = await import(
-      "../src/mcp/node-type-corpus.js"
-    );
-    const { registerRepoNodeTypeTools } = await import(
-      "../src/mcp/repo-node-types.js"
-    );
-    const { registerJobTools } = await import("../src/mcp/jobs.js");
-    const { registerSubgraphTools } = await import(
-      "../src/mcp/subgraphs.js"
-    );
-    const { registerCacheTools } = await import(
-      "../src/mcp/cache.js"
-    );
-    const { registerRunAndWait } = await import(
-      "../src/workflows/run-and-wait.js"
-    );
-    const { registerRetryAndWait } = await import(
-      "../src/workflows/retry-and-wait.js"
-    );
-    const { registerGetRunDetails } = await import(
-      "../src/workflows/get-run-details.js"
-    );
-    const { registerGetEnvironmentOverview } = await import(
-      "../src/workflows/get-environment-overview.js"
-    );
-
-    registerEnvironmentTools(server, client as any);
-    registerNodeTools(server, client as any);
-    registerPipelineTools(server, client as any);
-    registerRunTools(server, client as any);
-    registerProjectTools(server, client as any);
-    registerGitAccountTools(server, client as any);
-    registerUserTools(server, client as any);
-    registerNodeTypeCorpusTools(server, client as any);
-    registerRepoNodeTypeTools(server, client as any);
-    registerJobTools(server, client as any);
-    registerSubgraphTools(server, client as any);
-    registerCacheTools(server, client as any);
-    registerRunAndWait(server, client as any);
-    registerRetryAndWait(server, client as any);
-    registerGetRunDetails(server, client as any);
-    registerGetEnvironmentOverview(server, client as any);
+    registerServerSurface(server, client as any);
 
     // Verify expected tool names are registered
     const toolNames = toolSpy.mock.calls.map(

@@ -4,7 +4,8 @@
   "description": "MCP server for the Coalesce Transform API; run tools support Snowflake Key Pair auth only",
   "main": "dist/index.js",
   "bin": {
-    "coalesce-transform-mcp": "./dist/index.js"
+    "coalesce-transform-mcp": "./dist/index.js",
+    "coalesce-transform-mcp-http": "./dist/http.js"
   },
   "type": "module",
   "engines": {

@@ -1,27 +1,6 @@
-import { createRequire } from "node:module";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { registerEnvironmentTools } from "../../src/mcp/environments.js";
-import { registerNodeTools } from "../../src/mcp/nodes.js";
-import { registerPipelineTools } from "../../src/mcp/pipelines.js";
-import { registerRunTools } from "../../src/mcp/runs.js";
-import { registerProjectTools } from "../../src/mcp/projects.js";
-import { registerGitAccountTools } from "../../src/mcp/git-accounts.js";
-import { registerUserTools } from "../../src/mcp/users.js";
-import { registerNodeTypeCorpusTools } from "../../src/mcp/node-type-corpus.js";
-import { registerRepoNodeTypeTools } from "../../src/mcp/repo-node-types.js";
-import { registerJobTools } from "../../src/mcp/jobs.js";
-import { registerSubgraphTools } from "../../src/mcp/subgraphs.js";
-import { registerCacheTools } from "../../src/mcp/cache.js";
-import { registerRunAndWait } from "../../src/workflows/run-and-wait.js";
-import { registerRetryAndWait } from "../../src/workflows/retry-and-wait.js";
-import { registerGetRunDetails } from "../../src/workflows/get-run-details.js";
-import { registerGetEnvironmentOverview } from "../../src/workflows/get-environment-overview.js";
-import { registerResources } from "../../src/resources/index.js";
-
-const require = createRequire(import.meta.url);
-const { version } = require("../../package.json") as { version: string };
+import { createCoalesceMcpServer, SERVER_NAME } from "../../src/server.js";
 
 class LoopbackTransport implements Transport {
   onclose?: () => void;
@@ -79,28 +58,7 @@ export function createMockApiClient(overrides: Partial<{
 }
 
 export async function createConnectedMcpHarness(apiClient: ReturnType<typeof createMockApiClient>) {
-  const server = new McpServer({
-    name: "coalesce-transform-mcp",
-    version,
-  });
-
-  registerEnvironmentTools(server, apiClient as never);
-  registerNodeTools(server, apiClient as never);
-  registerPipelineTools(server, apiClient as never);
-  registerRunTools(server, apiClient as never);
-  registerProjectTools(server, apiClient as never);
-  registerGitAccountTools(server, apiClient as never);
-  registerUserTools(server, apiClient as never);
-  registerNodeTypeCorpusTools(server, apiClient as never);
-  registerRepoNodeTypeTools(server, apiClient as never);
-  registerJobTools(server, apiClient as never);
-  registerSubgraphTools(server, apiClient as never);
-  registerCacheTools(server, apiClient as never);
-  registerRunAndWait(server, apiClient as never);
-  registerRetryAndWait(server, apiClient as never);
-  registerGetRunDetails(server, apiClient as never);
-  registerGetEnvironmentOverview(server, apiClient as never);
-  registerResources(server);
+  const server = createCoalesceMcpServer(apiClient as never);
 
   const serverTransport = new LoopbackTransport();
   const clientTransport = new LoopbackTransport();
@@ -109,7 +67,7 @@ export async function createConnectedMcpHarness(apiClient: ReturnType<typeof cre
 
   const client = new Client(
     {
-      name: "coalesce-transform-mcp-test-client",
+      name: `${SERVER_NAME}-test-client`,
       version: "0.0.1",
     },
     { capabilities: {} }

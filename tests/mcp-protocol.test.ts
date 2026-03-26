@@ -26,10 +26,12 @@ describe("MCP Protocol Surface", () => {
         name: "coalesce-transform-mcp",
         version: expect.any(String),
       });
+      expect(harness.client.getInstructions()).toContain("plan-pipeline");
 
       const capabilities = harness.client.getServerCapabilities();
       expect(capabilities?.tools).toBeDefined();
       expect(capabilities?.resources).toBeDefined();
+      expect(capabilities?.prompts).toBeDefined();
 
       const result = await harness.client.listTools();
       expect(result.tools.length).toBeGreaterThan(70);
@@ -93,6 +95,30 @@ describe("MCP Protocol Surface", () => {
       expect(clearCacheTool?.annotations).toMatchObject({
         destructiveHint: true,
       });
+
+      const prompts = await harness.client.listPrompts();
+      const promptNames = prompts.prompts.map((prompt) => prompt.name);
+      expect(promptNames).toEqual(
+        expect.arrayContaining([
+          "coalesce-start-here",
+          "safe-pipeline-planning",
+          "run-operations-guide",
+          "large-result-handling",
+        ])
+      );
+
+      const planningPrompt = await harness.client.getPrompt({
+        name: "safe-pipeline-planning",
+      });
+      expect(planningPrompt.messages).toEqual([
+        expect.objectContaining({
+          role: "user",
+          content: expect.objectContaining({
+            type: "text",
+            text: expect.stringContaining("Always call plan-pipeline"),
+          }),
+        }),
+      ]);
     } finally {
       await harness.close();
     }
