@@ -298,11 +298,26 @@ function findTopLevelKeywordIndex(sql: string, keyword: string, startIndex = 0):
   let inDoubleQuote = false;
   let inBacktick = false;
   let inBracket = false;
+  let inLineComment = false;
+  let inBlockComment = false;
 
   for (let index = startIndex; index < sql.length; index += 1) {
     const char = sql[index];
     const next = sql[index + 1];
 
+    if (inLineComment) {
+      if (char === "\n") {
+        inLineComment = false;
+      }
+      continue;
+    }
+    if (inBlockComment) {
+      if (char === "*" && next === "/") {
+        inBlockComment = false;
+        index += 1;
+      }
+      continue;
+    }
     if (inSingleQuote) {
       if (char === "'" && next === "'") {
         index += 1;
@@ -346,6 +361,16 @@ function findTopLevelKeywordIndex(sql: string, keyword: string, startIndex = 0):
       inBracket = true;
       continue;
     }
+    if (char === "-" && next === "-") {
+      inLineComment = true;
+      index += 1;
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      inBlockComment = true;
+      index += 1;
+      continue;
+    }
     if (char === "(") {
       parenDepth += 1;
       continue;
@@ -377,7 +402,8 @@ function findTopLevelKeywordIndex(sql: string, keyword: string, startIndex = 0):
  * The callback returns `true` to continue or `false` to stop early.
  *
  * The scanner handles: single-quoted strings (with '' escapes), double-quoted
- * identifiers, backtick-quoted identifiers, and bracket-quoted identifiers.
+ * identifiers, backtick-quoted identifiers, bracket-quoted identifiers, block
+ * comments, and line comments.
  */
 function scanTopLevel(
   value: string,
@@ -388,11 +414,26 @@ function scanTopLevel(
   let inDoubleQuote = false;
   let inBacktick = false;
   let inBracket = false;
+  let inLineComment = false;
+  let inBlockComment = false;
 
   for (let index = 0; index < value.length; index += 1) {
     const char = value[index]!;
     const next = value[index + 1];
 
+    if (inLineComment) {
+      if (char === "\n") {
+        inLineComment = false;
+      }
+      continue;
+    }
+    if (inBlockComment) {
+      if (char === "*" && next === "/") {
+        inBlockComment = false;
+        index += 1;
+      }
+      continue;
+    }
     if (inSingleQuote) {
       if (char === "'" && next === "'") {
         index += 1;
@@ -418,6 +459,8 @@ function scanTopLevel(
     if (char === '"') { inDoubleQuote = true; continue; }
     if (char === "`") { inBacktick = true; continue; }
     if (char === "[") { inBracket = true; continue; }
+    if (char === "-" && next === "-") { inLineComment = true; index += 1; continue; }
+    if (char === "/" && next === "*") { inBlockComment = true; index += 1; continue; }
     if (char === "(") { parenDepth += 1; continue; }
     if (char === ")" && parenDepth > 0) { parenDepth -= 1; continue; }
 
@@ -446,39 +489,178 @@ function splitTopLevel(value: string, delimiter: string): string[] {
   return parts;
 }
 
-function splitTopLevelWhitespace(value: string): string[] {
-  const parts: string[] = [];
-  let start = 0;
-  let inWhitespace = true;
+type TopLevelWhitespaceToken = {
+  text: string;
+  start: number;
+  end: number;
+};
 
-  scanTopLevel(value, (char, index, parenDepth) => {
+function tokenizeTopLevelWhitespace(value: string): TopLevelWhitespaceToken[] {
+  const parts: TopLevelWhitespaceToken[] = [];
+  let tokenStart: number | null = null;
+  let tokenEnd = 0;
+  let tokenText = "";
+  let parenDepth = 0;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inBacktick = false;
+  let inBracket = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  const appendChar = (char: string, index: number) => {
+    if (tokenStart === null) {
+      tokenStart = index;
+    }
+    tokenText += char;
+    tokenEnd = index + 1;
+  };
+
+  const flushToken = () => {
+    if (tokenStart === null || tokenText.length === 0) {
+      tokenStart = null;
+      tokenEnd = 0;
+      tokenText = "";
+      return;
+    }
+
+    parts.push({
+      text: tokenText,
+      start: tokenStart,
+      end: tokenEnd,
+    });
+    tokenStart = null;
+    tokenEnd = 0;
+    tokenText = "";
+  };
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]!;
+    const next = value[index + 1];
+
+    if (inLineComment) {
+      if (char === "\n") {
+        inLineComment = false;
+      }
+      continue;
+    }
+    if (inBlockComment) {
+      if (char === "*" && next === "/") {
+        inBlockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+    if (inSingleQuote) {
+      appendChar(char, index);
+      if (char === "'" && next === "'") {
+        appendChar(next, index + 1);
+        index += 1;
+      } else if (char === "'") {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+    if (inDoubleQuote) {
+      appendChar(char, index);
+      if (char === '"') {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+    if (inBacktick) {
+      appendChar(char, index);
+      if (char === "`") {
+        inBacktick = false;
+      }
+      continue;
+    }
+    if (inBracket) {
+      appendChar(char, index);
+      if (char === "]") {
+        inBracket = false;
+      }
+      continue;
+    }
+
+    if (char === "-" && next === "-" && parenDepth === 0) {
+      flushToken();
+      inLineComment = true;
+      index += 1;
+      continue;
+    }
+    if (char === "/" && next === "*" && parenDepth === 0) {
+      flushToken();
+      inBlockComment = true;
+      index += 1;
+      continue;
+    }
     if (/\s/u.test(char) && parenDepth === 0) {
-      if (!inWhitespace) {
-        parts.push(value.slice(start, index).trim());
-        inWhitespace = true;
-      }
-    } else {
-      if (inWhitespace) {
-        start = index;
-        inWhitespace = false;
-      }
+      flushToken();
+      continue;
     }
-    return true;
-  });
+    if (char === "'") {
+      appendChar(char, index);
+      inSingleQuote = true;
+      continue;
+    }
+    if (char === '"') {
+      appendChar(char, index);
+      inDoubleQuote = true;
+      continue;
+    }
+    if (char === "`") {
+      appendChar(char, index);
+      inBacktick = true;
+      continue;
+    }
+    if (char === "[") {
+      appendChar(char, index);
+      inBracket = true;
+      continue;
+    }
+    if (char === "(") {
+      appendChar(char, index);
+      parenDepth += 1;
+      continue;
+    }
+    if (char === ")" && parenDepth > 0) {
+      parenDepth -= 1;
+      appendChar(char, index);
+      continue;
+    }
 
-  if (!inWhitespace) {
-    const tail = value.slice(start).trim();
-    if (tail.length > 0) {
-      parts.push(tail);
-    }
+    appendChar(char, index);
   }
+
+  flushToken();
   return parts;
 }
 
-function skipWhitespace(value: string, index: number): number {
+function splitTopLevelWhitespace(value: string): string[] {
+  return tokenizeTopLevelWhitespace(value).map((part) => part.text);
+}
+
+function skipSqlTrivia(value: string, index: number): number {
   let nextIndex = index;
-  while (nextIndex < value.length && /\s/u.test(value[nextIndex] ?? "")) {
-    nextIndex += 1;
+  while (nextIndex < value.length) {
+    if (/\s/u.test(value[nextIndex] ?? "")) {
+      nextIndex += 1;
+      continue;
+    }
+    if (value[nextIndex] === "-" && value[nextIndex + 1] === "-") {
+      nextIndex += 2;
+      while (nextIndex < value.length && value[nextIndex] !== "\n") {
+        nextIndex += 1;
+      }
+      continue;
+    }
+    if (value[nextIndex] === "/" && value[nextIndex + 1] === "*") {
+      const blockEnd = value.indexOf("*/", nextIndex + 2);
+      nextIndex = blockEnd >= 0 ? blockEnd + 2 : value.length;
+      continue;
+    }
+    break;
   }
   return nextIndex;
 }
@@ -565,18 +747,18 @@ function extractTopLevelSourceSegments(
 
     if (captureStart === null) {
       if (matchesKeywordAt(fromClause, index, "from")) {
-        captureStart = skipWhitespace(fromClause, index + 4);
+        captureStart = skipSqlTrivia(fromClause, index + 4);
       } else if (matchesKeywordAt(fromClause, index, "join")) {
-        captureStart = skipWhitespace(fromClause, index + 4);
+        captureStart = skipSqlTrivia(fromClause, index + 4);
       } else if (char === ",") {
-        captureStart = skipWhitespace(fromClause, index + 1);
+        captureStart = skipSqlTrivia(fromClause, index + 1);
       }
       return true;
     }
 
     if (char === ",") {
       pushSegment(index);
-      captureStart = skipWhitespace(fromClause, index + 1);
+      captureStart = skipSqlTrivia(fromClause, index + 1);
       return true;
     }
 
@@ -585,7 +767,7 @@ function extractTopLevelSourceSegments(
       pushSegment(index);
       captureStart =
         terminator === "join"
-          ? skipWhitespace(fromClause, index + terminator.length)
+          ? skipSqlTrivia(fromClause, index + terminator.length)
           : null;
     }
 
@@ -608,27 +790,39 @@ function isSupportedIdentifierToken(token: string): boolean {
 function parseSqlSourceSegment(
   segment: { text: string; relationStart: number; relationEnd: number }
 ): ParsedSqlSourceRef | null {
-  const trimmedSegment = segment.text.trim();
-  if (trimmedSegment.length === 0) {
+  const relationOffset = skipSqlTrivia(segment.text, 0);
+  if (relationOffset >= segment.text.length) {
     return null;
   }
 
   let relationText: string;
+  let relationTokenStart: number;
+  let relationTokenEnd: number;
   let aliasTokens: string[];
-  if (trimmedSegment.startsWith("{{")) {
-    const closingIndex = trimmedSegment.indexOf("}}");
+
+  if (segment.text.slice(relationOffset).startsWith("{{")) {
+    const closingIndex = segment.text.indexOf("}}", relationOffset);
     if (closingIndex < 0) {
       return null;
     }
-    relationText = trimmedSegment.slice(0, closingIndex + 2);
-    aliasTokens = splitTopLevelWhitespace(trimmedSegment.slice(closingIndex + 2).trim());
+
+    relationTokenStart = relationOffset;
+    relationTokenEnd = closingIndex + 2;
+    relationText = segment.text.slice(relationTokenStart, relationTokenEnd).trim();
+    aliasTokens = tokenizeTopLevelWhitespace(segment.text.slice(relationTokenEnd)).map(
+      (token) => token.text
+    );
   } else {
-    const tokens = splitTopLevelWhitespace(trimmedSegment);
+    const tokens = tokenizeTopLevelWhitespace(segment.text);
     if (tokens.length === 0) {
       return null;
     }
-    relationText = tokens[0]!;
-    aliasTokens = tokens.slice(1);
+
+    const relationToken = tokens[0]!;
+    relationText = relationToken.text;
+    relationTokenStart = relationToken.start;
+    relationTokenEnd = relationToken.end;
+    aliasTokens = tokens.slice(1).map((token) => token.text);
   }
 
   const alias =
@@ -649,8 +843,8 @@ function parseSqlSourceSegment(
       nodeID: null,
       sourceStyle: "coalesce_ref",
       locationCandidates: refMatch[2] ? [refMatch[2]] : [],
-      relationStart: segment.relationStart,
-      relationEnd: segment.relationStart + relationText.length,
+      relationStart: segment.relationStart + relationTokenStart,
+      relationEnd: segment.relationStart + relationTokenEnd,
     };
   }
 
@@ -676,8 +870,8 @@ function parseSqlSourceSegment(
     nodeID: null,
     sourceStyle: "table_name",
     locationCandidates: normalizedParts.slice(0, -1).reverse(),
-    relationStart: segment.relationStart,
-    relationEnd: segment.relationStart + relationText.length,
+    relationStart: segment.relationStart + relationTokenStart,
+    relationEnd: segment.relationStart + relationTokenEnd,
   };
 }
 
