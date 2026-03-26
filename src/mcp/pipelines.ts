@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { CACHE_DIR_NAME } from "../cache-dir.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
+import { buildPlanConfirmationToken } from "../services/pipelines/confirmation.js";
 import {
   PipelinePlanSchema,
   planPipeline,
@@ -22,6 +23,8 @@ import {
   validatePathSegment,
 } from "../coalesce/types.js";
 import { isPlainObject } from "../utils.js";
+
+export { buildPlanConfirmationToken };
 
 /**
  * Recursively sorts JSON values to ensure deterministic serialization.
@@ -289,30 +292,6 @@ function buildPlanSummaryForElicitation(plan: unknown): string {
   lines.push("");
   lines.push("Confirm to proceed with node creation, or cancel to abort.");
   return lines.join("\n");
-}
-
-/**
- * Generates a confirmation token for a pipeline plan to prevent bypass of user approval.
- *
- * The token is a SHA256 hash (truncated to 16 hex chars) of the canonicalized plan JSON.
- * AI agents must provide this token when calling pipeline creation tools with `confirmed=true`,
- * proving they received and can reference the exact plan that should have been presented to the user.
- *
- * **Important limitations:**
- * - The token proves the agent received the correct plan (plan integrity)
- * - It does NOT verify the agent presented the plan accurately to the user
- * - An agent could theoretically show incomplete/misleading info but still provide the valid token
- * - This is an acceptable tradeoff: the token prevents accidental bypass and honest mistakes,
- *   while deliberate deception by a malicious agent is out of scope
- *
- * @param plan - The pipeline plan object to fingerprint
- * @returns A 16-character hex token uniquely identifying this plan's content
- */
-export function buildPlanConfirmationToken(plan: unknown): string {
-  return createHash("sha256")
-    .update(JSON.stringify(sortJsonValue(plan)))
-    .digest("hex")
-    .slice(0, 16);
 }
 
 async function requirePipelineCreationApproval(

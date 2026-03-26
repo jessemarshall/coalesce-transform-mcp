@@ -1411,11 +1411,106 @@ describe("Pipeline Tools", () => {
 
     expect(result).toMatchObject({
       created: false,
+      confirmationToken: expect.any(String),
       STOP_AND_CONFIRM: expect.stringContaining("Present the pipeline summary"),
     });
     expect((result as any).plan.status).toBe("ready");
     expect(client.post).not.toHaveBeenCalled();
     expect(client.put).not.toHaveBeenCalled();
+  });
+
+  it("createPipelineFromSql rejects confirmed=true without a matching confirmation token", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes") {
+        return Promise.resolve({
+          data: [{ id: "source-1", name: "CUSTOMER", nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(sourceNode);
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
+
+    const result = await createPipelineFromSql(client as any, {
+      workspaceID: "ws-1",
+      sql: "SELECT * FROM RAW.CUSTOMER",
+      confirmed: true,
+    });
+
+    expect(result).toMatchObject({
+      created: false,
+      confirmationToken: expect.any(String),
+      STOP_AND_CONFIRM: expect.stringContaining("confirmationToken is missing or does not match"),
+    });
+    expect((result as any).plan.status).toBe("ready");
+    expect(client.post).not.toHaveBeenCalled();
+    expect(client.put).not.toHaveBeenCalled();
+  });
+
+  it("createPipelineFromSql executes when confirmed=true with a matching confirmation token", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+    const createdNode = buildCreatedStageNode("source-1");
+    let savedBody: Record<string, unknown> | null = null;
+
+    client.post.mockResolvedValue({ id: "new-node" });
+    client.put.mockImplementation((_path: string, body: Record<string, unknown>) => {
+      savedBody = body;
+      return Promise.resolve(body);
+    });
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({
+          data: [{ nodeType: "Stage" }, { nodeType: "Source" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes") {
+        return Promise.resolve({
+          data: [{ id: "source-1", name: "CUSTOMER", nodeType: "Source", locationName: "RAW" }],
+        });
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/source-1") {
+        return Promise.resolve(sourceNode);
+      }
+      if (path === "/api/v1/workspaces/ws-1/nodes/new-node") {
+        return Promise.resolve(savedBody ?? createdNode);
+      }
+      throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+    });
+
+    const readyPlan = await planPipeline(client as any, {
+      workspaceID: "ws-1",
+      sql: "SELECT CUSTOMER.CUSTOMER_ID FROM RAW.CUSTOMER CUSTOMER",
+    });
+
+    expect(readyPlan.status).toBe("ready");
+
+    const result = await createPipelineFromSql(client as any, {
+      workspaceID: "ws-1",
+      sql: "SELECT CUSTOMER.CUSTOMER_ID FROM RAW.CUSTOMER CUSTOMER",
+      confirmed: true,
+      confirmationToken: buildPlanConfirmationToken(readyPlan),
+    });
+
+    expect(result).toMatchObject({
+      created: true,
+      workspaceID: "ws-1",
+      nodeCount: 1,
+      plan: expect.objectContaining({
+        status: "ready",
+      }),
+    });
+    expect(client.post).toHaveBeenCalledTimes(1);
+    expect(client.put).toHaveBeenCalledTimes(1);
   });
 
   it("create-pipeline-from-sql tool executes when confirmed=true without elicitation", async () => {
