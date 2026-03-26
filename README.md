@@ -14,16 +14,7 @@ MCP server for the Coalesce Transform API. Lets MCP-compatible AI assistants han
 
 ## Installation
 
-### 1. Clone and Build
-
-```bash
-git clone https://github.com/jessemarshall/coalesce-transform-mcp.git
-cd coalesce-transform-mcp
-npm install
-npm run build
-```
-
-### 2. Set Environment Variables
+### 1. Set Environment Variables
 
 Add your credentials to your shell profile (`~/.zshrc` or `~/.bashrc`):
 
@@ -48,9 +39,9 @@ Then reload your shell:
 source ~/.zshrc
 ```
 
-### 3. Add the MCP Server to Your Client
+### 2. Add the MCP Server to Your Client
 
-Add the following to your client's MCP configuration file, replacing `/absolute/path/to/coalesce-transform-mcp` with the path where you cloned the repo:
+Add the following to your client's MCP configuration file:
 
 | Client | Config file location |
 |--------|---------------------|
@@ -59,11 +50,36 @@ Add the following to your client's MCP configuration file, replacing `/absolute/
 | Cursor | `.cursor/mcp.json` in your project root |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
 
+**Claude Desktop, Cursor, Windsurf** (`mcpServers` wrapper):
+
+```json
+{
+  "mcpServers": {
+    "coalesce-transform": {
+      "command": "npx",
+      "args": ["coalesce-transform-mcp"],
+      "env": {
+        "COALESCE_ACCESS_TOKEN": "${COALESCE_ACCESS_TOKEN}",
+        "COALESCE_BASE_URL": "${COALESCE_BASE_URL}",
+        "COALESCE_REPO_PATH": "${COALESCE_REPO_PATH}",
+        "SNOWFLAKE_USERNAME": "${SNOWFLAKE_USERNAME}",
+        "SNOWFLAKE_KEY_PAIR_KEY": "${SNOWFLAKE_KEY_PAIR_KEY}",
+        "SNOWFLAKE_KEY_PAIR_PASS": "${SNOWFLAKE_KEY_PAIR_PASS}",
+        "SNOWFLAKE_WAREHOUSE": "${SNOWFLAKE_WAREHOUSE}",
+        "SNOWFLAKE_ROLE": "${SNOWFLAKE_ROLE}"
+      }
+    }
+  }
+}
+```
+
+**Claude Code** (`.mcp.json` — no `mcpServers` wrapper):
+
 ```json
 {
   "coalesce-transform": {
-    "command": "node",
-    "args": ["/absolute/path/to/coalesce-transform-mcp/dist/index.js"],
+    "command": "npx",
+    "args": ["coalesce-transform-mcp"],
     "env": {
       "COALESCE_ACCESS_TOKEN": "${COALESCE_ACCESS_TOKEN}",
       "COALESCE_BASE_URL": "${COALESCE_BASE_URL}",
