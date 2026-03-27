@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
+import { CoalesceApiError } from "../client.js";
 import {
   READ_ONLY_ANNOTATIONS,
   buildJsonToolResponse,
@@ -9,15 +10,17 @@ import {
   handleToolError,
 } from "../coalesce/types.js";
 
+type ResultsError = { message: string; status?: number; detail?: unknown };
+
 export async function getRunDetails(
   client: CoalesceClient,
   params: { runID: string }
-): Promise<{ run: unknown; results: unknown; resultsError?: string }> {
+): Promise<{ run: unknown; results: unknown; resultsError?: ResultsError }> {
   const validRunID = validatePathSegment(params.runID, "runID");
 
   let run: unknown;
   let results: unknown = null;
-  let resultsError: string | undefined;
+  let resultsError: ResultsError | undefined;
 
   const runPromise = client.get(`/api/v1/runs/${validRunID}`);
   const resultsPromise = client.get(`/api/v1/runs/${validRunID}/results`);
@@ -26,13 +29,27 @@ export async function getRunDetails(
     runPromise,
     resultsPromise.then(
       (data) => { results = data; },
-      (error) => { resultsError = error instanceof Error ? error.message : String(error); }
+      (error) => { resultsError = serializeResultsError(error); }
     ),
   ]);
 
   return resultsError !== undefined
     ? { run, results: null, resultsError }
     : { run, results };
+}
+
+function serializeResultsError(error: unknown): ResultsError {
+  if (error instanceof CoalesceApiError) {
+    return {
+      message: error.message,
+      status: error.status,
+      ...(error.detail !== undefined ? { detail: error.detail } : {}),
+    };
+  }
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+  return { message: "Unable to fetch run results", detail: error };
 }
 
 export function registerGetRunDetails(server: McpServer, client: CoalesceClient): void {

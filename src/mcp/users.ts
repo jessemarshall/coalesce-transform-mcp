@@ -81,14 +81,13 @@ export function registerUserTools(
     "Set the organization-level role for a user",
     {
       userID: z.string().describe("The user ID"),
-      body: z
-        .record(z.unknown())
-        .describe("The organization role assignment body"),
+      role: z.string().describe("The organization role to assign (e.g., 'admin', 'member', 'viewer')"),
     },
     IDEMPOTENT_WRITE_ANNOTATIONS,
     async (params) => {
       try {
-        const result = await setOrgRole(client, params);
+        const { userID, ...body } = params;
+        const result = await setOrgRole(client, { userID, body });
         return buildJsonToolResponse("set-org-role", result);
       } catch (error) {
         return handleToolError(error);
@@ -102,14 +101,13 @@ export function registerUserTools(
     {
       userID: z.string().describe("The user ID"),
       projectID: z.string().describe("The project ID"),
-      body: z
-        .record(z.unknown())
-        .describe("The project role assignment body"),
+      role: z.string().describe("The project role to assign (e.g., 'admin', 'developer', 'viewer')"),
     },
     IDEMPOTENT_WRITE_ANNOTATIONS,
     async (params) => {
       try {
-        const result = await setProjectRole(client, params);
+        const { userID, projectID, ...body } = params;
+        const result = await setProjectRole(client, { userID, projectID, body });
         return buildJsonToolResponse("set-project-role", result);
       } catch (error) {
         return handleToolError(error);
@@ -141,14 +139,13 @@ export function registerUserTools(
     {
       userID: z.string().describe("The user ID"),
       environmentID: z.string().describe("The environment ID"),
-      body: z
-        .record(z.unknown())
-        .describe("The environment role assignment body"),
+      role: z.string().describe("The environment role to assign (e.g., 'admin', 'developer', 'viewer')"),
     },
     IDEMPOTENT_WRITE_ANNOTATIONS,
     async (params) => {
       try {
-        const result = await setEnvRole(client, params);
+        const { userID, environmentID, ...body } = params;
+        const result = await setEnvRole(client, { userID, environmentID, body });
         return buildJsonToolResponse("set-env-role", result);
       } catch (error) {
         return handleToolError(error);

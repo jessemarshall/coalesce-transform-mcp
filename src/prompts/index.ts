@@ -15,7 +15,7 @@ export function registerPrompts(server: McpServer): void {
           content: {
             type: "text",
             text:
-              "Start with discovery before mutation. Use list-projects(includeWorkspaces=true) or get-project(includeWorkspaces=true) to resolve workspace IDs, list-environments for environment IDs, list-jobs for job IDs, and list-workspace-nodes or get-workspace-node before editing node bodies. Read coalesce://context/id-discovery and coalesce://context/tool-usage for the detailed lookup patterns.",
+              "Start with discovery before mutation. Use list-workspaces to resolve workspace IDs, list-environments for environment IDs, list-environment-jobs for job IDs, and list-workspace-nodes or get-workspace-node before editing node bodies. Read coalesce://context/id-discovery and coalesce://context/tool-usage for the detailed lookup patterns.",
           },
         },
       ],

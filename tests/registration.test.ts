@@ -30,8 +30,8 @@ describe("Tool Registration", () => {
       (call: unknown[]) => call[0] as string
     );
 
-    expect(toolSpy).toHaveBeenCalledTimes(72); // Removed deprecated create-workspace-node
-    expect(toolNames).toContain("list-jobs");
+    expect(toolSpy).toHaveBeenCalledTimes(75);
+    expect(toolNames).toContain("list-environment-jobs");
     expect(toolNames).toContain("list-environments");
     expect(toolNames).toContain("get-environment");
     expect(toolNames).toContain("list-environment-nodes");

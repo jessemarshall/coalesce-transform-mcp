@@ -12,6 +12,7 @@ import { registerNodeTypeCorpusTools } from "./mcp/node-type-corpus.js";
 import { registerRepoNodeTypeTools } from "./mcp/repo-node-types.js";
 import { registerJobTools } from "./mcp/jobs.js";
 import { registerSubgraphTools } from "./mcp/subgraphs.js";
+import { registerWorkspaceTools } from "./mcp/workspaces.js";
 import { registerCacheTools } from "./mcp/cache.js";
 import { registerRunAndWait } from "./workflows/run-and-wait.js";
 import { registerRetryAndWait } from "./workflows/retry-and-wait.js";
@@ -27,7 +28,7 @@ const { version } = require("../package.json") as { version: string };
 export const SERVER_NAME = "coalesce-transform-mcp";
 export const SERVER_VERSION = version;
 export const SERVER_INSTRUCTIONS = [
-  "Resolve IDs before mutating projects, workspaces, environments, jobs, runs, or nodes.",
+  "Resolve IDs before mutating. Use list-workspaces for workspace IDs, list-environments for environment IDs, list-environment-jobs for job IDs.",
   "Always use plan-pipeline before creating pipeline nodes, and wait for explicit user approval before calling creation tools.",
   "Inspect warning, validation, resultsError, incomplete, timedOut, and cleanupFailures fields before continuing.",
   "Prefer run-and-wait or retry-and-wait when the user wants an end-to-end run outcome in one call.",
@@ -47,6 +48,7 @@ export function registerServerSurface(server: McpServer, client: CoalesceClient)
   registerRepoNodeTypeTools(server, client);
   registerJobTools(server, client);
   registerSubgraphTools(server, client);
+  registerWorkspaceTools(server, client);
   registerCacheTools(server, client);
   registerRunAndWait(server, client);
   registerRetryAndWait(server, client);

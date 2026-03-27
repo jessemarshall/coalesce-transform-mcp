@@ -15,7 +15,7 @@
 ### Find Projects and Workspaces
 
 - `list-projects` or `get-project` to discover project structure
-- For workspace IDs: `list-projects({ includeWorkspaces: true })` or `get-project({ projectID, includeWorkspaces: true })`
+- For workspace IDs: `list-workspaces()` or `list-workspaces({ projectID })`
 - For broader ID resolution guidance, see `coalesce://context/id-discovery`
 
 ### List vs Get

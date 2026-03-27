@@ -58,6 +58,6 @@ describe("get-run-details workflow", () => {
 
     expect(result.run).toEqual(runData);
     expect(result.results).toBeNull();
-    expect(result.resultsError).toBe("Resource not found");
+    expect(result.resultsError).toEqual({ message: "Resource not found" });
   });
 });

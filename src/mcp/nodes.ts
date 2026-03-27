@@ -64,7 +64,7 @@ export function registerNodeTools(
 
   server.tool(
     "list-workspace-nodes",
-    "List all nodes in a Coalesce workspace. To find workspace IDs, use list-projects or get-project with includeWorkspaces=true.",
+    "List all nodes in a Coalesce workspace. To find workspace IDs, use list-workspaces.",
     PaginationParams.extend({
       workspaceID: z.string().describe("The workspace ID"),
       detail: z.boolean().optional().describe("Include full node details in response"),
@@ -100,7 +100,7 @@ export function registerNodeTools(
 
   server.tool(
     "get-workspace-node",
-    "Get details of a specific node in a Coalesce workspace. To find workspace IDs, use list-projects or get-project with includeWorkspaces=true.",
+    "Get details of a specific node in a Coalesce workspace. To find workspace IDs, use list-workspaces.",
     {
       workspaceID: z.string().describe("The workspace ID"),
       nodeID: z.string().describe("The node ID"),
@@ -151,6 +151,10 @@ export function registerNodeTools(
         .string()
         .optional()
         .describe("Path to local Coalesce repository for automatic config completion after creation."),
+      goal: z
+        .string()
+        .optional()
+        .describe("The goal or intent for this node (e.g., 'deduplicate customer records', 'aggregate daily sales'). Used to validate that the chosen nodeType is appropriate for the task. Same value you would pass to plan-pipeline."),
     },
     WRITE_ANNOTATIONS,
     async (params) => {
@@ -165,7 +169,7 @@ export function registerNodeTools(
 
   server.tool(
     "set-workspace-node",
-    "Replace all fields of a workspace node (full update). To find workspace IDs, use list-projects or get-project with includeWorkspaces=true.\n\nDo not include overrideSQL or override.* fields; they are auto-preserved from the existing node. SQL override is disallowed in this project.\n\nPrefer update-workspace-node for partial changes. This tool fetches the current node to preserve API-required fields (table, overrideSQL, columnIDs).",
+    "Replace all fields of a workspace node (full update). To find workspace IDs, use list-workspaces.\n\nDo not include overrideSQL or override.* fields; they are auto-preserved from the existing node. SQL override is disallowed in this project.\n\nPrefer update-workspace-node for partial changes. This tool fetches the current node to preserve API-required fields (table, overrideSQL, columnIDs).",
     {
       workspaceID: z.string().describe("The workspace ID"),
       nodeID: z.string().describe("The node ID"),
@@ -214,7 +218,7 @@ export function registerNodeTools(
 
   server.tool(
     "update-workspace-node",
-    "Safely update selected fields of a workspace node by fetching the current node, applying partial changes, then writing back the full merged body. Object fields are deep-merged; arrays replace the existing array when provided. To find workspace IDs, use list-projects or get-project with includeWorkspaces=true.\n\nDo not use overrideSQL or override.* fields; SQL override is disallowed in this project.\n\nNOTE: Arrays (like metadata.columns) are replaced, not merged. For complex column transformations (e.g., converting from join to aggregation), consider using replace-workspace-node-columns instead.\n\nFor guidance on SQL platforms and tool usage patterns, see resources: coalesce://context/sql-platform-selection, coalesce://context/tool-usage",
+    "Safely update selected fields of a workspace node by fetching the current node, applying partial changes, then writing back the full merged body. Object fields are deep-merged; arrays replace the existing array when provided. To find workspace IDs, use list-workspaces.\n\nDo not use overrideSQL or override.* fields; SQL override is disallowed in this project.\n\nNOTE: Arrays (like metadata.columns) are replaced, not merged. For complex column transformations (e.g., converting from join to aggregation), consider using replace-workspace-node-columns instead.\n\nFor guidance on SQL platforms and tool usage patterns, see resources: coalesce://context/sql-platform-selection, coalesce://context/tool-usage",
     {
       workspaceID: z.string().describe("The workspace ID"),
       nodeID: z.string().describe("The node ID"),
@@ -391,7 +395,7 @@ export function registerNodeTools(
       goal: z
         .string()
         .optional()
-        .describe("Optional goal/context for this node. Required when using specialized types (Dynamic Table, Incremental Load, etc.) — must include keywords like 'dynamic table', 'incremental', 'near-real-time' to pass validation."),
+        .describe("The goal or intent for this node (e.g., 'deduplicate customer records', 'join orders with customers'). Used to validate that the chosen nodeType is appropriate for the task. Same value you would pass to plan-pipeline."),
     },
     WRITE_ANNOTATIONS,
     async (params) => {
@@ -446,7 +450,7 @@ export function registerNodeTools(
 
   server.tool(
     "delete-workspace-node",
-    "Delete a node from a Coalesce workspace. This is a destructive operation — the node and all its configuration will be permanently removed. To find workspace IDs, use list-projects or get-project with includeWorkspaces=true.",
+    "Delete a node from a Coalesce workspace. This is a destructive operation — the node and all its configuration will be permanently removed. To find workspace IDs, use list-workspaces.",
     {
       workspaceID: z.string().describe("The workspace ID"),
       nodeID: z.string().describe("The node ID to delete"),

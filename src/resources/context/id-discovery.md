@@ -15,19 +15,13 @@ Prefer list/get discovery tools over guessing IDs from URLs or names.
 
 ### Workspace IDs
 
-- Workspace IDs are nested under projects.
-- Use:
-  - `list-projects({ includeWorkspaces: true })`
-  - `get-project({ projectID, includeWorkspaces: true })`
-
-Do not assume workspace IDs are visible unless `includeWorkspaces` was requested.
+- Use `list-workspaces()` to get all workspaces across projects.
+- Use `list-workspaces({ projectID })` to get workspaces for a specific project.
 
 ### Job IDs
 
-- Jobs are nested under projects and workspaces.
-- Use:
-  - `list-projects({ includeJobs: true, includeWorkspaces: true })`
-  - `get-project({ projectID, includeJobs: true, includeWorkspaces: true })`
+- Jobs are listed by environment but created/updated/deleted by workspace.
+- Use `list-environment-jobs({ environmentID })` to discover job IDs.
 
 If the user gives a job name, resolve it to a job ID before calling `start-run`.
 

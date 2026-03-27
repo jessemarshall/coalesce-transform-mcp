@@ -31,6 +31,25 @@ export async function createEnvironment(
   return client.post("/api/v1/environments", params);
 }
 
+export async function updateEnvironment(
+  client: CoalesceClient,
+  params: {
+    environmentID: string;
+    name?: string;
+    oauthEnabled?: boolean;
+    devEnv?: boolean;
+    connectionAccount?: string;
+    runTimeParameters?: Record<string, unknown>;
+    tagColors?: { backgroundColor?: string; textColor?: string };
+  }
+): Promise<unknown> {
+  const { environmentID, ...body } = params;
+  return client.patch(
+    `/api/v1/environments/${validatePathSegment(environmentID, "environmentID")}`,
+    body
+  );
+}
+
 export async function deleteEnvironment(
   client: CoalesceClient,
   params: { environmentID: string }

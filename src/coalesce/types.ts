@@ -137,7 +137,7 @@ const RunSchedulerOutputSchema = z.object({
 const RunDetailsOutputSchema = z.object({
   run: z.unknown(),
   results: z.unknown(),
-  resultsError: z.string().optional(),
+  resultsError: JsonToolErrorSchema.optional(),
 }).passthrough();
 
 const RunWaitOutputSchema = z.object({
@@ -291,24 +291,27 @@ const PipelineCreateOutputSchema = z.object({
 const LIST_TOOL_NAMES = new Set([
   "list-environments",
   "list-projects",
-  "list-jobs",
+  "list-environment-jobs",
   "list-runs",
   "list-environment-nodes",
   "list-workspace-nodes",
   "list-org-users",
   "list-user-roles",
   "list-git-accounts",
+  "list-workspaces",
+  "list-workspace-subgraphs",
 ]);
 
 const ENTITY_TOOL_NAMES = new Set([
   "get-environment",
   "create-environment",
+  "update-environment",
   "delete-environment",
   "get-project",
   "create-project",
   "update-project",
   "delete-project",
-  "get-job",
+  "get-environment-job",
   "create-workspace-job",
   "update-workspace-job",
   "delete-workspace-job",
