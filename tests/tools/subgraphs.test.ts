@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+  listWorkspaceSubgraphs,
   getWorkspaceSubgraph,
   createWorkspaceSubgraph,
   updateWorkspaceSubgraph,
@@ -17,6 +18,45 @@ function createMockClient() {
 }
 
 describe("Subgraph API", () => {
+  it("listWorkspaceSubgraphs calls GET /api/v1/workspaces/{workspaceID}/subgraphs", async () => {
+    const client = createMockClient();
+    client.get.mockResolvedValue({ data: [{ id: "sg-1", name: "Staging" }] });
+
+    const result = await listWorkspaceSubgraphs(client as any, { workspaceID: "ws-1" });
+
+    expect(client.get).toHaveBeenCalledWith("/api/v1/workspaces/ws-1/subgraphs", {});
+    expect(result).toEqual({ data: [{ id: "sg-1", name: "Staging" }] });
+  });
+
+  it("listWorkspaceSubgraphs passes pagination params", async () => {
+    const client = createMockClient();
+    client.get.mockResolvedValue({ data: [] });
+
+    await listWorkspaceSubgraphs(client as any, { workspaceID: "ws-1", limit: 5, orderBy: "name" });
+
+    expect(client.get).toHaveBeenCalledWith("/api/v1/workspaces/ws-1/subgraphs", {
+      limit: 5,
+      orderBy: "name",
+    });
+  });
+
+  it("listWorkspaceSubgraphs rejects path traversal in workspaceID", async () => {
+    const client = createMockClient();
+
+    await expect(
+      listWorkspaceSubgraphs(client as any, { workspaceID: "../escape" })
+    ).rejects.toThrow("workspaceID");
+  });
+
+  it("listWorkspaceSubgraphs propagates CoalesceApiError", async () => {
+    const client = createMockClient();
+    client.get.mockRejectedValue(new CoalesceApiError("Forbidden", 403));
+
+    await expect(
+      listWorkspaceSubgraphs(client as any, { workspaceID: "ws-1" })
+    ).rejects.toThrow("Forbidden");
+  });
+
   it("getWorkspaceSubgraph calls GET /api/v1/workspaces/{workspaceID}/subgraphs/{subgraphID}", async () => {
     const client = createMockClient();
     client.get.mockResolvedValue({ id: "sg-1", name: "Staging" });

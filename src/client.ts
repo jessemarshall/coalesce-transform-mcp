@@ -89,7 +89,11 @@ async function handleResponse(response: Response): Promise<unknown> {
     try {
       detail = await response.json();
     } catch {
-      detail = undefined;
+      try {
+        detail = await response.text();
+      } catch {
+        detail = undefined;
+      }
     }
 
     switch (response.status) {

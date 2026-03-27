@@ -20,6 +20,49 @@ describe("Job Tools", () => {
     expect(true).toBe(true);
   });
 
+  it("list-workspace-jobs calls GET /api/v1/workspaces/{workspaceID}/jobs", async () => {
+    const client = createMockClient();
+    client.get.mockResolvedValue({ data: [{ id: "job-1", name: "Nightly" }] });
+
+    const { listWorkspaceJobs } = await import("../../src/coalesce/api/jobs.js");
+    const result = await listWorkspaceJobs(client as any, { workspaceID: "ws-1" });
+
+    expect(client.get).toHaveBeenCalledWith("/api/v1/workspaces/ws-1/jobs", {});
+    expect(result).toEqual({ data: [{ id: "job-1", name: "Nightly" }] });
+  });
+
+  it("list-workspace-jobs passes pagination params", async () => {
+    const client = createMockClient();
+    client.get.mockResolvedValue({ data: [] });
+
+    const { listWorkspaceJobs } = await import("../../src/coalesce/api/jobs.js");
+    await listWorkspaceJobs(client as any, { workspaceID: "ws-1", limit: 5, orderBy: "name" });
+
+    expect(client.get).toHaveBeenCalledWith("/api/v1/workspaces/ws-1/jobs", {
+      limit: 5,
+      orderBy: "name",
+    });
+  });
+
+  it("list-workspace-jobs rejects path traversal in workspaceID", async () => {
+    const client = createMockClient();
+
+    const { listWorkspaceJobs } = await import("../../src/coalesce/api/jobs.js");
+    await expect(
+      listWorkspaceJobs(client as any, { workspaceID: "../escape" })
+    ).rejects.toThrow("workspaceID");
+  });
+
+  it("list-workspace-jobs propagates CoalesceApiError", async () => {
+    const client = createMockClient();
+    client.get.mockRejectedValue(new CoalesceApiError("Forbidden", 403));
+
+    const { listWorkspaceJobs } = await import("../../src/coalesce/api/jobs.js");
+    await expect(
+      listWorkspaceJobs(client as any, { workspaceID: "ws-1" })
+    ).rejects.toThrow("Forbidden");
+  });
+
   it("list-jobs calls GET /api/v1/environments/{environmentID}/jobs", async () => {
     const client = createMockClient();
     client.get.mockResolvedValue({ data: [{ id: "job-1", name: "Nightly" }] });

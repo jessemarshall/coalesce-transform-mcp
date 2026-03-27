@@ -11,6 +11,12 @@ import {
   createPipelineFromSql,
 } from "../../src/services/pipelines/execution.js";
 import { registerPipelineTools, buildPlanConfirmationToken } from "../../src/mcp/pipelines.js";
+import {
+  createMockClient,
+  buildSourceColumn,
+  buildSourceNode,
+  buildCreatedStageNode,
+} from "../helpers/fixtures.js";
 
 // Mock completeNodeConfiguration so pipeline tests don't need corpus/repo files
 vi.mock("../../src/services/config/intelligent.js", () => ({
@@ -41,128 +47,6 @@ afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
-
-function createMockClient() {
-  return {
-    get: vi.fn().mockResolvedValue({ data: [] }),
-    post: vi.fn(),
-    put: vi.fn(),
-    patch: vi.fn(),
-    delete: vi.fn(),
-  };
-}
-
-function buildSourceColumn(name: string, nodeID: string, columnID: string) {
-  return {
-    name,
-    columnID,
-    dataType: "VARCHAR",
-    nullable: true,
-    columnReference: {
-      stepCounter: nodeID,
-      columnCounter: columnID,
-    },
-    sources: [
-      {
-        columnReferences: [
-          {
-            nodeID,
-            columnID,
-          },
-        ],
-      },
-    ],
-  };
-}
-
-function buildSourceNode(nodeID: string, name: string, locationName: string | null = "RAW") {
-  return {
-    id: nodeID,
-    name,
-    ...(locationName ? { locationName } : {}),
-    metadata: {
-      columns: [
-        buildSourceColumn("CUSTOMER_ID", nodeID, `${nodeID}-cust-id`),
-        buildSourceColumn("CUSTOMER_NAME", nodeID, `${nodeID}-cust-name`),
-      ],
-    },
-  };
-}
-
-function buildCreatedStageNode(predecessorNodeID: string) {
-  return {
-    id: "new-node",
-    name: "STG_CUSTOMER",
-    description: "",
-    locationName: "STAGING",
-    database: "STAGING",
-    schema: "ANALYTICS",
-    config: {
-      preSQL: "",
-      postSQL: "",
-      testsEnabled: true,
-    },
-    metadata: {
-      columns: [
-        {
-          name: "CUSTOMER_ID",
-          dataType: "NUMBER(38,0)",
-          nullable: false,
-          columnReference: {
-            stepCounter: "new-node",
-            columnCounter: "new-customer-id",
-          },
-          sources: [
-            {
-              columnReferences: [
-                {
-                  nodeID: predecessorNodeID,
-                  columnID: `${predecessorNodeID}-cust-id`,
-                },
-              ],
-            },
-          ],
-        },
-        {
-          name: "CUSTOMER_NAME",
-          dataType: "VARCHAR(256)",
-          nullable: true,
-          columnReference: {
-            stepCounter: "new-node",
-            columnCounter: "new-customer-name",
-          },
-          sources: [
-            {
-              columnReferences: [
-                {
-                  nodeID: predecessorNodeID,
-                  columnID: `${predecessorNodeID}-cust-name`,
-                },
-              ],
-            },
-          ],
-        },
-      ],
-      sourceMapping: [
-        {
-          aliases: {},
-          customSQL: { customSQL: "" },
-          dependencies: [
-            {
-              locationName: "RAW",
-              nodeName: "CUSTOMER",
-            },
-          ],
-          join: {
-            joinCondition: `FROM {{ ref('RAW', 'CUSTOMER') }} "CUSTOMER"`,
-          },
-          name: "STG_CUSTOMER",
-          noLinkRefs: [],
-        },
-      ],
-    },
-  };
-}
 
 function buildCreatedProjectionNode(predecessorNodeID: string) {
   return {
@@ -927,9 +811,9 @@ describe("Pipeline Tools", () => {
     });
 
     expect(result.status).toBe("needs_clarification");
-    expect(result.warnings).toContain(
-      "Observed workspace node types could not be fetched for workspace ws-1. Use list-workspace-node-types or cache-workspace-nodes to inspect current workspace usage and confirm installation before execution."
-    );
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain("Observed workspace node types could not be fetched for workspace ws-1");
+    expect(result.warnings[0]).toContain("workspace list unavailable");
   });
 
   it("planPipeline warns but still returns a plan when COALESCE_REPO_PATH is stale", async () => {
@@ -947,6 +831,264 @@ describe("Pipeline Tools", () => {
       "Repo path does not exist. Check the provided path or COALESCE_REPO_PATH environment variable."
     );
     expect(result.status).toBe("needs_clarification");
+  });
+
+  it("createPipelineFromPlan rejects workspaceID mismatch between plan and params", async () => {
+    const client = createMockClient();
+    const plan = {
+      version: 1,
+      intent: "sql",
+      status: "ready",
+      workspaceID: "ws-OTHER",
+      platform: null,
+      goal: null,
+      sql: null,
+      nodes: [],
+      assumptions: [],
+      openQuestions: [],
+      warnings: [],
+      supportedNodeTypes: [],
+    };
+
+    await expect(
+      createPipelineFromPlan(client as any, { workspaceID: "ws-1", plan })
+    ).rejects.toThrow("does not match requested workspaceID");
+  });
+
+  it("createPipelineFromPlan returns warning for needs_clarification plans", async () => {
+    const client = createMockClient();
+    const plan = {
+      version: 1,
+      intent: "sql",
+      status: "needs_clarification",
+      workspaceID: "ws-1",
+      platform: null,
+      goal: null,
+      sql: null,
+      nodes: [],
+      assumptions: [],
+      openQuestions: ["Which source table?"],
+      warnings: [],
+      supportedNodeTypes: [],
+    };
+
+    const result = (await createPipelineFromPlan(client as any, {
+      workspaceID: "ws-1",
+      plan,
+    })) as any;
+
+    expect(result.created).toBe(false);
+    expect(result.warning).toContain("needs clarification");
+    // Should NOT have attempted any API calls for node creation
+    expect(client.post).not.toHaveBeenCalled();
+  });
+
+  it("createPipelineFromPlan throws when a node has zero resolved predecessors", async () => {
+    const client = createMockClient();
+    const plan = {
+      version: 1,
+      intent: "sql",
+      status: "ready",
+      workspaceID: "ws-1",
+      platform: null,
+      goal: null,
+      sql: null,
+      nodes: [
+        {
+          planNodeID: "node-1",
+          name: "ORPHAN_NODE",
+          nodeType: "Stage",
+          predecessorNodeIDs: [],
+          predecessorPlanNodeIDs: [],
+          predecessorNodeNames: [],
+          description: null,
+          sql: null,
+          selectItems: [],
+          outputColumnNames: [],
+          configOverrides: {},
+          sourceRefs: [],
+          joinCondition: null,
+          location: {},
+          requiresFullSetNode: false,
+        },
+      ],
+      assumptions: [],
+      openQuestions: [],
+      warnings: [],
+      supportedNodeTypes: ["Stage"],
+    };
+
+    await expect(
+      createPipelineFromPlan(client as any, { workspaceID: "ws-1", plan })
+    ).rejects.toThrow("has no resolved predecessor node IDs");
+  });
+
+  it("createPipelineFromPlan re-throws original error after successful rollback", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+    const createdNode = { ...buildCreatedStageNode("source-1"), id: "created-1" };
+    let postCallCount = 0;
+    let savedBody: Record<string, unknown> | null = null;
+
+    client.post.mockImplementation(() => {
+      postCallCount++;
+      if (postCallCount === 1) return Promise.resolve({ id: "created-1" });
+      return Promise.reject(new CoalesceApiError("Server error", 500));
+    });
+    client.put.mockImplementation((_path: string, body: Record<string, unknown>) => {
+      savedBody = body;
+      return Promise.resolve(body);
+    });
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({ data: [{ nodeType: "Stage" }] });
+      }
+      if (path.includes("/nodes/source-1")) return Promise.resolve(sourceNode);
+      if (path.includes("/nodes/created-1")) return Promise.resolve(savedBody ?? createdNode);
+      return Promise.resolve({ data: [] });
+    });
+    // Rollback delete succeeds
+    client.delete.mockResolvedValue({});
+
+    const nodeTemplate = {
+      planNodeID: "node-1",
+      name: "STG_CUSTOMER",
+      nodeType: "Stage",
+      predecessorNodeIDs: ["source-1"],
+      predecessorPlanNodeIDs: [],
+      predecessorNodeNames: ["CUSTOMER"],
+      description: "Test",
+      sql: "SELECT CUSTOMER.CUSTOMER_ID FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
+      selectItems: [
+        {
+          expression: "CUSTOMER.CUSTOMER_ID",
+          outputName: "CUSTOMER_ID",
+          sourceNodeAlias: "CUSTOMER",
+          sourceNodeName: "CUSTOMER",
+          sourceNodeID: "source-1",
+          sourceColumnName: "CUSTOMER_ID",
+          kind: "column" as const,
+          supported: true,
+        },
+      ],
+      outputColumnNames: ["CUSTOMER_ID"],
+      configOverrides: {},
+      sourceRefs: [{ locationName: "RAW", nodeName: "CUSTOMER", alias: "CUSTOMER", nodeID: "source-1" }],
+      joinCondition: "FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
+      location: { locationName: "STAGING", database: "STAGING", schema: "ANALYTICS" },
+      requiresFullSetNode: true,
+    };
+    const plan = {
+      version: 1,
+      intent: "sql",
+      status: "ready",
+      workspaceID: "ws-1",
+      platform: null,
+      goal: null,
+      sql: null,
+      nodes: [
+        nodeTemplate,
+        { ...nodeTemplate, planNodeID: "node-2", name: "STG_B" },
+      ],
+      assumptions: [],
+      openQuestions: [],
+      warnings: [],
+      supportedNodeTypes: ["Stage"],
+    };
+
+    // Should re-throw the original 500 error after successful rollback
+    await expect(
+      createPipelineFromPlan(client as any, { workspaceID: "ws-1", plan })
+    ).rejects.toThrow("Server error");
+    // Rollback should have deleted the first node
+    expect(client.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it("createPipelineFromPlan returns error result when rollback fails", async () => {
+    const client = createMockClient();
+    const sourceNode = buildSourceNode("source-1", "CUSTOMER");
+    const createdNode = { ...buildCreatedStageNode("source-1"), id: "created-1" };
+    let postCallCount = 0;
+    let savedBody: Record<string, unknown> | null = null;
+
+    client.post.mockImplementation(() => {
+      postCallCount++;
+      if (postCallCount === 1) return Promise.resolve({ id: "created-1" });
+      return Promise.reject(new CoalesceApiError("Server error", 500));
+    });
+    client.put.mockImplementation((_path: string, body: Record<string, unknown>) => {
+      savedBody = body;
+      return Promise.resolve(body);
+    });
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+        return Promise.resolve({ data: [{ nodeType: "Stage" }] });
+      }
+      if (path.includes("/nodes/source-1")) return Promise.resolve(sourceNode);
+      if (path.includes("/nodes/created-1")) return Promise.resolve(savedBody ?? createdNode);
+      return Promise.resolve({ data: [] });
+    });
+    // Rollback also fails
+    client.delete.mockRejectedValue(new CoalesceApiError("Delete failed", 500));
+
+    const nodeTemplate = {
+      planNodeID: "node-1",
+      name: "STG_CUSTOMER",
+      nodeType: "Stage",
+      predecessorNodeIDs: ["source-1"],
+      predecessorPlanNodeIDs: [],
+      predecessorNodeNames: ["CUSTOMER"],
+      description: "Test",
+      sql: "SELECT CUSTOMER.CUSTOMER_ID FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
+      selectItems: [
+        {
+          expression: "CUSTOMER.CUSTOMER_ID",
+          outputName: "CUSTOMER_ID",
+          sourceNodeAlias: "CUSTOMER",
+          sourceNodeName: "CUSTOMER",
+          sourceNodeID: "source-1",
+          sourceColumnName: "CUSTOMER_ID",
+          kind: "column" as const,
+          supported: true,
+        },
+      ],
+      outputColumnNames: ["CUSTOMER_ID"],
+      configOverrides: {},
+      sourceRefs: [{ locationName: "RAW", nodeName: "CUSTOMER", alias: "CUSTOMER", nodeID: "source-1" }],
+      joinCondition: "FROM {{ ref('RAW', 'CUSTOMER') }} CUSTOMER",
+      location: { locationName: "STAGING", database: "STAGING", schema: "ANALYTICS" },
+      requiresFullSetNode: true,
+    };
+    const plan = {
+      version: 1,
+      intent: "sql",
+      status: "ready",
+      workspaceID: "ws-1",
+      platform: null,
+      goal: null,
+      sql: null,
+      nodes: [
+        nodeTemplate,
+        { ...nodeTemplate, planNodeID: "node-2", name: "STG_B" },
+      ],
+      assumptions: [],
+      openQuestions: [],
+      warnings: [],
+      supportedNodeTypes: ["Stage"],
+    };
+
+    // Should return structured error (not throw) when rollback fails
+    const result = (await createPipelineFromPlan(client as any, {
+      workspaceID: "ws-1",
+      plan,
+    })) as any;
+
+    expect(result.created).toBe(false);
+    expect(result.isError).toBe(true);
+    expect(result.incomplete).toBe(true);
+    expect(result.cleanupFailedNodeIDs).toContain("created-1");
+    expect(result.error).toBeDefined();
+    expect(result.warning).toContain("cleanup did not fully succeed");
   });
 
   it("createPipelineFromPlan creates a Stage node and persists the SQL-derived source mapping", async () => {
@@ -2398,6 +2540,86 @@ describe("Pipeline Tools", () => {
       const questions = result.openQuestions ?? [];
       const finalNote = questions.find((q: string) => /redundant/i.test(q) || /Do NOT create an additional/i.test(q));
       expect(finalNote).toBeDefined();
+    });
+
+    it("planPipeline handles CTE bodies with double-quoted identifiers containing parens", async () => {
+      const client = createMockClient();
+
+      client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+        if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+          return Promise.resolve({ data: [{ nodeType: "Stage" }] });
+        }
+        return Promise.resolve({ data: [] });
+      });
+
+      const result = await planPipeline(client as any, {
+        workspaceID: "ws-1",
+        sql: `WITH stg_data AS (
+          SELECT "col(x)" AS col_x, name FROM my_table
+        ),
+        stg_other AS (
+          SELECT id, value FROM other_table
+        )
+        SELECT * FROM stg_data JOIN stg_other ON stg_data.col_x = stg_other.id`,
+      });
+
+      expect(result.status).toBe("needs_clarification");
+      // Both CTEs must be found despite the double-quoted identifier with parens
+      expect(result.cteNodeSummary).toHaveLength(2);
+      expect(result.cteNodeSummary![0]!.name).toBe("STG_DATA");
+      expect(result.cteNodeSummary![1]!.name).toBe("STG_OTHER");
+    });
+
+    it("planPipeline ignores CTE-like keywords inside string literals", async () => {
+      const client = createMockClient();
+
+      client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+        if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+          return Promise.resolve({ data: [{ nodeType: "Stage" }] });
+        }
+        return Promise.resolve({ data: [] });
+      });
+
+      const result = await planPipeline(client as any, {
+        workspaceID: "ws-1",
+        sql: `WITH stg_data AS (
+          SELECT id, 'WHERE x > 1' AS label FROM my_table
+        )
+        SELECT * FROM stg_data`,
+      });
+
+      expect(result.status).toBe("needs_clarification");
+      expect(result.cteNodeSummary).toHaveLength(1);
+      // The string 'WHERE x > 1' should NOT be parsed as a WHERE clause
+      expect(result.cteNodeSummary![0]!.whereFilter).toBeNull();
+    });
+
+    it("planPipeline handles block comments with parens in CTE bodies", async () => {
+      const client = createMockClient();
+
+      client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+        if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+          return Promise.resolve({ data: [{ nodeType: "Stage" }] });
+        }
+        return Promise.resolve({ data: [] });
+      });
+
+      const result = await planPipeline(client as any, {
+        workspaceID: "ws-1",
+        sql: `WITH stg_data AS (
+          SELECT id, /* func() */ name FROM my_table
+        ),
+        stg_next AS (
+          SELECT a, b FROM next_table
+        )
+        SELECT * FROM stg_data JOIN stg_next ON stg_data.id = stg_next.a`,
+      });
+
+      expect(result.status).toBe("needs_clarification");
+      // Block comment with parens must not corrupt paren depth
+      expect(result.cteNodeSummary).toHaveLength(2);
+      expect(result.cteNodeSummary![0]!.name).toBe("STG_DATA");
+      expect(result.cteNodeSummary![1]!.name).toBe("STG_NEXT");
     });
 
     it("planPipeline allows SQL without CTEs", async () => {

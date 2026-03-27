@@ -3,124 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildCacheResourceUri } from "../src/cache-dir.js";
+import { buildSourceNode, buildCreatedStageNode } from "./helpers/fixtures.js";
 import {
   createConnectedMcpHarness,
   createMockApiClient,
 } from "./helpers/mcp-harness.js";
 
 const tempDirs: string[] = [];
-
-function buildSourceColumn(name: string, nodeID: string, columnID: string) {
-  return {
-    name,
-    columnID,
-    dataType: "VARCHAR",
-    nullable: true,
-    columnReference: {
-      stepCounter: nodeID,
-      columnCounter: columnID,
-    },
-    sources: [
-      {
-        columnReferences: [
-          {
-            nodeID,
-            columnID,
-          },
-        ],
-      },
-    ],
-  };
-}
-
-function buildSourceNode(nodeID: string, name: string, locationName = "RAW") {
-  return {
-    id: nodeID,
-    name,
-    locationName,
-    metadata: {
-      columns: [
-        buildSourceColumn("CUSTOMER_ID", nodeID, `${nodeID}-cust-id`),
-        buildSourceColumn("CUSTOMER_NAME", nodeID, `${nodeID}-cust-name`),
-      ],
-    },
-  };
-}
-
-function buildCreatedStageNode(predecessorNodeID: string) {
-  return {
-    id: "new-node",
-    name: "STG_CUSTOMER",
-    description: "",
-    locationName: "STAGING",
-    database: "STAGING",
-    schema: "ANALYTICS",
-    config: {
-      preSQL: "",
-      postSQL: "",
-      testsEnabled: true,
-    },
-    metadata: {
-      columns: [
-        {
-          name: "CUSTOMER_ID",
-          dataType: "NUMBER(38,0)",
-          nullable: false,
-          columnReference: {
-            stepCounter: "new-node",
-            columnCounter: "new-customer-id",
-          },
-          sources: [
-            {
-              columnReferences: [
-                {
-                  nodeID: predecessorNodeID,
-                  columnID: `${predecessorNodeID}-cust-id`,
-                },
-              ],
-            },
-          ],
-        },
-        {
-          name: "CUSTOMER_NAME",
-          dataType: "VARCHAR(256)",
-          nullable: true,
-          columnReference: {
-            stepCounter: "new-node",
-            columnCounter: "new-customer-name",
-          },
-          sources: [
-            {
-              columnReferences: [
-                {
-                  nodeID: predecessorNodeID,
-                  columnID: `${predecessorNodeID}-cust-name`,
-                },
-              ],
-            },
-          ],
-        },
-      ],
-      sourceMapping: [
-        {
-          aliases: {},
-          customSQL: { customSQL: "" },
-          dependencies: [
-            {
-              locationName: "RAW",
-              nodeName: "CUSTOMER",
-            },
-          ],
-          join: {
-            joinCondition: `FROM {{ ref('RAW', 'CUSTOMER') }}`,
-          },
-          name: "STG_CUSTOMER",
-          noLinkRefs: [],
-        },
-      ],
-    },
-  };
-}
 
 afterEach(() => {
   vi.restoreAllMocks();

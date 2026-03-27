@@ -2,12 +2,14 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
 import {
+  listWorkspaceSubgraphs,
   getWorkspaceSubgraph,
   createWorkspaceSubgraph,
   updateWorkspaceSubgraph,
   deleteWorkspaceSubgraph,
 } from "../coalesce/api/subgraphs.js";
 import {
+  PaginationParams,
   buildJsonToolResponse,
   handleToolError,
   READ_ONLY_ANNOTATIONS,
@@ -19,6 +21,23 @@ export function registerSubgraphTools(
   server: McpServer,
   client: CoalesceClient
 ): void {
+  server.tool(
+    "list-workspace-subgraphs",
+    "List all subgraphs in a Coalesce workspace. Use this to discover subgraph IDs for get, update, or delete operations.",
+    PaginationParams.extend({
+      workspaceID: z.string().describe("The workspace ID"),
+    }).shape,
+    READ_ONLY_ANNOTATIONS,
+    async (params) => {
+      try {
+        const result = await listWorkspaceSubgraphs(client, params);
+        return buildJsonToolResponse("list-workspace-subgraphs", result);
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
   server.tool(
     "get-workspace-subgraph",
     "Get details of a specific subgraph in a Coalesce workspace.",
