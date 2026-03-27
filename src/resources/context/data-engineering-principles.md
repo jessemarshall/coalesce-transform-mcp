@@ -9,8 +9,8 @@ When to consult:
 
 Application pattern:
 - If the user already specified the exact node type, use it and skip analysis.
-- Use `analyze-workspace-patterns` for a compact inline profile of workspace conventions.
-- Use `cache-workspace-nodes` when the full node list should bypass chat context or be reused.
+- Use `coalesce_analyze_workspace_patterns` for a compact inline profile of workspace conventions.
+- Use `coalesce_cache_workspace_nodes` when the full node list should bypass chat context or be reused.
 - If workspace differs from recommendations, inform user with rationale.
 - If workspace aligns, proceed with existing pattern.
 

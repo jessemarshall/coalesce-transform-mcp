@@ -63,7 +63,7 @@ describe("Node Tools", () => {
 
   it("analyze-workspace-patterns paginates through the full workspace node list", async () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
     const client = createMockClient();
 
     client.get.mockImplementation((_path: string, params?: Record<string, unknown>) => {
@@ -89,9 +89,9 @@ describe("Node Tools", () => {
     registerNodeTools(server, client as any);
 
     const analyzeToolCall = toolSpy.mock.calls.find(
-      (call) => call[0] === "analyze-workspace-patterns"
+      (call) => call[0] === "coalesce_analyze_workspace_patterns"
     );
-    const handler = analyzeToolCall?.[4] as
+    const handler = analyzeToolCall?.[2] as
       | ((params: { workspaceID: string }) => Promise<{ content: { text: string }[] }>)
       | undefined;
 
@@ -120,7 +120,7 @@ describe("Node Tools", () => {
     const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(tempDir);
     const originalMaxBytes = process.env.COALESCE_MCP_AUTO_CACHE_MAX_BYTES;
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
     const client = createMockClient();
 
     process.env.COALESCE_MCP_AUTO_CACHE_MAX_BYTES = "128";
@@ -139,9 +139,9 @@ describe("Node Tools", () => {
       registerNodeTools(server, client as any);
 
       const listToolCall = toolSpy.mock.calls.find(
-        (call) => call[0] === "list-workspace-nodes"
+        (call) => call[0] === "coalesce_list_workspace_nodes"
       );
-      const handler = listToolCall?.[4] as
+      const handler = listToolCall?.[2] as
         | ((params: { workspaceID: string; detail?: boolean }) => Promise<{ content: { text: string }[] }>)
         | undefined;
 
@@ -152,7 +152,7 @@ describe("Node Tools", () => {
 
       expect(metadata).toMatchObject({
         autoCached: true,
-        toolName: "list-workspace-nodes",
+        toolName: "coalesce_list_workspace_nodes",
         resourceUri: expect.stringContaining("coalesce://cache/"),
       });
 

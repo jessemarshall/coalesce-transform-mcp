@@ -11,8 +11,10 @@ import { sanitizeNodeDefinitionSqlOverridePolicy } from "../services/policies/sq
 import { getWorkspaceNode } from "../coalesce/api/nodes.js";
 import {
   buildJsonToolResponse,
+  getToolOutputSchema,
   handleToolError,
   READ_ONLY_ANNOTATIONS,
+  READ_ONLY_LOCAL_ANNOTATIONS,
 } from "../coalesce/types.js";
 import {
   parseRepo,
@@ -367,7 +369,7 @@ export async function generateSetWorkspaceNodeTemplate(
       const parseError =
         typeof definition.parseError === "string" ? definition.parseError : "unknown";
       throw new Error(
-        `Repo-backed definition could not be resolved for template generation because metadata.nodeMetadataSpec could not be parsed. Parse error: ${parseError} Use the corpus tools (search-node-type-variants, get-node-type-variant, or generate-set-workspace-node-template-from-variant) as the next step.`
+        `Repo-backed definition could not be resolved for template generation because metadata.nodeMetadataSpec could not be parsed. Parse error: ${parseError} Use the corpus tools (coalesce_search_node_type_variants, coalesce_get_node_type_variant, or coalesce_generate_set_workspace_node_template_from_variant) as the next step.`
       );
     }
 
@@ -413,69 +415,81 @@ export function registerRepoNodeTypeTools(
   server: McpServer,
   client: CoalesceClient
 ): void {
-  server.tool(
-    "list-repo-packages",
-    "Inspect a committed local Coalesce repo and list package aliases from packages/*.yml. Use this when a local repo is available and you want repo-backed node-type discovery before falling back to the corpus.",
+  server.registerTool(
+    "coalesce_list_repo_packages",
     {
-      repoPath: z
-        .string()
-        .optional()
-        .describe("Optional absolute or relative path to the local committed Coalesce repo. Falls back to COALESCE_REPO_PATH when omitted."),
+      title: "List Repo Packages",
+      description: "Inspect a committed local Coalesce repo and list package aliases from packages/*.yml. Use this when a local repo is available and you want repo-backed node-type discovery before falling back to the corpus.",
+      inputSchema: z.object({
+        repoPath: z
+          .string()
+          .optional()
+          .describe("Optional absolute or relative path to the local committed Coalesce repo. Falls back to COALESCE_REPO_PATH when omitted."),
+      }),
+      outputSchema: getToolOutputSchema("coalesce_list_repo_packages"),
+      annotations: READ_ONLY_LOCAL_ANNOTATIONS,
     },
-    READ_ONLY_ANNOTATIONS,
     async (params) => {
       try {
-        return buildJsonToolResponse("list-repo-packages", listRepoPackages(params));
+        return buildJsonToolResponse("coalesce_list_repo_packages", listRepoPackages(params));
       } catch (error) {
         return handleToolError(error);
       }
     }
   );
 
-  server.tool(
-    "list-repo-node-types",
-    "Inspect a committed local Coalesce repo and list exact resolvable node-type identifiers from nodeTypes/, optionally filtered to one package alias. Repo-backed discovery is preferred when the repo contains the committed definition; otherwise use the corpus tools.",
+  server.registerTool(
+    "coalesce_list_repo_node_types",
     {
-      repoPath: z
-        .string()
-        .optional()
-        .describe("Optional absolute or relative path to the local committed Coalesce repo. Falls back to COALESCE_REPO_PATH when omitted."),
-      packageAlias: z
-        .string()
-        .optional()
-        .describe("Optional exact package alias filter sourced from package YAML name."),
-      inUseOnly: z
-        .boolean()
-        .optional()
-        .describe("When true, return only identifiers currently referenced by committed nodes/*.yml operation.sqlType values."),
+      title: "List Repo Node Types",
+      description: "Inspect a committed local Coalesce repo and list exact resolvable node-type identifiers from nodeTypes/, optionally filtered to one package alias. Repo-backed discovery is preferred when the repo contains the committed definition; otherwise use the corpus tools.",
+      inputSchema: z.object({
+        repoPath: z
+          .string()
+          .optional()
+          .describe("Optional absolute or relative path to the local committed Coalesce repo. Falls back to COALESCE_REPO_PATH when omitted."),
+        packageAlias: z
+          .string()
+          .optional()
+          .describe("Optional exact package alias filter sourced from package YAML name."),
+        inUseOnly: z
+          .boolean()
+          .optional()
+          .describe("When true, return only identifiers currently referenced by committed nodes/*.yml operation.sqlType values."),
+      }),
+      outputSchema: getToolOutputSchema("coalesce_list_repo_node_types"),
+      annotations: READ_ONLY_LOCAL_ANNOTATIONS,
     },
-    READ_ONLY_ANNOTATIONS,
     async (params) => {
       try {
-        return buildJsonToolResponse("list-repo-node-types", listRepoNodeTypes(params));
+        return buildJsonToolResponse("coalesce_list_repo_node_types", listRepoNodeTypes(params));
       } catch (error) {
         return handleToolError(error);
       }
     }
   );
 
-  server.tool(
-    "get-repo-node-type-definition",
-    "Resolve one exact node type from a committed local Coalesce repo. Supports direct identifiers like Stage or 65 and package-backed identifiers like alias:::id. If the repo cannot resolve the definition exactly, use the corpus tools as the fallback path.",
+  server.registerTool(
+    "coalesce_get_repo_node_type_definition",
     {
-      repoPath: z
-        .string()
-        .optional()
-        .describe("Optional absolute or relative path to the local committed Coalesce repo. Falls back to COALESCE_REPO_PATH when omitted."),
-      nodeType: z
-        .string()
-        .describe("Exact direct node type identifier or exact package-backed alias:::id value."),
+      title: "Get Repo Node Type Definition",
+      description: "Resolve one exact node type from a committed local Coalesce repo. Supports direct identifiers like Stage or 65 and package-backed identifiers like alias:::id. If the repo cannot resolve the definition exactly, use the corpus tools as the fallback path.",
+      inputSchema: z.object({
+        repoPath: z
+          .string()
+          .optional()
+          .describe("Optional absolute or relative path to the local committed Coalesce repo. Falls back to COALESCE_REPO_PATH when omitted."),
+        nodeType: z
+          .string()
+          .describe("Exact direct node type identifier or exact package-backed alias:::id value."),
+      }),
+      outputSchema: getToolOutputSchema("coalesce_get_repo_node_type_definition"),
+      annotations: READ_ONLY_LOCAL_ANNOTATIONS,
     },
-    READ_ONLY_ANNOTATIONS,
     async (params) => {
       try {
         return buildJsonToolResponse(
-          "get-repo-node-type-definition",
+          "coalesce_get_repo_node_type_definition",
           getRepoNodeTypeDefinition(params)
         );
       } catch (error) {
@@ -484,52 +498,56 @@ export function registerRepoNodeTypeTools(
     }
   );
 
-  server.tool(
-    "generate-set-workspace-node-template",
-    "Generate a YAML-friendly set-workspace-node body template either from a raw node definition object or by resolving a committed node type from a local repo. Prefer repo mode when a local committed repo contains the definition; use the corpus tools when repo-backed resolution is unavailable. SQL override controls are removed from returned templates because they are disallowed in this project.",
+  server.registerTool(
+    "coalesce_generate_set_workspace_node_template",
     {
-      definition: z
-        .record(z.unknown())
-        .optional()
-        .describe("Raw parsed node definition object for template generation in raw mode."),
-      repoPath: z
-        .string()
-        .optional()
-        .describe("Optional local committed repo path for repo mode. Falls back to COALESCE_REPO_PATH when omitted."),
-      nodeType: z
-        .string()
-        .optional()
-        .describe("Exact repo node type identifier in repo mode, or optional nodeType override in raw mode."),
-      nodeName: z
-        .string()
-        .optional()
-        .describe("Optional node name to inject into the generated template."),
-      locationName: z
-        .string()
-        .optional()
-        .describe("Optional storage location name to include in the template."),
-      database: z
-        .string()
-        .optional()
-        .describe("Optional database value to include in the template."),
-      schema: z
-        .string()
-        .optional()
-        .describe("Optional schema value to include in the template."),
-      workspaceID: z
-        .string()
-        .optional()
-        .describe("Optional workspace ID for comparing inferred mappings to a live workspace node."),
-      nodeID: z
-        .string()
-        .optional()
-        .describe("Optional node ID for comparing inferred mappings to a live workspace node."),
+      title: "Generate Set Workspace Node Template",
+      description: "Generate a YAML-friendly coalesce_set_workspace_node body template either from a raw node definition object or by resolving a committed node type from a local repo. Prefer repo mode when a local committed repo contains the definition; use the corpus tools when repo-backed resolution is unavailable. SQL override controls are removed from returned templates because they are disallowed in this project.",
+      inputSchema: z.object({
+        definition: z
+          .record(z.unknown())
+          .optional()
+          .describe("Raw parsed node definition object for template generation in raw mode."),
+        repoPath: z
+          .string()
+          .optional()
+          .describe("Optional local committed repo path for repo mode. Falls back to COALESCE_REPO_PATH when omitted."),
+        nodeType: z
+          .string()
+          .optional()
+          .describe("Exact repo node type identifier in repo mode, or optional nodeType override in raw mode."),
+        nodeName: z
+          .string()
+          .optional()
+          .describe("Optional node name to inject into the generated template."),
+        locationName: z
+          .string()
+          .optional()
+          .describe("Optional storage location name to include in the template."),
+        database: z
+          .string()
+          .optional()
+          .describe("Optional database value to include in the template."),
+        schema: z
+          .string()
+          .optional()
+          .describe("Optional schema value to include in the template."),
+        workspaceID: z
+          .string()
+          .optional()
+          .describe("Optional workspace ID for comparing inferred mappings to a live workspace node."),
+        nodeID: z
+          .string()
+          .optional()
+          .describe("Optional node ID for comparing inferred mappings to a live workspace node."),
+      }),
+      outputSchema: getToolOutputSchema("coalesce_generate_set_workspace_node_template"),
+      annotations: READ_ONLY_ANNOTATIONS,
     },
-    READ_ONLY_ANNOTATIONS,
     async (params) => {
       try {
         return buildJsonToolResponse(
-          "generate-set-workspace-node-template",
+          "coalesce_generate_set_workspace_node_template",
           await generateSetWorkspaceNodeTemplate(client, params)
         );
       } catch (error) {

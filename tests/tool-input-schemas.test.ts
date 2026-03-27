@@ -19,23 +19,23 @@ function getToolParamsSchema(
   toolName: string
 ): z.ZodObject<z.ZodRawShape> {
   const toolCall = toolSpy.mock.calls.find((call) => call[0] === toolName);
-  const shape = toolCall?.[2] as z.ZodRawShape | undefined;
+  const schema = toolCall?.[1]?.inputSchema as z.ZodObject<z.ZodRawShape> | undefined;
 
-  if (!shape) {
+  if (!schema) {
     throw new Error(`Tool ${toolName} was not registered`);
   }
 
-  return z.object(shape);
+  return schema;
 }
 
 describe("Node Tool Input Schemas", () => {
   it("requires structured objects for scratch-node payload fields", () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
 
     registerNodeTools(server, createMockClient() as any);
 
-    const schema = getToolParamsSchema(toolSpy, "create-workspace-node-from-scratch");
+    const schema = getToolParamsSchema(toolSpy, "coalesce_create_workspace_node_from_scratch");
 
     expect(
       schema.safeParse({
@@ -78,12 +78,12 @@ describe("Node Tool Input Schemas", () => {
 
   it("requires structured node bodies for set/update tools", () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
 
     registerNodeTools(server, createMockClient() as any);
 
-    const setSchema = getToolParamsSchema(toolSpy, "set-workspace-node");
-    const updateSchema = getToolParamsSchema(toolSpy, "update-workspace-node");
+    const setSchema = getToolParamsSchema(toolSpy, "coalesce_set_workspace_node");
+    const updateSchema = getToolParamsSchema(toolSpy, "coalesce_update_workspace_node");
 
     expect(
       setSchema.safeParse({
@@ -131,11 +131,11 @@ describe("Node Tool Input Schemas", () => {
 
   it("requires column objects for replace-workspace-node-columns", () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
 
     registerNodeTools(server, createMockClient() as any);
 
-    const schema = getToolParamsSchema(toolSpy, "replace-workspace-node-columns");
+    const schema = getToolParamsSchema(toolSpy, "coalesce_replace_workspace_node_columns");
 
     expect(
       schema.safeParse({
@@ -174,12 +174,12 @@ describe("Node Tool Input Schemas", () => {
 describe("Pipeline Tool Input Schemas", () => {
   it("requires structured config overrides for planner/create tools", () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
 
     registerPipelineTools(server, createMockClient() as any);
 
-    const planSchema = getToolParamsSchema(toolSpy, "plan-pipeline");
-    const createFromSqlSchema = getToolParamsSchema(toolSpy, "create-pipeline-from-sql");
+    const planSchema = getToolParamsSchema(toolSpy, "coalesce_plan_pipeline");
+    const createFromSqlSchema = getToolParamsSchema(toolSpy, "coalesce_create_pipeline_from_sql");
 
     expect(
       planSchema.safeParse({
@@ -216,11 +216,11 @@ describe("Pipeline Tool Input Schemas", () => {
 
   it("requires a structured plan object for create-pipeline-from-plan", () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
 
     registerPipelineTools(server, createMockClient() as any);
 
-    const schema = getToolParamsSchema(toolSpy, "create-pipeline-from-plan");
+    const schema = getToolParamsSchema(toolSpy, "coalesce_create_pipeline_from_plan");
 
     const validPlan = {
       version: 1,

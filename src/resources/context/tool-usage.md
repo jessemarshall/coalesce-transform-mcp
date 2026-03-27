@@ -14,46 +14,46 @@
 
 ### Find Projects and Workspaces
 
-- `list-projects` or `get-project` to discover project structure
-- For workspace IDs: `list-workspaces()` or `list-workspaces({ projectID })`
+- `coalesce_list_projects` or `coalesce_get_project` to discover project structure
+- For workspace IDs: `coalesce_list_workspaces()` or `coalesce_list_workspaces({ projectID })`
 - For broader ID resolution guidance, see `coalesce://context/id-discovery`
 
 ### List vs Get
 
-- **List** endpoints for discovery and broad state: `list-environments`, `list-projects`, `list-runs`, `list-workspace-nodes`, `list-environment-nodes`
-- **Get** endpoints when you have an ID and need the full object: `get-environment`, `get-project`, `get-run`, `get-workspace-node`, `get-environment-node`
+- **List** endpoints for discovery and broad state: `coalesce_list_environments`, `coalesce_list_projects`, `coalesce_list_runs`, `coalesce_list_workspace_nodes`, `coalesce_list_environment_nodes`
+- **Get** endpoints when you have an ID and need the full object: `coalesce_get_environment`, `coalesce_get_project`, `coalesce_get_run`, `coalesce_get_workspace_node`, `coalesce_get_environment_node`
 
 ### Pagination
 
 - Large list endpoints may be paginated. Do not assume one page is complete if `next` or paging cursors are present.
 - Prefer discovery first, then targeted reads.
 - Large JSON responses may be auto-cached to `coalesce_transform_mcp_data_cache/auto-cache/`; the tool returns cache metadata plus a `coalesce://cache/...` resource URI and `resource_link` instead of the full payload.
-- Use explicit cache tools for large lists: `cache-workspace-nodes`, `cache-environment-nodes`, `cache-runs`, `cache-org-users`.
+- Use explicit cache tools for large lists: `coalesce_cache_workspace_nodes`, `coalesce_cache_environment_nodes`, `coalesce_cache_runs`, `coalesce_cache_org_users`.
 
 ### Large Workspace Analysis
 
-- `analyze-workspace-patterns` for a compact workspace profile (naming, packages, methodology conventions)
-- `cache-workspace-nodes` when the full payload should be written to `coalesce_transform_mcp_data_cache/nodes/` for reuse
+- `coalesce_analyze_workspace_patterns` for a compact workspace profile (naming, packages, methodology conventions)
+- `coalesce_cache_workspace_nodes` when the full payload should be written to `coalesce_transform_mcp_data_cache/nodes/` for reuse
 - For architecture guidance, see `coalesce://context/data-engineering-principles`
 
 ## Mandatory: Plan Before Creating Nodes
 
-**NEVER skip `plan-pipeline` before creating nodes.** Do not hardcode node types like "Stage", "65", or any other ID.
+**NEVER skip `coalesce_plan_pipeline` before creating nodes.** Do not hardcode node types like "Stage", "65", or any other ID.
 
-1. Call `plan-pipeline` with `goal`, `sourceNodeIDs`, and `repoPath` — it discovers and ranks all node types
+1. Call `coalesce_plan_pipeline` with `goal`, `sourceNodeIDs`, and `repoPath` — it discovers and ranks all node types
 2. Use the `nodeType` from the plan result when calling creation tools — the planner already excludes specialized types (Dynamic Table, Incremental, Materialized View, etc.) unless your context explicitly requires them
 
-**Common mistake**: Picking node types by ID or name without calling `plan-pipeline`. This leads to wrong types (e.g., Dynamic Tables for batch ETL) because the agent has no visibility into what types are available or appropriate.
+**Common mistake**: Picking node types by ID or name without calling `coalesce_plan_pipeline`. This leads to wrong types (e.g., Dynamic Tables for batch ETL) because the agent has no visibility into what types are available or appropriate.
 
 ## Repo-Backed and Corpus Workflows
 
 Before creating nodes with complex metadata:
 
-1. Check observed types: `list-workspace-node-types` (see `coalesce://context/node-type-corpus`)
-2. If a local repo is available: install the package, commit, update clone, use `list-repo-node-types` / `get-repo-node-type-definition` / `generate-set-workspace-node-template` with `repoPath` or `COALESCE_REPO_PATH`
-3. If the repo lacks the definition: use `search-node-type-variants` / `get-node-type-variant` / `generate-set-workspace-node-template-from-variant`
+1. Check observed types: `coalesce_list_workspace_node_types` (see `coalesce://context/node-type-corpus`)
+2. If a local repo is available: install the package, commit, update clone, use `coalesce_list_repo_node_types` / `coalesce_get_repo_node_type_definition` / `coalesce_generate_set_workspace_node_template` with `repoPath` or `COALESCE_REPO_PATH`
+3. If the repo lacks the definition: use `coalesce_search_node_type_variants` / `coalesce_get_node_type_variant` / `coalesce_generate_set_workspace_node_template_from_variant`
 4. Adapt the pattern with user-specific data
-5. Create with `create-workspace-node-from-predecessor` or pipeline tools
+5. Create with `coalesce_create_workspace_node_from_predecessor` or pipeline tools
 
 ## Parallel vs Sequential Tool Use
 

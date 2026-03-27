@@ -61,7 +61,7 @@ describe("Run Tools", () => {
 
   it("sanitizes userCredentials from run read tool output", async () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
     const client = createMockClient();
 
     client.get.mockImplementation((path: string) => {
@@ -94,18 +94,18 @@ describe("Run Tools", () => {
 
     registerRunTools(server, client as any);
 
-    const listRunsHandler = toolSpy.mock.calls.find((call) => call[0] === "list-runs")?.[4] as
+    const listRunsHandler = toolSpy.mock.calls.find((call) => call[0] === "coalesce_list_runs")?.[2] as
       | ((params: Record<string, unknown>) => Promise<{ content: { text: string }[] }>)
       | undefined;
-    const getRunHandler = toolSpy.mock.calls.find((call) => call[0] === "get-run")?.[4] as
+    const getRunHandler = toolSpy.mock.calls.find((call) => call[0] === "coalesce_get_run")?.[2] as
       | ((params: { runID: string }) => Promise<{ content: { text: string }[] }>)
       | undefined;
     const getRunResultsHandler = toolSpy.mock.calls.find(
-      (call) => call[0] === "get-run-results"
-    )?.[4] as
+      (call) => call[0] === "coalesce_get_run_results"
+    )?.[2] as
       | ((params: { runID: string }) => Promise<{ content: { text: string }[] }>)
       | undefined;
-    const runStatusHandler = toolSpy.mock.calls.find((call) => call[0] === "run-status")?.[4] as
+    const runStatusHandler = toolSpy.mock.calls.find((call) => call[0] === "coalesce_run_status")?.[2] as
       | ((params: { runCounter: number }) => Promise<{ content: { text: string }[] }>)
       | undefined;
 

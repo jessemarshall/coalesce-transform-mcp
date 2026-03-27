@@ -66,7 +66,7 @@ describe("Pipeline Tools", () => {
 
   it("plan-pipeline tool accepts ref-based SQL unchanged", async () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
     const client = createMockClient();
 
     client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
@@ -89,9 +89,9 @@ describe("Pipeline Tools", () => {
     registerPipelineTools(server, client as any);
 
     const planToolCall = toolSpy.mock.calls.find(
-      (call) => call[0] === "plan-pipeline"
+      (call) => call[0] === "coalesce_plan_pipeline"
     );
-    const handler = planToolCall?.[4] as
+    const handler = planToolCall?.[2] as
       | ((params: { workspaceID: string; sql: string }) => Promise<{
           isError?: boolean;
           content: { type: "text"; text: string }[];
@@ -129,7 +129,7 @@ describe("Pipeline Tools", () => {
     vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
     const client = createMockClient();
 
     client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
@@ -151,9 +151,9 @@ describe("Pipeline Tools", () => {
     registerPipelineTools(server, client as any);
 
     const planToolCall = toolSpy.mock.calls.find(
-      (call) => call[0] === "plan-pipeline"
+      (call) => call[0] === "coalesce_plan_pipeline"
     );
-    const handler = planToolCall?.[4] as
+    const handler = planToolCall?.[2] as
       | ((params: {
           workspaceID: string;
           goal: string;
@@ -217,7 +217,7 @@ describe("Pipeline Tools", () => {
 
   it("create-pipeline-from-sql tool accepts ref-based SQL unchanged", async () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
     const client = createMockClient();
 
     client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
@@ -240,9 +240,9 @@ describe("Pipeline Tools", () => {
     registerPipelineTools(server, client as any);
 
     const createToolCall = toolSpy.mock.calls.find(
-      (call) => call[0] === "create-pipeline-from-sql"
+      (call) => call[0] === "coalesce_create_pipeline_from_sql"
     );
-    const handler = createToolCall?.[4] as
+    const handler = createToolCall?.[2] as
       | ((params: { workspaceID: string; sql: string }) => Promise<{
           isError?: boolean;
           content: { type: "text"; text: string }[];
@@ -1657,7 +1657,7 @@ describe("Pipeline Tools", () => {
 
   it("create-pipeline-from-sql tool executes when confirmed=true without elicitation", async () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
     const client = createMockClient();
     registerPipelineTools(server, client as any);
 
@@ -1690,9 +1690,9 @@ describe("Pipeline Tools", () => {
 
     const elicitSpy = vi.spyOn(server.server, "elicitInput");
     const createToolCall = toolSpy.mock.calls.find(
-      (call) => call[0] === "create-pipeline-from-sql"
+      (call) => call[0] === "coalesce_create_pipeline_from_sql"
     );
-    const handler = createToolCall?.[4] as
+    const handler = createToolCall?.[2] as
       | ((params: { workspaceID: string; sql: string; confirmed?: boolean; confirmationToken?: string }) => Promise<{
           structuredContent?: Record<string, unknown>;
         }>)

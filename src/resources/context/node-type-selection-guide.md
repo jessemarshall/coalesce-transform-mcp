@@ -90,7 +90,7 @@ When creating pipeline nodes, choose the node type based on the actual purpose o
 | Mistake | Why It's Wrong | Correct Approach |
 |---------|---------------|-----------------|
 | Using Dynamic Tables for batch ETL | Dynamic Tables add continuous compute cost and are for near-real-time refresh | Use Stage or Work with table materialization |
-| Picking node type by ID (e.g., "65") without `plan-pipeline` | The agent doesn't know what the ID maps to or if it's appropriate | Always call `plan-pipeline` first |
+| Picking node type by ID (e.g., "65") without `coalesce_plan_pipeline` | The agent doesn't know what the ID maps to or if it's appropriate | Always call `coalesce_plan_pipeline` first |
 | Using Dimension/Fact for GROUP BY | GROUP BY is a transform, not a dimensional model | Use Stage or Work |
-| Skipping `plan-pipeline` and guessing "Stage" | May miss better options or select an inappropriate type | Always call `plan-pipeline` with `repoPath` |
+| Skipping `coalesce_plan_pipeline` and guessing "Stage" | May miss better options or select an inappropriate type | Always call `coalesce_plan_pipeline` with `repoPath` |
 | Using Incremental Load for small tables | Incremental overhead isn't worth it for fast full refreshes | Use Stage with full refresh |

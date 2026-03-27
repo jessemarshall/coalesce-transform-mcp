@@ -10,40 +10,40 @@ Prefer list/get discovery tools over guessing IDs from URLs or names.
 
 ### Project IDs
 
-- Use `list-projects` to browse projects.
-- Use `get-project` when you already know the `projectID`.
+- Use `coalesce_list_projects` to browse projects.
+- Use `coalesce_get_project` when you already know the `projectID`.
 
 ### Workspace IDs
 
-- Use `list-workspaces()` to get all workspaces across projects.
-- Use `list-workspaces({ projectID })` to get workspaces for a specific project.
+- Use `coalesce_list_workspaces()` to get all workspaces across projects.
+- Use `coalesce_list_workspaces({ projectID })` to get workspaces for a specific project.
 
 ### Job IDs
 
 - Jobs are listed by environment but created/updated/deleted by workspace.
-- Use `list-environment-jobs({ environmentID })` to discover job IDs.
+- Use `coalesce_list_environment_jobs({ environmentID })` to discover job IDs.
 
-If the user gives a job name, resolve it to a job ID before calling `start-run`.
+If the user gives a job name, resolve it to a job ID before calling `coalesce_start_run`.
 
 ### Environment IDs
 
-- Use `list-environments` to discover environments by name.
-- Use `get-environment` only after you already know the `environmentID`.
+- Use `coalesce_list_environments` to discover environments by name.
+- Use `coalesce_get_environment` only after you already know the `environmentID`.
 
 ### Node IDs
 
-- Use `list-workspace-nodes` when working in a workspace.
-- Use `list-environment-nodes` when working against an environment.
-- Use `get-workspace-node` or `get-environment-node` only after you know the node ID.
+- Use `coalesce_list_workspace_nodes` when working in a workspace.
+- Use `coalesce_list_environment_nodes` when working against an environment.
+- Use `coalesce_get_workspace_node` or `coalesce_get_environment_node` only after you know the node ID.
 
 ### Run IDs and Run Counters
 
-- Use `list-runs` to discover recent runs when needed.
+- Use `coalesce_list_runs` to discover recent runs when needed.
 - For run ID format details (runCounter vs UUID) and operational usage, see `coalesce://context/run-operations`.
 
 ### Org IDs
 
-- For org ID requirements in run operations (cancel-run), see `coalesce://context/run-operations`.
+- For org ID requirements in run operations (coalesce_cancel_run), see `coalesce://context/run-operations`.
 
 ## Good Defaults
 

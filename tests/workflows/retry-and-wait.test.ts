@@ -56,7 +56,7 @@ describe("retry-and-wait workflow", () => {
 
   it("sends MCP progress notifications while waiting for the retry run", async () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
     const client = createMockClient();
 
     client.get.mockImplementation((path: string) => {
@@ -74,8 +74,8 @@ describe("retry-and-wait workflow", () => {
 
     registerRetryAndWait(server, client as any);
 
-    const toolCall = toolSpy.mock.calls.find((call) => call[0] === "retry-and-wait");
-    const handler = toolCall?.[4] as
+    const toolCall = toolSpy.mock.calls.find((call) => call[0] === "coalesce_retry_and_wait");
+    const handler = toolCall?.[2] as
       | ((params: {
           runDetails: { runID: string };
           pollInterval?: number;

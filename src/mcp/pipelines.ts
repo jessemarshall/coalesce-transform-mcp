@@ -16,6 +16,7 @@ import {
 import { NodeConfigInputSchema } from "../schemas/node-payloads.js";
 import {
   buildJsonToolResponse,
+  getToolOutputSchema,
   handleToolError,
   type JsonToolResponse,
   READ_ONLY_ANNOTATIONS,
@@ -162,11 +163,11 @@ function writePlanSummary(plan: unknown, fingerprint: string): string | null {
     `This file is automatically invalidated when repo-backed ranking inputs or`,
     `workspace node types change enough to alter the planner's ranked guidance.`,
     `If you install new packages, commit new node type definitions, or otherwise`,
-    `change ranking-relevant repo content, call plan-pipeline again to refresh.`,
+    `change ranking-relevant repo content, call coalesce_plan_pipeline again to refresh.`,
     ``,
     `## Ranked Node Types`,
     ``,
-    `Use these node types when calling create-workspace-node-from-predecessor.`,
+    `Use these node types when calling coalesce_create_workspace_node_from_predecessor.`,
     `Pick the type whose family matches your pipeline layer (stage, dimension, fact, etc.).`,
     ``,
   ];
@@ -190,7 +191,7 @@ function writePlanSummary(plan: unknown, fingerprint: string): string | null {
   if (supportedNodeTypes.length > 0) {
     lines.push(`## Auto-Executable Types`);
     lines.push(``);
-    lines.push(`These types support automatic creation via create-workspace-node-from-predecessor:`);
+    lines.push(`These types support automatic creation via coalesce_create_workspace_node_from_predecessor:`);
     lines.push(``);
     for (const nodeType of supportedNodeTypes) {
       lines.push(`- ${nodeType}`);
@@ -268,7 +269,7 @@ function buildPlanSummaryForElicitation(plan: unknown): string {
 
 async function requirePipelineCreationApproval(
   server: McpServer,
-  toolName: "create-pipeline-from-plan" | "create-pipeline-from-sql",
+  toolName: "coalesce_create_pipeline_from_plan" | "coalesce_create_pipeline_from_sql",
   plan: unknown,
   confirmed?: boolean,
   confirmationToken?: string,
@@ -346,35 +347,39 @@ export function registerPipelineTools(
   server: McpServer,
   client: CoalesceClient
 ): void {
-  server.tool(
-    "plan-pipeline",
-    "Plan a Coalesce pipeline by discovering and ranking all available node types from the repo. ALWAYS call this before creating nodes to get the correct node type.\n\nThe planner scans the repo for all committed node type definitions, scores them against your use case, and returns ranked candidates. When available, it also returns a cached `planSummaryUri` MCP resource for the ranked node type summary so you can reuse that guidance throughout the pipeline without calling the planner again.\n\nIMPORTANT — DO NOT WRITE SQL: The `sql` parameter is ONLY for converting SQL that the USER provided (pasted or typed). If you are building a pipeline yourself, provide `goal` + `sourceNodeIDs` instead.\n\nPREREQUISITE: Before calling this tool, use list-workspace-nodes to discover available source/upstream nodes and their IDs in the workspace.\n\nPreferred approach: Provide `goal` AND `sourceNodeIDs`. The planner selects the best node type and scaffolds the pipeline. Without sourceNodeIDs, the planner returns clarification questions.\n\nUser-provided SQL: When a user pastes SQL, pass it in `sql`. The planner parses refs and column projections.\n\nConsult coalesce://context/node-type-corpus for node type patterns and metadata structures.",
+  server.registerTool(
+    "coalesce_plan_pipeline",
     {
-      workspaceID: z.string().describe("The workspace ID"),
-      goal: z.string().optional().describe("Optional natural-language pipeline goal"),
-      sql: z.string().optional().describe("The user's EXACT SQL, copied verbatim. It may use raw table names or existing Coalesce {{ ref() }} syntax. Do NOT rewrite between SQL styles or modify the query. If you are building a pipeline yourself, do NOT write SQL — use goal + sourceNodeIDs instead."),
-      targetName: z.string().optional().describe("Optional target node name override"),
-      targetNodeType: z
-        .string()
-        .optional()
-        .describe("Optional node type override. When omitted, the planner ranks repo-backed and observed workspace node types for the use case."),
-      description: z.string().optional().describe("Optional node description"),
-      configOverrides: NodeConfigInputSchema
-        .optional()
-        .describe("Optional config overrides to merge into the planned node body."),
-      locationName: z.string().optional().describe("Optional target locationName"),
-      database: z.string().optional().describe("Optional target database"),
-      schema: z.string().optional().describe("Optional target schema"),
-      repoPath: z
-        .string()
-        .optional()
-        .describe("Optional local committed Coalesce repo path for repo-first node-type ranking. Falls back to COALESCE_REPO_PATH when omitted."),
-      sourceNodeIDs: z
-        .array(z.string())
-        .optional()
-        .describe("Optional upstream node IDs when planning from a non-SQL goal."),
+      title: "Plan Pipeline",
+      description: "Plan a Coalesce pipeline by discovering and ranking all available node types from the repo. ALWAYS call this before creating nodes to get the correct node type.\n\nThe planner scans the repo for all committed node type definitions, scores them against your use case, and returns ranked candidates. When available, it also returns a cached `planSummaryUri` MCP resource for the ranked node type summary so you can reuse that guidance throughout the pipeline without calling the planner again.\n\nIMPORTANT — DO NOT WRITE SQL: The `sql` parameter is ONLY for converting SQL that the USER provided (pasted or typed). If you are building a pipeline yourself, provide `goal` + `sourceNodeIDs` instead.\n\nPREREQUISITE: Before calling this tool, use coalesce_list_workspace_nodes to discover available source/upstream nodes and their IDs in the workspace.\n\nPreferred approach: Provide `goal` AND `sourceNodeIDs`. The planner selects the best node type and scaffolds the pipeline. Without sourceNodeIDs, the planner returns clarification questions.\n\nUser-provided SQL: When a user pastes SQL, pass it in `sql`. The planner parses refs and column projections.\n\nConsult coalesce://context/node-type-corpus for node type patterns and metadata structures.",
+      inputSchema: z.object({
+        workspaceID: z.string().describe("The workspace ID"),
+        goal: z.string().optional().describe("Optional natural-language pipeline goal"),
+        sql: z.string().optional().describe("The user's EXACT SQL, copied verbatim. It may use raw table names or existing Coalesce {{ ref() }} syntax. Do NOT rewrite between SQL styles or modify the query. If you are building a pipeline yourself, do NOT write SQL — use goal + sourceNodeIDs instead."),
+        targetName: z.string().optional().describe("Optional target node name override"),
+        targetNodeType: z
+          .string()
+          .optional()
+          .describe("Optional node type override. When omitted, the planner ranks repo-backed and observed workspace node types for the use case."),
+        description: z.string().optional().describe("Optional node description"),
+        configOverrides: NodeConfigInputSchema
+          .optional()
+          .describe("Optional config overrides to merge into the planned node body."),
+        locationName: z.string().optional().describe("Optional target locationName"),
+        database: z.string().optional().describe("Optional target database"),
+        schema: z.string().optional().describe("Optional target schema"),
+        repoPath: z
+          .string()
+          .optional()
+          .describe("Optional local committed Coalesce repo path for repo-first node-type ranking. Falls back to COALESCE_REPO_PATH when omitted."),
+        sourceNodeIDs: z
+          .array(z.string())
+          .optional()
+          .describe("Optional upstream node IDs when planning from a non-SQL goal."),
+      }),
+      outputSchema: getToolOutputSchema("coalesce_plan_pipeline"),
+      annotations: READ_ONLY_ANNOTATIONS,
     },
-    READ_ONLY_ANNOTATIONS,
     async (params) => {
       try {
         const result = await planPipeline(client, params);
@@ -414,56 +419,60 @@ export function registerPipelineTools(
               ...(selectedNodeType ? {
                 USE_THIS_NODE_TYPE: selectedNodeType,
                 ...(selectedDisplayName ? { nodeTypeDisplayName: selectedDisplayName } : {}),
-                nodeTypeInstruction: `Use nodeType "${selectedNodeType}" when calling create-workspace-node-from-predecessor or create-workspace-node-from-scratch. Do NOT use "Source" or any other type unless the plan explicitly recommends it.`,
+                nodeTypeInstruction: `Use nodeType "${selectedNodeType}" when calling coalesce_create_workspace_node_from_predecessor or coalesce_create_workspace_node_from_scratch. Do NOT use "Source" or any other type unless the plan explicitly recommends it.`,
               } : {}),
               ...result,
               planSummaryUri: summaryPath,
               planCached: !!cached,
               instruction: cached
-                ? `Cached node type rankings found at planSummaryUri (ranking fingerprint unchanged). Reference this resource for all subsequent node creations — no need to call plan-pipeline again unless repo-backed ranking inputs or workspace node types change enough to alter the planner's ranking.`
+                ? `Cached node type rankings found at planSummaryUri (ranking fingerprint unchanged). Reference this resource for all subsequent node creations — no need to call coalesce_plan_pipeline again unless repo-backed ranking inputs or workspace node types change enough to alter the planner's ranking.`
                 : `Node type rankings saved to planSummaryUri. Reference this resource for all subsequent node creations in this pipeline. The cache auto-invalidates when repo-backed ranking inputs or workspace node types change enough to alter the planner's ranking.`,
             }
           : {
               ...(selectedNodeType ? {
                 USE_THIS_NODE_TYPE: selectedNodeType,
                 ...(selectedDisplayName ? { nodeTypeDisplayName: selectedDisplayName } : {}),
-                nodeTypeInstruction: `Use nodeType "${selectedNodeType}" when calling create-workspace-node-from-predecessor or create-workspace-node-from-scratch. Do NOT use "Source" or any other type unless the plan explicitly recommends it.`,
+                nodeTypeInstruction: `Use nodeType "${selectedNodeType}" when calling coalesce_create_workspace_node_from_predecessor or coalesce_create_workspace_node_from_scratch. Do NOT use "Source" or any other type unless the plan explicitly recommends it.`,
               } : {}),
               ...result,
             };
-        return buildJsonToolResponse("plan-pipeline", response);
+        return buildJsonToolResponse("coalesce_plan_pipeline", response);
       } catch (error) {
         return handleToolError(error);
       }
     }
   );
 
-  server.tool(
-    "create-pipeline-from-plan",
-    "Create a Coalesce pipeline from a previously approved plan. Projection-capable node types execute by creating predecessor-based nodes first and then persisting the final full node body with set-workspace-node.",
+  server.registerTool(
+    "coalesce_create_pipeline_from_plan",
     {
-      workspaceID: z.string().describe("The workspace ID"),
-      plan: PipelinePlanSchema.describe("The plan object returned by plan-pipeline."),
-      confirmed: z
-        .boolean()
-        .optional()
-        .describe("Set to true only after presenting the plan to the user and receiving explicit approval. Must be paired with the confirmationToken returned by the prior STOP_AND_CONFIRM response."),
-      confirmationToken: z
-        .string()
-        .optional()
-        .describe("The token returned in the STOP_AND_CONFIRM response. Required when confirmed=true to prove the plan was presented to the user."),
-      dryRun: z
-        .boolean()
-        .optional()
-        .describe("When true, validate the plan and return it without creating any nodes."),
+      title: "Create Pipeline from Plan",
+      description: "Create a Coalesce pipeline from a previously approved plan. Pass the exact plan object returned by coalesce_plan_pipeline. Projection-capable node types execute by creating predecessor-based nodes first and then persisting the final full node body via coalesce_set_workspace_node.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - plan (object, required): The exact plan object returned by coalesce_plan_pipeline\n  - confirmed (boolean, optional): Set to true after user approves the plan. Must be paired with confirmationToken\n  - confirmationToken (string, optional): Token from prior STOP_AND_CONFIRM response. Required when confirmed=true\n  - dryRun (boolean, optional): When true, validate without creating nodes\n\nReturns:\n  { created: boolean, nodes?: CreatedNode[], warnings?: string[] }",
+      inputSchema: z.object({
+        workspaceID: z.string().describe("The workspace ID"),
+        plan: PipelinePlanSchema.describe("The plan object returned by coalesce_plan_pipeline."),
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Set to true only after presenting the plan to the user and receiving explicit approval. Must be paired with the confirmationToken returned by the prior STOP_AND_CONFIRM response."),
+        confirmationToken: z
+          .string()
+          .optional()
+          .describe("The token returned in the STOP_AND_CONFIRM response. Required when confirmed=true to prove the plan was presented to the user."),
+        dryRun: z
+          .boolean()
+          .optional()
+          .describe("When true, validate the plan and return it without creating any nodes."),
+      }),
+      outputSchema: getToolOutputSchema("coalesce_create_pipeline_from_plan"),
+      annotations: WRITE_ANNOTATIONS,
     },
-    WRITE_ANNOTATIONS,
     async (params) => {
       try {
         if (!params.dryRun) {
           const approvalResponse = await requirePipelineCreationApproval(
             server,
-            "create-pipeline-from-plan",
+            "coalesce_create_pipeline_from_plan",
             params.plan,
             params.confirmed,
             params.confirmationToken,
@@ -475,7 +484,7 @@ export function registerPipelineTools(
         }
 
         const result = await createPipelineFromPlan(client, params);
-        const response = buildJsonToolResponse("create-pipeline-from-plan", result);
+        const response = buildJsonToolResponse("coalesce_create_pipeline_from_plan", result);
         if (isPlainObject(result) && result.isError) {
           return { ...response, isError: true };
         }
@@ -486,49 +495,53 @@ export function registerPipelineTools(
     }
   );
 
-  server.tool(
-    "create-pipeline-from-sql",
-    "Plan and create a Coalesce pipeline from user-provided SQL. Pass the user's EXACT SQL unchanged. The SQL may use raw table names or already contain Coalesce {{ ref() }} syntax if that is what the user provided. Do NOT rewrite between styles or otherwise modify the query. The planner resolves workspace sources automatically and generates a Coalesce-compatible joinCondition for the final node.\n\nIf you are building a pipeline yourself, use declarative tools directly: create-workspace-node-from-predecessor → convert-join-to-aggregation → replace-workspace-node-columns.\n\nThis tool validates candidate node types against currently observed workspace nodes. If a selected type is not observed, the plan will include a warning asking the user to confirm installation in Coalesce.\n\nConsult coalesce://context/node-type-corpus for node type patterns and metadata structures.",
+  server.registerTool(
+    "coalesce_create_pipeline_from_sql",
     {
-      workspaceID: z.string().describe("The workspace ID"),
-      sql: z.string().describe("The user's EXACT SQL, copied verbatim. It may use raw table names or existing Coalesce {{ ref() }} syntax. Do NOT rewrite between SQL styles or modify it in any way. Pass it exactly as the user provided it."),
-      goal: z.string().optional().describe("Optional business goal or context for the SQL"),
-      targetName: z.string().optional().describe("Optional target node name override"),
-      targetNodeType: z
-        .string()
-        .optional()
-        .describe("Optional node type override. When omitted, the planner ranks repo-backed and observed workspace node types for the use case."),
-      description: z.string().optional().describe("Optional node description"),
-      configOverrides: NodeConfigInputSchema
-        .optional()
-        .describe("Optional config overrides to merge into the final node body."),
-      locationName: z.string().optional().describe("Optional target locationName"),
-      database: z.string().optional().describe("Optional target database"),
-      schema: z.string().optional().describe("Optional target schema"),
-      repoPath: z
-        .string()
-        .optional()
-        .describe("Optional local committed Coalesce repo path for repo-first node-type ranking. Falls back to COALESCE_REPO_PATH when omitted."),
-      confirmed: z
-        .boolean()
-        .optional()
-        .describe("Set to true only after presenting the ready plan to the user and receiving explicit approval. Must be paired with the confirmationToken returned by the prior STOP_AND_CONFIRM response."),
-      confirmationToken: z
-        .string()
-        .optional()
-        .describe("The token returned in the STOP_AND_CONFIRM response. Required when confirmed=true to prove the plan was presented to the user."),
-      dryRun: z
-        .boolean()
-        .optional()
-        .describe("When true, return the generated plan without creating nodes."),
+      title: "Create Pipeline from SQL",
+      description: "Plan and create a Coalesce pipeline from user-provided SQL. Pass the user's EXACT SQL unchanged. The SQL may use raw table names or already contain Coalesce {{ ref() }} syntax if that is what the user provided. Do NOT rewrite between styles or otherwise modify the query. The planner resolves workspace sources automatically and generates a Coalesce-compatible joinCondition for the final node.\n\nIf you are building a pipeline yourself, use declarative tools directly: coalesce_create_workspace_node_from_predecessor → coalesce_convert_join_to_aggregation → coalesce_replace_workspace_node_columns.\n\nThis tool validates candidate node types against currently observed workspace nodes. If a selected type is not observed, the plan will include a warning asking the user to confirm installation in Coalesce.\n\nConsult coalesce://context/node-type-corpus for node type patterns and metadata structures.",
+      inputSchema: z.object({
+        workspaceID: z.string().describe("The workspace ID"),
+        sql: z.string().describe("The user's EXACT SQL, copied verbatim. It may use raw table names or existing Coalesce {{ ref() }} syntax. Do NOT rewrite between SQL styles or modify it in any way. Pass it exactly as the user provided it."),
+        goal: z.string().optional().describe("Optional business goal or context for the SQL"),
+        targetName: z.string().optional().describe("Optional target node name override"),
+        targetNodeType: z
+          .string()
+          .optional()
+          .describe("Optional node type override. When omitted, the planner ranks repo-backed and observed workspace node types for the use case."),
+        description: z.string().optional().describe("Optional node description"),
+        configOverrides: NodeConfigInputSchema
+          .optional()
+          .describe("Optional config overrides to merge into the final node body."),
+        locationName: z.string().optional().describe("Optional target locationName"),
+        database: z.string().optional().describe("Optional target database"),
+        schema: z.string().optional().describe("Optional target schema"),
+        repoPath: z
+          .string()
+          .optional()
+          .describe("Optional local committed Coalesce repo path for repo-first node-type ranking. Falls back to COALESCE_REPO_PATH when omitted."),
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Set to true only after presenting the ready plan to the user and receiving explicit approval. Must be paired with the confirmationToken returned by the prior STOP_AND_CONFIRM response."),
+        confirmationToken: z
+          .string()
+          .optional()
+          .describe("The token returned in the STOP_AND_CONFIRM response. Required when confirmed=true to prove the plan was presented to the user."),
+        dryRun: z
+          .boolean()
+          .optional()
+          .describe("When true, return the generated plan without creating nodes."),
+      }),
+      outputSchema: getToolOutputSchema("coalesce_create_pipeline_from_sql"),
+      annotations: WRITE_ANNOTATIONS,
     },
-    WRITE_ANNOTATIONS,
     async (params) => {
       try {
         const plan = await planPipeline(client, params);
 
         if (params.dryRun || plan.status !== "ready") {
-          return buildJsonToolResponse("create-pipeline-from-sql", {
+          return buildJsonToolResponse("coalesce_create_pipeline_from_sql", {
             created: false,
             ...(params.dryRun ? { dryRun: true } : {}),
             plan,
@@ -543,7 +556,7 @@ export function registerPipelineTools(
 
         const approvalResponse = await requirePipelineCreationApproval(
           server,
-          "create-pipeline-from-sql",
+          "coalesce_create_pipeline_from_sql",
           plan,
           params.confirmed,
           params.confirmationToken,
@@ -561,7 +574,7 @@ export function registerPipelineTools(
           plan,
           ...((isPlainObject(execution) ? execution : { execution }) as Record<string, unknown>),
         };
-        const response = buildJsonToolResponse("create-pipeline-from-sql", result);
+        const response = buildJsonToolResponse("coalesce_create_pipeline_from_sql", result);
         if (isPlainObject(execution) && execution.isError) {
           return { ...response, isError: true };
         }

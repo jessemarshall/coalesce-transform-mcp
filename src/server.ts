@@ -20,7 +20,6 @@ import { registerGetRunDetails } from "./workflows/get-run-details.js";
 import { registerGetEnvironmentOverview } from "./workflows/get-environment-overview.js";
 import { registerResources } from "./resources/index.js";
 import { registerPrompts } from "./prompts/index.js";
-import { ensureJsonToolOutputSchemas } from "./coalesce/types.js";
 
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json") as { version: string };
@@ -28,15 +27,14 @@ const { version } = require("../package.json") as { version: string };
 export const SERVER_NAME = "coalesce-transform-mcp";
 export const SERVER_VERSION = version;
 export const SERVER_INSTRUCTIONS = [
-  "Resolve IDs before mutating. Use list-workspaces for workspace IDs, list-environments for environment IDs, list-environment-jobs for job IDs.",
-  "Always use plan-pipeline before creating pipeline nodes, and wait for explicit user approval before calling creation tools.",
+  "Resolve IDs before mutating. Use coalesce_list_workspaces for workspace IDs, coalesce_list_environments for environment IDs, coalesce_list_environment_jobs for job IDs.",
+  "Always use coalesce_plan_pipeline before creating pipeline nodes, and wait for explicit user approval before calling creation tools.",
   "Inspect warning, validation, resultsError, incomplete, timedOut, and cleanupFailures fields before continuing.",
-  "Prefer run-and-wait or retry-and-wait when the user wants an end-to-end run outcome in one call.",
+  "Prefer coalesce_run_and_wait or coalesce_retry_and_wait when the user wants an end-to-end run outcome in one call.",
   "Large payloads may be exposed through coalesce://cache resource URIs; read the resource rather than assuming inline JSON.",
 ].join("\n");
 
 export function registerServerSurface(server: McpServer, client: CoalesceClient): void {
-  ensureJsonToolOutputSchemas(server);
   registerEnvironmentTools(server, client);
   registerNodeTools(server, client);
   registerPipelineTools(server, client);

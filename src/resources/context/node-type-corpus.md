@@ -11,26 +11,26 @@ Repo-backed workflow:
 - Install the package in Coalesce
 - Commit the workspace branch
 - Update the local repo clone to that branch
-- Use `list-repo-packages`, `list-repo-node-types`, `get-repo-node-type-definition`, or `generate-set-workspace-node-template`
+- Use `coalesce_list_repo_packages`, `coalesce_list_repo_node_types`, `coalesce_get_repo_node_type_definition`, or `coalesce_generate_set_workspace_node_template`
 - Prefer explicit `repoPath` on repo-aware calls; when omitted, tools fall back to `COALESCE_REPO_PATH`
 - There is no server-wide repo mapping in v1
 
 ## Repo-Aware Tools
 
-### `list-repo-packages`
+### `coalesce_list_repo_packages`
 Inspect committed `packages/*.yml`
 Use this to discover exact package aliases and see which enabled node-type IDs have committed definitions
 
-### `list-repo-node-types`
+### `coalesce_list_repo_node_types`
 List exact resolvable node-type identifiers from committed `nodeTypes/`
 Use this to confirm the exact direct identifier or `alias:::id` value before generating templates
 
-### `get-repo-node-type-definition`
+### `coalesce_get_repo_node_type_definition`
 Resolve one exact node type from the committed repo
 Returns the parsed outer definition plus raw and parsed `metadata.nodeMetadataSpec`
 
-### `generate-set-workspace-node-template`
-Generate a `set-workspace-node` body template from either:
+### `coalesce_generate_set_workspace_node_template`
+Generate a `coalesce_set_workspace_node` body template from either:
 - a raw definition object
 - a committed repo definition resolved by `repoPath` + `nodeType`
 
@@ -38,15 +38,15 @@ In repo mode, this preserves the exact resolved node type, including package-bac
 
 ## Corpus Tools
 
-### `search-node-type-variants`
+### `coalesce_search_node_type_variants`
 Search for node type families (e.g., "stage", "dimension")
 Returns variants with their config schema and metadata examples
 
-### `get-node-type-variant`
+### `coalesce_get_node_type_variant`
 Get exact variant definition by key
 Use this to get the authoritative structure for a node type
 
-### `list-workspace-node-types` *(NEW)*
+### `coalesce_list_workspace_node_types` *(NEW)*
 Scan workspace nodes and return distinct observed node types
 Use this to inspect current workspace usage and exact identifiers before recommending
 The response includes `basis: "observed_nodes"` to make the contract explicit
@@ -93,20 +93,20 @@ Node type definitions contain config items with `"type": "columnSelector"`. Thes
 
 **Discovery workflow:**
 
-1. Use `get-repo-node-type-definition` to read the node type definition from the local repo
+1. Use `coalesce_get_repo_node_type_definition` to read the node type definition from the local repo
 2. Find config items where `type` is `"columnSelector"`
 3. The `attributeName` field tells you what property to set on columns
-4. Set `attributeName: true` on the appropriate columns via `update-workspace-node` or `replace-workspace-node-columns`
+4. Set `attributeName: true` on the appropriate columns via `coalesce_update_workspace_node` or `coalesce_replace_workspace_node_columns`
 
 **Important:** Attribute names vary by node type and package. Always look them up in the actual node type definition — do not guess or hardcode attribute names.
 
 ## Workflow
 
-1. **Discover observed types:** `list-workspace-node-types`
+1. **Discover observed types:** `coalesce_list_workspace_node_types`
 2. **Check if recommended type is already observed:** Compare to workspace types
 3. **If unobserved:** Do not claim it is unavailable; confirm installation in the UI before proceeding
 4. **If a committed local repo is available:** Use repo-aware tools with `repoPath` or `COALESCE_REPO_PATH`
-5. **If repo resolution fails or the definition is missing:** Use `search-node-type-variants` and `get-node-type-variant`
+5. **If repo resolution fails or the definition is missing:** Use `coalesce_search_node_type_variants` and `coalesce_get_node_type_variant`
 6. **Adapt example:** Replace placeholder values with user-specific data
 7. **Create/update:** Use appropriate tool with correct structure
 
@@ -142,25 +142,25 @@ Prefer the full package-prefixed format when you know it. Using just the numeric
 
 ### Discovering Node Type Format
 
-Use `list-workspace-node-types` to see the exact format of observed node types. The response will show package-prefixed types like `"IncrementalLoading:::230"` when those identifiers are already present in current workspace nodes.
+Use `coalesce_list_workspace_node_types` to see the exact format of observed node types. The response will show package-prefixed types like `"IncrementalLoading:::230"` when those identifiers are already present in current workspace nodes.
 
 ## Template Usage
 
 ### Template Generation Hierarchy
 
-1. **For committed local repo definitions:** Use `generate-set-workspace-node-template` in repo mode
+1. **For committed local repo definitions:** Use `coalesce_generate_set_workspace_node_template` in repo mode
    - Resolves the exact committed definition from `repoPath` or `COALESCE_REPO_PATH`
    - Preserves exact direct or package-backed node-type identifiers
    - Best choice when the local repo contains the definition
 
-2. **For known corpus variants:** Use `get-node-type-variant`
+2. **For known corpus variants:** Use `coalesce_get_node_type_variant`
    - Returns exact variant definition from the committed corpus snapshot
    - Best fallback when repo-backed resolution is unavailable
 
-3. **For generating templates from corpus variants:** Use `generate-set-workspace-node-template-from-variant`
+3. **For generating templates from corpus variants:** Use `coalesce_generate_set_workspace_node_template_from_variant`
    - Converts a corpus variant into an editable YAML-friendly template
    - Use this when the repo does not contain the committed definition
 
 4. **For discovery:** Search first, then get variant
-   - Use `search-node-type-variants` to find the right fallback variant
-   - Then use `get-node-type-variant` or `generate-set-workspace-node-template-from-variant`
+   - Use `coalesce_search_node_type_variants` to find the right fallback variant
+   - Then use `coalesce_get_node_type_variant` or `coalesce_generate_set_workspace_node_template_from_variant`

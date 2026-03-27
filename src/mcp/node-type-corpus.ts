@@ -24,8 +24,9 @@ import {
 import { getWorkspaceNode } from "../coalesce/api/nodes.js";
 import {
   buildJsonToolResponse,
+  getToolOutputSchema,
   handleToolError,
-  READ_ONLY_ANNOTATIONS,
+  READ_ONLY_LOCAL_ANNOTATIONS,
 } from "../coalesce/types.js";
 import { isPlainObject } from "../utils.js";
 
@@ -55,35 +56,39 @@ export function registerNodeTypeCorpusTools(
   server: McpServer,
   client: CoalesceClient
 ): void {
-  server.tool(
-    "search-node-type-variants",
-    "Search the generated node-type corpus snapshot by normalized family, package, primitive, or support status. This tool queries the committed snapshot and does not require access to the original external node source repo at runtime.",
+  server.registerTool(
+    "coalesce_search_node_type_variants",
     {
-      normalizedFamily: z
-        .string()
-        .optional()
-        .describe("Case-insensitive exact match against the normalized family name."),
-      packageName: z
-        .string()
-        .optional()
-        .describe("Case-insensitive exact match against one of the package names that carries the variant."),
-      primitive: z
-        .string()
-        .optional()
-        .describe("Case-insensitive match against a primitive used in the node definition, such as tabular or materializationSelector."),
-      supportStatus: z
-        .enum(["supported", "partial"])
-        .or(z.literal("parse_error"))
-        .optional()
-        .describe("Filter by current MCP support classification."),
-      limit: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe("Maximum number of matches to return. Defaults to 25, max 200."),
+      title: "Search Node Type Variants",
+      description: "Search the generated node-type corpus snapshot by normalized family, package, primitive, or support status. This tool queries the committed snapshot and does not require access to the original external node source repo at runtime.",
+      inputSchema: z.object({
+        normalizedFamily: z
+          .string()
+          .optional()
+          .describe("Case-insensitive exact match against the normalized family name."),
+        packageName: z
+          .string()
+          .optional()
+          .describe("Case-insensitive exact match against one of the package names that carries the variant."),
+        primitive: z
+          .string()
+          .optional()
+          .describe("Case-insensitive match against a primitive used in the node definition, such as tabular or materializationSelector."),
+        supportStatus: z
+          .enum(["supported", "partial"])
+          .or(z.literal("parse_error"))
+          .optional()
+          .describe("Filter by current MCP support classification."),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Maximum number of matches to return. Defaults to 25, max 200."),
+      }),
+      outputSchema: getToolOutputSchema("coalesce_search_node_type_variants"),
+      annotations: READ_ONLY_LOCAL_ANNOTATIONS,
     },
-    READ_ONLY_ANNOTATIONS,
     async (params) => {
       try {
         const snapshot = loadNodeTypeCorpusSnapshot();
@@ -91,26 +96,30 @@ export function registerNodeTypeCorpusTools(
           summary: summarizeNodeTypeCorpus(snapshot),
           ...searchNodeTypeCorpusVariants(snapshot, params),
         };
-        return buildJsonToolResponse("search-node-type-variants", result);
+        return buildJsonToolResponse("coalesce_search_node_type_variants", result);
       } catch (error) {
         return handleToolError(error);
       }
     }
   );
 
-  server.tool(
-    "get-node-type-variant",
-    "Get one node-type corpus variant from the committed snapshot by variantKey. Use search-node-type-variants first when you need discovery.",
+  server.registerTool(
+    "coalesce_get_node_type_variant",
     {
-      variantKey: z.string().describe("The exact node-type corpus variant key."),
+      title: "Get Node Type Variant",
+      description: "Get one node-type corpus variant from the committed snapshot by variantKey. Use coalesce_search_node_type_variants first when you need discovery.",
+      inputSchema: z.object({
+        variantKey: z.string().describe("The exact node-type corpus variant key."),
+      }),
+      outputSchema: getToolOutputSchema("coalesce_get_node_type_variant"),
+      annotations: READ_ONLY_LOCAL_ANNOTATIONS,
     },
-    READ_ONLY_ANNOTATIONS,
     async (params) => {
       try {
         const snapshot = loadNodeTypeCorpusSnapshot();
         const variant = getNodeTypeCorpusVariant(snapshot, params.variantKey);
         return buildJsonToolResponse(
-          "get-node-type-variant",
+          "coalesce_get_node_type_variant",
           sanitizeVariantForResponse(variant)
         );
       } catch (error) {
@@ -119,45 +128,49 @@ export function registerNodeTypeCorpusTools(
     }
   );
 
-  server.tool(
-    "generate-set-workspace-node-template-from-variant",
-    "Generate a set-workspace-node body template from a node-type corpus variant stored in the committed snapshot. This avoids requiring the original external node source repo at runtime, rejects partial variants unless allowPartial=true, and can optionally compare the inferred template against a live workspace node. SQL override controls are removed from returned templates because they are disallowed in this project.",
+  server.registerTool(
+    "coalesce_generate_set_workspace_node_template_from_variant",
     {
-      variantKey: z.string().describe("The exact node-type corpus variant key."),
-      nodeName: z
-        .string()
-        .optional()
-        .describe("Optional node name to inject into the generated template."),
-      nodeType: z
-        .string()
-        .optional()
-        .describe("Optional nodeType override. Defaults to the variant definition capitalized field."),
-      locationName: z
-        .string()
-        .optional()
-        .describe("Optional storage location name to include in the template."),
-      database: z
-        .string()
-        .optional()
-        .describe("Optional database value to include in the template."),
-      schema: z
-        .string()
-        .optional()
-        .describe("Optional schema value to include in the template."),
-      allowPartial: z
-        .boolean()
-        .optional()
-        .describe("When true, allow best-effort generation for variants currently marked partial."),
-      workspaceID: z
-        .string()
-        .optional()
-        .describe("Optional workspace ID for comparing inferred mappings to a live workspace node."),
-      nodeID: z
-        .string()
-        .optional()
-        .describe("Optional node ID for comparing inferred mappings to a live workspace node."),
+      title: "Generate Set Workspace Node Template from Variant",
+      description: "Generate a coalesce_set_workspace_node body template from a node-type corpus variant stored in the committed snapshot. This avoids requiring the original external node source repo at runtime, rejects partial variants unless allowPartial=true, and can optionally compare the inferred template against a live workspace node. SQL override controls are removed from returned templates because they are disallowed in this project.",
+      inputSchema: z.object({
+        variantKey: z.string().describe("The exact node-type corpus variant key."),
+        nodeName: z
+          .string()
+          .optional()
+          .describe("Optional node name to inject into the generated template."),
+        nodeType: z
+          .string()
+          .optional()
+          .describe("Optional nodeType override. Defaults to the variant definition capitalized field."),
+        locationName: z
+          .string()
+          .optional()
+          .describe("Optional storage location name to include in the template."),
+        database: z
+          .string()
+          .optional()
+          .describe("Optional database value to include in the template."),
+        schema: z
+          .string()
+          .optional()
+          .describe("Optional schema value to include in the template."),
+        allowPartial: z
+          .boolean()
+          .optional()
+          .describe("When true, allow best-effort generation for variants currently marked partial."),
+        workspaceID: z
+          .string()
+          .optional()
+          .describe("Optional workspace ID for comparing inferred mappings to a live workspace node."),
+        nodeID: z
+          .string()
+          .optional()
+          .describe("Optional node ID for comparing inferred mappings to a live workspace node."),
+      }),
+      outputSchema: getToolOutputSchema("coalesce_generate_set_workspace_node_template_from_variant"),
+      annotations: READ_ONLY_LOCAL_ANNOTATIONS,
     },
-    READ_ONLY_ANNOTATIONS,
     async (params) => {
       try {
         if ((params.workspaceID && !params.nodeID) || (!params.workspaceID && params.nodeID)) {
@@ -241,7 +254,7 @@ export function registerNodeTypeCorpusTools(
           ...(comparison ? { comparison } : {}),
         };
         return buildJsonToolResponse(
-          "generate-set-workspace-node-template-from-variant",
+          "coalesce_generate_set_workspace_node_template_from_variant",
           result
         );
       } catch (error) {
