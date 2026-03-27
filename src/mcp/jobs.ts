@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
 import {
+  listWorkspaceJobs,
   listEnvironmentJobs,
   createWorkspaceJob,
   getEnvironmentJob,
@@ -23,7 +24,7 @@ export function registerJobTools(
 ): void {
   server.tool(
     "list-jobs",
-    "List all jobs in a Coalesce environment.",
+    "List all jobs in a Coalesce environment. For workspace-scoped listing, use list-workspace-jobs instead.",
     PaginationParams.extend({
       environmentID: z.string().describe("The environment ID"),
     }).shape,
@@ -32,6 +33,23 @@ export function registerJobTools(
       try {
         const result = await listEnvironmentJobs(client, params);
         return buildJsonToolResponse("list-jobs", result);
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "list-workspace-jobs",
+    "List all jobs in a Coalesce workspace. Use this to discover job IDs for update-workspace-job or delete-workspace-job.",
+    PaginationParams.extend({
+      workspaceID: z.string().describe("The workspace ID"),
+    }).shape,
+    READ_ONLY_ANNOTATIONS,
+    async (params) => {
+      try {
+        const result = await listWorkspaceJobs(client, params);
+        return buildJsonToolResponse("list-workspace-jobs", result);
       } catch (error) {
         return handleToolError(error);
       }

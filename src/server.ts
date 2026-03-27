@@ -12,6 +12,7 @@ import { registerNodeTypeCorpusTools } from "./mcp/node-type-corpus.js";
 import { registerRepoNodeTypeTools } from "./mcp/repo-node-types.js";
 import { registerJobTools } from "./mcp/jobs.js";
 import { registerSubgraphTools } from "./mcp/subgraphs.js";
+import { registerWorkspaceTools } from "./mcp/workspaces.js";
 import { registerCacheTools } from "./mcp/cache.js";
 import { registerRunAndWait } from "./workflows/run-and-wait.js";
 import { registerRetryAndWait } from "./workflows/retry-and-wait.js";
@@ -47,6 +48,7 @@ export function registerServerSurface(server: McpServer, client: CoalesceClient)
   registerRepoNodeTypeTools(server, client);
   registerJobTools(server, client);
   registerSubgraphTools(server, client);
+  registerWorkspaceTools(server, client);
   registerCacheTools(server, client);
   registerRunAndWait(server, client);
   registerRetryAndWait(server, client);
