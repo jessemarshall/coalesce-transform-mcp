@@ -300,71 +300,71 @@ const PipelineCreateOutputSchema = z.object({
 }).passthrough();
 
 const LIST_TOOL_NAMES = new Set([
-  "coalesce_list_environments",
-  "coalesce_list_projects",
-  "coalesce_list_environment_jobs",
-  "coalesce_list_runs",
-  "coalesce_list_environment_nodes",
-  "coalesce_list_workspace_nodes",
-  "coalesce_list_org_users",
-  "coalesce_list_user_roles",
-  "coalesce_list_git_accounts",
-  "coalesce_list_workspaces",
-  "coalesce_list_workspace_subgraphs",
-  "coalesce_list_workspace_jobs",
+  "list_environments",
+  "list_projects",
+  "list_environment_jobs",
+  "list_runs",
+  "list_environment_nodes",
+  "list_workspace_nodes",
+  "list_org_users",
+  "list_user_roles",
+  "list_git_accounts",
+  "list_workspaces",
+  "list_workspace_subgraphs",
+  "list_workspace_jobs",
 ]);
 
 const ENTITY_TOOL_NAMES = new Set([
-  "coalesce_get_environment",
-  "coalesce_create_environment",
-  "coalesce_update_environment",
-  "coalesce_delete_environment",
-  "coalesce_get_project",
-  "coalesce_create_project",
-  "coalesce_update_project",
-  "coalesce_delete_project",
-  "coalesce_get_environment_job",
-  "coalesce_get_workspace",
-  "coalesce_create_workspace_job",
-  "coalesce_update_workspace_job",
-  "coalesce_delete_workspace_job",
-  "coalesce_get_run",
-  "coalesce_get_run_results",
-  "coalesce_get_environment_node",
-  "coalesce_get_workspace_node",
-  "coalesce_get_user_roles",
-  "coalesce_set_org_role",
-  "coalesce_set_project_role",
-  "coalesce_delete_project_role",
-  "coalesce_set_env_role",
-  "coalesce_delete_env_role",
-  "coalesce_get_git_account",
-  "coalesce_create_git_account",
-  "coalesce_update_git_account",
-  "coalesce_delete_git_account",
-  "coalesce_get_workspace_subgraph",
-  "coalesce_create_workspace_subgraph",
-  "coalesce_update_workspace_subgraph",
-  "coalesce_delete_workspace_subgraph",
+  "get_environment",
+  "create_environment",
+  "update_environment",
+  "delete_environment",
+  "get_project",
+  "create_project",
+  "update_project",
+  "delete_project",
+  "get_environment_job",
+  "get_workspace",
+  "create_workspace_job",
+  "update_workspace_job",
+  "delete_workspace_job",
+  "get_run",
+  "get_run_results",
+  "get_environment_node",
+  "get_workspace_node",
+  "get_user_roles",
+  "set_org_role",
+  "set_project_role",
+  "delete_project_role",
+  "set_env_role",
+  "delete_env_role",
+  "get_git_account",
+  "create_git_account",
+  "update_git_account",
+  "delete_git_account",
+  "get_workspace_subgraph",
+  "create_workspace_subgraph",
+  "update_workspace_subgraph",
+  "delete_workspace_subgraph",
 ]);
 
 const WORKSPACE_NODE_MUTATION_TOOL_NAMES = new Set([
-  "coalesce_create_workspace_node_from_scratch",
-  "coalesce_set_workspace_node",
-  "coalesce_update_workspace_node",
-  "coalesce_replace_workspace_node_columns",
-  "coalesce_convert_join_to_aggregation",
-  "coalesce_apply_join_condition",
-  "coalesce_create_workspace_node_from_predecessor",
-  "coalesce_delete_workspace_node",
-  "coalesce_complete_node_configuration",
+  "create_workspace_node_from_scratch",
+  "set_workspace_node",
+  "update_workspace_node",
+  "replace_workspace_node_columns",
+  "convert_join_to_aggregation",
+  "apply_join_condition",
+  "create_workspace_node_from_predecessor",
+  "delete_workspace_node",
+  "complete_node_configuration",
 ]);
 
 const CACHE_TOOL_NAMES = new Set([
-  "coalesce_cache_workspace_nodes",
-  "coalesce_cache_environment_nodes",
-  "coalesce_cache_runs",
-  "coalesce_cache_org_users",
+  "cache_workspace_nodes",
+  "cache_environment_nodes",
+  "cache_runs",
+  "cache_org_users",
 ]);
 
 export const JsonToolOutputSchema = JsonObjectSchema.describe(
@@ -386,41 +386,41 @@ export function getToolOutputSchema(toolName: string) {
   }
 
   switch (toolName) {
-    case "coalesce_clear_data_cache":
+    case "clear_data_cache":
       return ClearCacheOutputSchema;
-    case "coalesce_analyze_workspace_patterns":
+    case "analyze_workspace_patterns":
       return WorkspaceAnalysisOutputSchema;
-    case "coalesce_list_workspace_node_types":
+    case "list_workspace_node_types":
       return WorkspaceNodeTypesOutputSchema;
-    case "coalesce_run_status":
-    case "coalesce_start_run":
-    case "coalesce_retry_run":
-    case "coalesce_cancel_run":
+    case "run_status":
+    case "start_run":
+    case "retry_run":
+    case "cancel_run":
       return RunSchedulerOutputSchema;
-    case "coalesce_get_run_details":
+    case "get_run_details":
       return RunDetailsOutputSchema;
-    case "coalesce_run_and_wait":
-    case "coalesce_retry_and_wait":
+    case "run_and_wait":
+    case "retry_and_wait":
       return RunWaitOutputSchema;
-    case "coalesce_get_environment_overview":
+    case "get_environment_overview":
       return EnvironmentOverviewOutputSchema;
-    case "coalesce_list_repo_packages":
+    case "list_repo_packages":
       return RepoPackagesOutputSchema;
-    case "coalesce_list_repo_node_types":
+    case "list_repo_node_types":
       return RepoNodeTypesOutputSchema;
-    case "coalesce_get_repo_node_type_definition":
+    case "get_repo_node_type_definition":
       return RepoNodeTypeDefinitionOutputSchema;
-    case "coalesce_generate_set_workspace_node_template":
-    case "coalesce_generate_set_workspace_node_template_from_variant":
+    case "generate_set_workspace_node_template":
+    case "generate_set_workspace_node_template_from_variant":
       return WorkspaceNodeTemplateOutputSchema;
-    case "coalesce_search_node_type_variants":
+    case "search_node_type_variants":
       return CorpusSearchOutputSchema;
-    case "coalesce_get_node_type_variant":
+    case "get_node_type_variant":
       return CorpusVariantOutputSchema;
-    case "coalesce_plan_pipeline":
+    case "plan_pipeline":
       return PipelinePlanOutputSchema;
-    case "coalesce_create_pipeline_from_plan":
-    case "coalesce_create_pipeline_from_sql":
+    case "create_pipeline_from_plan":
+    case "create_pipeline_from_sql":
       return PipelineCreateOutputSchema;
     default:
       return JsonToolOutputSchema;

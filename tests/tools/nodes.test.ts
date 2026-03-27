@@ -89,7 +89,7 @@ describe("Node Tools", () => {
     registerNodeTools(server, client as any);
 
     const analyzeToolCall = toolSpy.mock.calls.find(
-      (call) => call[0] === "coalesce_analyze_workspace_patterns"
+      (call) => call[0] === "analyze_workspace_patterns"
     );
     const handler = analyzeToolCall?.[2] as
       | ((params: { workspaceID: string }) => Promise<{ content: { text: string }[] }>)
@@ -139,7 +139,7 @@ describe("Node Tools", () => {
       registerNodeTools(server, client as any);
 
       const listToolCall = toolSpy.mock.calls.find(
-        (call) => call[0] === "coalesce_list_workspace_nodes"
+        (call) => call[0] === "list_workspace_nodes"
       );
       const handler = listToolCall?.[2] as
         | ((params: { workspaceID: string; detail?: boolean }) => Promise<{ content: { text: string }[] }>)
@@ -152,7 +152,7 @@ describe("Node Tools", () => {
 
       expect(metadata).toMatchObject({
         autoCached: true,
-        toolName: "coalesce_list_workspace_nodes",
+        toolName: "list_workspace_nodes",
         resourceUri: expect.stringContaining("coalesce://cache/"),
       });
 

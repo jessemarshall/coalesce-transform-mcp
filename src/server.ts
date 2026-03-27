@@ -27,10 +27,10 @@ const { version } = require("../package.json") as { version: string };
 export const SERVER_NAME = "coalesce-transform-mcp";
 export const SERVER_VERSION = version;
 export const SERVER_INSTRUCTIONS = [
-  "Resolve IDs before mutating. Use coalesce_list_workspaces for workspace IDs, coalesce_list_environments for environment IDs, coalesce_list_environment_jobs for job IDs.",
-  "Always use coalesce_plan_pipeline before creating pipeline nodes, and wait for explicit user approval before calling creation tools.",
+  "Resolve IDs before mutating. Use list_workspaces for workspace IDs, list_environments for environment IDs, list_environment_jobs for job IDs.",
+  "Always use plan_pipeline before creating pipeline nodes, and wait for explicit user approval before calling creation tools.",
   "Inspect warning, validation, resultsError, incomplete, timedOut, and cleanupFailures fields before continuing.",
-  "Prefer coalesce_run_and_wait or coalesce_retry_and_wait when the user wants an end-to-end run outcome in one call.",
+  "Prefer run_and_wait or retry_and_wait when the user wants an end-to-end run outcome in one call.",
   "Large payloads may be exposed through coalesce://cache resource URIs; read the resource rather than assuming inline JSON.",
 ].join("\n");
 

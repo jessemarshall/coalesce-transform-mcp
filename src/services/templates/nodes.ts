@@ -266,14 +266,14 @@ export function buildSetWorkspaceNodeTemplateFromDefinition(
 
         if (!targetPath) {
           warnings.push(
-            `Config item ${groupIndex}.${itemIndex} (${getString(item.type) ?? "unknown"}) does not map cleanly to coalesce_set_workspace_node body fields.`
+            `Config item ${groupIndex}.${itemIndex} (${getString(item.type) ?? "unknown"}) does not map cleanly to set_workspace_node body fields.`
           );
           return;
         }
 
         if (defaultValue === undefined) {
           warnings.push(
-            `Config item ${targetPath} has no inferred default. Fill it before calling coalesce_set_workspace_node if the node type requires it.`
+            `Config item ${targetPath} has no inferred default. Fill it before calling set_workspace_node if the node type requires it.`
           );
           return;
         }
@@ -331,8 +331,8 @@ export function buildSetWorkspaceNodeTemplateFromDefinition(
     inferredConfig,
     setWorkspaceNodeBodyTemplate,
     usageGuidance: [
-      "Use coalesce_create_workspace_node_from_predecessor or coalesce_create_workspace_node_from_scratch first to get a real workspace node ID.",
-      "Fill metadata.columns and metadata.sourceMapping before calling coalesce_set_workspace_node; those arrays are replace-on-write.",
+      "Use create_workspace_node_from_predecessor or create_workspace_node_from_scratch first to get a real workspace node ID.",
+      "Fill metadata.columns and metadata.sourceMapping before calling set_workspace_node; those arrays are replace-on-write.",
       "Keep materializationType and isMultisource at the top level when the definition uses the built-in selector/toggle items.",
       "Keep generic definition attributes under config.<attributeName>.",
       "If a built-in selector or toggle also defines attributeName, mirror the same value under both the top-level field and config.<attributeName>.",

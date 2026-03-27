@@ -186,7 +186,7 @@ export async function retryAndWait(
 
 export function registerRetryAndWait(server: McpServer, client: CoalesceClient): void {
   server.registerTool(
-    "coalesce_retry_and_wait",
+    "retry_and_wait",
     {
       title: "Retry and Wait",
       description:
@@ -195,7 +195,7 @@ export function registerRetryAndWait(server: McpServer, client: CoalesceClient):
         pollInterval: z.number().optional().describe("Seconds between status checks (default: 10, min: 5, max: 300)"),
         timeout: z.number().optional().describe("Max seconds to wait (default: 1800, min: 30, max: 3600)"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_retry_and_wait"),
+      outputSchema: getToolOutputSchema("retry_and_wait"),
       annotations: WRITE_ANNOTATIONS,
     },
     async (params, extra) => {
@@ -207,7 +207,7 @@ export function registerRetryAndWait(server: McpServer, client: CoalesceClient):
           signal: extra?.signal,
           reportProgress: progressReporter,
         });
-        return buildJsonToolResponse("coalesce_retry_and_wait", sanitizeResponse(result));
+        return buildJsonToolResponse("retry_and_wait", sanitizeResponse(result));
       } catch (error) {
         return handleToolError(error);
       }

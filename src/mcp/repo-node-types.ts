@@ -369,7 +369,7 @@ export async function generateSetWorkspaceNodeTemplate(
       const parseError =
         typeof definition.parseError === "string" ? definition.parseError : "unknown";
       throw new Error(
-        `Repo-backed definition could not be resolved for template generation because metadata.nodeMetadataSpec could not be parsed. Parse error: ${parseError} Use the corpus tools (coalesce_search_node_type_variants, coalesce_get_node_type_variant, or coalesce_generate_set_workspace_node_template_from_variant) as the next step.`
+        `Repo-backed definition could not be resolved for template generation because metadata.nodeMetadataSpec could not be parsed. Parse error: ${parseError} Use the corpus tools (search_node_type_variants, get_node_type_variant, or generate_set_workspace_node_template_from_variant) as the next step.`
       );
     }
 
@@ -416,7 +416,7 @@ export function registerRepoNodeTypeTools(
   client: CoalesceClient
 ): void {
   server.registerTool(
-    "coalesce_list_repo_packages",
+    "list_repo_packages",
     {
       title: "List Repo Packages",
       description: "Inspect a committed local Coalesce repo and list package aliases from packages/*.yml. Use this when a local repo is available and you want repo-backed node-type discovery before falling back to the corpus.",
@@ -426,12 +426,12 @@ export function registerRepoNodeTypeTools(
           .optional()
           .describe("Optional absolute or relative path to the local committed Coalesce repo. Falls back to COALESCE_REPO_PATH when omitted."),
       }),
-      outputSchema: getToolOutputSchema("coalesce_list_repo_packages"),
+      outputSchema: getToolOutputSchema("list_repo_packages"),
       annotations: READ_ONLY_LOCAL_ANNOTATIONS,
     },
     async (params) => {
       try {
-        return buildJsonToolResponse("coalesce_list_repo_packages", listRepoPackages(params));
+        return buildJsonToolResponse("list_repo_packages", listRepoPackages(params));
       } catch (error) {
         return handleToolError(error);
       }
@@ -439,7 +439,7 @@ export function registerRepoNodeTypeTools(
   );
 
   server.registerTool(
-    "coalesce_list_repo_node_types",
+    "list_repo_node_types",
     {
       title: "List Repo Node Types",
       description: "Inspect a committed local Coalesce repo and list exact resolvable node-type identifiers from nodeTypes/, optionally filtered to one package alias. Repo-backed discovery is preferred when the repo contains the committed definition; otherwise use the corpus tools.",
@@ -457,12 +457,12 @@ export function registerRepoNodeTypeTools(
           .optional()
           .describe("When true, return only identifiers currently referenced by committed nodes/*.yml operation.sqlType values."),
       }),
-      outputSchema: getToolOutputSchema("coalesce_list_repo_node_types"),
+      outputSchema: getToolOutputSchema("list_repo_node_types"),
       annotations: READ_ONLY_LOCAL_ANNOTATIONS,
     },
     async (params) => {
       try {
-        return buildJsonToolResponse("coalesce_list_repo_node_types", listRepoNodeTypes(params));
+        return buildJsonToolResponse("list_repo_node_types", listRepoNodeTypes(params));
       } catch (error) {
         return handleToolError(error);
       }
@@ -470,7 +470,7 @@ export function registerRepoNodeTypeTools(
   );
 
   server.registerTool(
-    "coalesce_get_repo_node_type_definition",
+    "get_repo_node_type_definition",
     {
       title: "Get Repo Node Type Definition",
       description: "Resolve one exact node type from a committed local Coalesce repo. Supports direct identifiers like Stage or 65 and package-backed identifiers like alias:::id. If the repo cannot resolve the definition exactly, use the corpus tools as the fallback path.",
@@ -483,13 +483,13 @@ export function registerRepoNodeTypeTools(
           .string()
           .describe("Exact direct node type identifier or exact package-backed alias:::id value."),
       }),
-      outputSchema: getToolOutputSchema("coalesce_get_repo_node_type_definition"),
+      outputSchema: getToolOutputSchema("get_repo_node_type_definition"),
       annotations: READ_ONLY_LOCAL_ANNOTATIONS,
     },
     async (params) => {
       try {
         return buildJsonToolResponse(
-          "coalesce_get_repo_node_type_definition",
+          "get_repo_node_type_definition",
           getRepoNodeTypeDefinition(params)
         );
       } catch (error) {
@@ -499,10 +499,10 @@ export function registerRepoNodeTypeTools(
   );
 
   server.registerTool(
-    "coalesce_generate_set_workspace_node_template",
+    "generate_set_workspace_node_template",
     {
       title: "Generate Set Workspace Node Template",
-      description: "Generate a YAML-friendly coalesce_set_workspace_node body template either from a raw node definition object or by resolving a committed node type from a local repo. Prefer repo mode when a local committed repo contains the definition; use the corpus tools when repo-backed resolution is unavailable. SQL override controls are removed from returned templates because they are disallowed in this project.",
+      description: "Generate a YAML-friendly set_workspace_node body template either from a raw node definition object or by resolving a committed node type from a local repo. Prefer repo mode when a local committed repo contains the definition; use the corpus tools when repo-backed resolution is unavailable. SQL override controls are removed from returned templates because they are disallowed in this project.",
       inputSchema: z.object({
         definition: z
           .record(z.unknown())
@@ -541,13 +541,13 @@ export function registerRepoNodeTypeTools(
           .optional()
           .describe("Optional node ID for comparing inferred mappings to a live workspace node."),
       }),
-      outputSchema: getToolOutputSchema("coalesce_generate_set_workspace_node_template"),
+      outputSchema: getToolOutputSchema("generate_set_workspace_node_template"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         return buildJsonToolResponse(
-          "coalesce_generate_set_workspace_node_template",
+          "generate_set_workspace_node_template",
           await generateSetWorkspaceNodeTemplate(client, params)
         );
       } catch (error) {

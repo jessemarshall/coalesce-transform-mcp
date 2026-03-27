@@ -75,16 +75,16 @@ If you send only the new array items, you will usually replace the old array.
 
 For tool selection and helper preference guidance, see `coalesce://context/node-creation-decision-tree`.
 
-### Prefer `coalesce_update_workspace_node`
+### Prefer `update_workspace_node`
 
 Use it for most partial node edits because it:
 - reads the current node first
 - deep-merges object fields
 - writes the merged full body back
 
-### Use `coalesce_set_workspace_node` carefully
+### Use `set_workspace_node` carefully
 
-Use `coalesce_set_workspace_node` only when:
+Use `set_workspace_node` only when:
 - you intend a full replacement
 - you already have the complete final node body
 

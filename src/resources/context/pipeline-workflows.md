@@ -4,22 +4,22 @@
 
 | User says | Node type | Action |
 |-----------|-----------|--------|
-| "stage my X data" | `Stage` | `coalesce_create_workspace_node_from_predecessor` with source node |
-| "create a dimension for X" | `Dimension` | `coalesce_create_workspace_node_from_predecessor` with staging node |
-| "build a fact table from X and Y" | `Fact` | `coalesce_create_workspace_node_from_predecessor` with both, then `coalesce_convert_join_to_aggregation` |
-| "create a view for X" | `View` | `coalesce_create_workspace_node_from_predecessor` with upstream node |
-| "join X and Y" | `View` | `coalesce_create_workspace_node_from_predecessor` with both, then apply join condition |
+| "stage my X data" | `Stage` | `create_workspace_node_from_predecessor` with source node |
+| "create a dimension for X" | `Dimension` | `create_workspace_node_from_predecessor` with staging node |
+| "build a fact table from X and Y" | `Fact` | `create_workspace_node_from_predecessor` with both, then `convert_join_to_aggregation` |
+| "create a view for X" | `View` | `create_workspace_node_from_predecessor` with upstream node |
+| "join X and Y" | `View` | `create_workspace_node_from_predecessor` with both, then apply join condition |
 | "build an incremental pipeline" | `Incremental Load` | See "Incremental Pipeline Setup" below |
-| "create an empty node" | Any | `coalesce_create_workspace_node_from_scratch` with `name` and `metadata.columns` |
+| "create an empty node" | Any | `create_workspace_node_from_scratch` with `name` and `metadata.columns` |
 
-Use this table as a heuristic for likely node families, but still call `coalesce_plan_pipeline` before creating anything so the exact `nodeType` is confirmed from the repo/workspace context. Use the full workflow whenever the request is ambiguous or involves multiple layers.
+Use this table as a heuristic for likely node families, but still call `plan_pipeline` before creating anything so the exact `nodeType` is confirmed from the repo/workspace context. Use the full workflow whenever the request is ambiguous or involves multiple layers.
 
 ## Choosing the Right Node Type
 
 **Step 1: Check available types**
 
 ```javascript
-coalesce_list_workspace_node_types({ workspaceID })
+list_workspace_node_types({ workspaceID })
 ```
 
 Prefer types already in use. If `base-nodes:::Stage` etc. are observed, use those over built-in types. If a recommended type is not observed, tell the user it may need installation via Build Settings > Packages.
@@ -27,7 +27,7 @@ Prefer types already in use. If `base-nodes:::Stage` etc. are observed, use thos
 **Step 2: Read source columns**
 
 ```javascript
-coalesce_get_workspace_node({ workspaceID, nodeID: "source-id" })
+get_workspace_node({ workspaceID, nodeID: "source-id" })
 ```
 
 Look for timestamp columns (UPDATED_AT, CREATED_AT) for incremental loading, business keys (CUSTOMER_ID) for merge keys, and SCD columns (EFFECTIVE_FROM, IS_CURRENT) for dimension tracking.
@@ -51,23 +51,23 @@ Node type format: `"Stage"` (simple) or `"IncrementalLoading:::230"` (PackageNam
 ### Step 1: Discover the Workspace
 
 ```javascript
-coalesce_list_workspaces()
+list_workspaces()
 ```
 
 ### Step 2: Find Source Nodes
 
 ```javascript
-coalesce_list_workspace_nodes({ workspaceID, detail: true })
+list_workspace_nodes({ workspaceID, detail: true })
 ```
 
 Note node IDs, names, and `locationName` (needed for `{{ ref() }}` syntax).
 
 ### Step 3: Plan to discover the correct node type
 
-**Always call `coalesce_plan_pipeline` before creating nodes.** The planner scans the repo for all committed node type definitions, scores them against your use case, and returns the best match. Do not guess node types — use what the planner recommends.
+**Always call `plan_pipeline` before creating nodes.** The planner scans the repo for all committed node type definitions, scores them against your use case, and returns the best match. Do not guess node types — use what the planner recommends.
 
 ```javascript
-coalesce_plan_pipeline({
+plan_pipeline({
   workspaceID,
   goal: "stage customer data",
   sourceNodeIDs: ["source-id-1"],
@@ -84,36 +84,36 @@ The response includes:
 **If the user provides SQL:** Pass it directly to the planner.
 
 ```javascript
-coalesce_plan_pipeline({ workspaceID, sql: "<USER-PROVIDED SQL HERE>" })
+plan_pipeline({ workspaceID, sql: "<USER-PROVIDED SQL HERE>" })
 ```
 
 Never author SQL yourself to pass to these tools.
 
 ### Step 4: Review and Execute
 
-- Plan returns `status: "ready"` -> use the recommended node type to create, or call `coalesce_create_pipeline_from_plan`
+- Plan returns `status: "ready"` -> use the recommended node type to create, or call `create_pipeline_from_plan`
 - Plan returns `status: "needs_clarification"` -> address `openQuestions`, then re-plan
 
 ### Step 5: Create Nodes with the planned node type
 
-Use `coalesce_create_workspace_node_from_predecessor` with the node type from the plan. **Always pass `repoPath`** so config completion runs automatically:
+Use `create_workspace_node_from_predecessor` with the node type from the plan. **Always pass `repoPath`** so config completion runs automatically:
 
 ```javascript
-coalesce_create_workspace_node_from_predecessor({
+create_workspace_node_from_predecessor({
   workspaceID,
-  nodeType: "base-nodes:::Stage",  // from coalesce_plan_pipeline result
+  nodeType: "base-nodes:::Stage",  // from plan_pipeline result
   predecessorNodeIDs: ["source-id-1"],
   changes: { name: "STG_CUSTOMER" },
   repoPath: "/path/to/repo"  // enables automatic config completion
 })
 ```
 
-**Always use `coalesce_create_workspace_node_from_predecessor` or `coalesce_create_workspace_node_from_scratch`** — they handle validation, config completion, and column-level attributes automatically.
+**Always use `create_workspace_node_from_predecessor` or `create_workspace_node_from_scratch`** — they handle validation, config completion, and column-level attributes automatically.
 
 For joins and aggregations:
 
 ```javascript
-coalesce_convert_join_to_aggregation({
+convert_join_to_aggregation({
   workspaceID, nodeID: "join-node-id",
   groupByColumns: [...], aggregates: [...],
   maintainJoins: true,
@@ -136,14 +136,14 @@ Config is applied automatically when `repoPath` is provided. Check the `configCo
 
 **Action required when `configReview.status` is not `complete`:**
 
-- `incomplete` — required fields are missing. Set them via `coalesce_update_workspace_node` or `coalesce_replace_workspace_node_columns`.
+- `incomplete` — required fields are missing. Set them via `update_workspace_node` or `replace_workspace_node_columns`.
 - `needs_attention` — warnings need manual review (e.g., set `isBusinessKey` on the correct columns).
 
-If `configCompletionSkipped` appears instead, call `coalesce_complete_node_configuration` with `repoPath` to retry.
+If `configCompletionSkipped` appears instead, call `complete_node_configuration` with `repoPath` to retry.
 
 ### Step 7: Follow-Up Edits
 
-Use `coalesce_update_workspace_node` for post-creation changes.
+Use `update_workspace_node` for post-creation changes.
 
 ## Multi-Node Pipelines
 
@@ -153,7 +153,7 @@ Create nodes bottom-up — upstream before downstream. Each step uses node IDs f
 
 ```javascript
 // 0. Plan to discover correct node types for each layer
-coalesce_plan_pipeline({
+plan_pipeline({
   workspaceID,
   goal: "stage customer and orders, then build CLV fact",
   sourceNodeIDs: ["source-customer-id", "source-orders-id"],
@@ -163,7 +163,7 @@ coalesce_plan_pipeline({
 //    "base-nodes:::Fact" for the fact layer
 
 // 1. Stage each source using the planned node type (independent — parallelize)
-coalesce_create_workspace_node_from_predecessor({
+create_workspace_node_from_predecessor({
   workspaceID, nodeType: "base-nodes:::Stage",  // from plan
   predecessorNodeIDs: ["source-customer-id"],
   changes: { name: "STG_CUSTOMER" },
@@ -171,7 +171,7 @@ coalesce_create_workspace_node_from_predecessor({
 })
 // -> "stg-cust-id" + configCompletion shows applied config
 
-coalesce_create_workspace_node_from_predecessor({
+create_workspace_node_from_predecessor({
   workspaceID, nodeType: "base-nodes:::Stage",  // from plan
   predecessorNodeIDs: ["source-orders-id"],
   changes: { name: "STG_ORDERS" },
@@ -180,7 +180,7 @@ coalesce_create_workspace_node_from_predecessor({
 // -> "stg-orders-id" + configCompletion shows applied config
 
 // 2. Create join/fact node with planned fact type
-coalesce_create_workspace_node_from_predecessor({
+create_workspace_node_from_predecessor({
   workspaceID, nodeType: "base-nodes:::Fact",  // from plan
   predecessorNodeIDs: ["stg-cust-id", "stg-orders-id"],
   changes: { name: "FACT_CLV" },
@@ -189,7 +189,7 @@ coalesce_create_workspace_node_from_predecessor({
 // -> "fact-clv-id", joinSuggestions with common columns, configCompletion
 
 // 3. Aggregate with automatic JOIN ON generation
-coalesce_convert_join_to_aggregation({
+convert_join_to_aggregation({
   workspaceID, nodeID: "fact-clv-id",
   groupByColumns: ['"STG_CUSTOMER"."CUSTOMER_ID"'],
   aggregates: [
@@ -203,18 +203,18 @@ coalesce_convert_join_to_aggregation({
 
 **Verification after each step:** Check `validation.allPredecessorsRepresented`, `validation.autoPopulatedColumns`, `warning`, and `joinSuggestions` before proceeding.
 
-**If a node is created with 0 columns:** The predecessor may have no columns, the IDs were wrong, or the node type doesn't auto-inherit. Try a projection-capable type (Stage, View, Work) or add columns with `coalesce_replace_workspace_node_columns`.
+**If a node is created with 0 columns:** The predecessor may have no columns, the IDs were wrong, or the node type doesn't auto-inherit. Try a projection-capable type (Stage, View, Work) or add columns with `replace_workspace_node_columns`.
 
 ### UNION / Multi-Source Nodes
 
 ```javascript
-coalesce_create_workspace_node_from_predecessor({
+create_workspace_node_from_predecessor({
   workspaceID, nodeType: "Stage",
   predecessorNodeIDs: ["stg-orders-us-id", "stg-orders-eu-id"],
   changes: { name: "STG_ORDERS_ALL" }
 })
 
-coalesce_update_workspace_node({
+update_workspace_node({
   workspaceID, nodeID: "new-node-id",
   changes: { config: { insertStrategy: "UNION ALL" } }
 })
@@ -224,18 +224,18 @@ Values: `"UNION"` (dedup), `"UNION ALL"` (keep all), `"INSERT"` (sequential, def
 
 ## Incremental Pipeline Setup
 
-**With the Incremental-Nodes package** (check `coalesce_list_workspace_node_types` for `IncrementalLoading:::230`):
+**With the Incremental-Nodes package** (check `list_workspace_node_types` for `IncrementalLoading:::230`):
 
 ```javascript
 // 1. Create the node
-coalesce_create_workspace_node_from_predecessor({
+create_workspace_node_from_predecessor({
   workspaceID, nodeType: "IncrementalLoading:::230",
   predecessorNodeIDs: ["source-orders-id"],
   changes: { name: "INC_ORDERS" }
 })
 
 // 2. Configure incremental settings
-coalesce_update_workspace_node({
+update_workspace_node({
   workspaceID, nodeID: "inc-orders-id",
   changes: {
     config: {
@@ -253,7 +253,7 @@ How it works: reads MAX of the high-water mark column from the target, filters s
 **Without the package** — use a regular Stage with a MAX subquery in joinCondition:
 
 ```javascript
-coalesce_update_workspace_node({
+update_workspace_node({
   workspaceID, nodeID: "new-node-id",
   changes: {
     config: { truncateBefore: false },
@@ -302,14 +302,14 @@ After creating a multi-predecessor node, ALWAYS:
    - `LEFT JOIN` — keep all rows from the primary table (use when the left table is the "driver" and right table may have missing matches)
    - `FULL OUTER JOIN` — keep all rows from both tables (rare, use for reconciliation)
 3. **Verify join cardinality:** Joining a 1M-row table to a 10M-row table on a non-unique key causes fan-out (row multiplication). Ensure at least one side of the join is unique on the join key.
-4. **Set the join condition** — call `coalesce_convert_join_to_aggregation` (for aggregation), `coalesce_apply_join_condition` (for row-level joins), or `coalesce_update_workspace_node` (for full manual control)
-5. **Verify columns** — call `coalesce_get_workspace_node` to confirm the final column list and transforms are correct
+4. **Set the join condition** — call `convert_join_to_aggregation` (for aggregation), `apply_join_condition` (for row-level joins), or `update_workspace_node` (for full manual control)
+5. **Verify columns** — call `get_workspace_node` to confirm the final column list and transforms are correct
 
 ### Fact Table Grain
 
 When building fact tables, define the **grain** (the set of columns that uniquely identifies each row):
 
-- Grain columns become your `groupByColumns` in `coalesce_convert_join_to_aggregation`
+- Grain columns become your `groupByColumns` in `convert_join_to_aggregation`
 - Mark grain columns as `isBusinessKey: true`
 - All other columns should be aggregates (COUNT, SUM, AVG, etc.)
 - If unsure about the grain, ask the user: "What uniquely identifies each row in this fact table?"
@@ -323,8 +323,8 @@ After creating each node, verify before moving to the next:
 1. **Check `nextSteps`** in the creation response — follow all required steps
 2. **Check `validation.allPredecessorsRepresented`** — if false, predecessors are missing from column sources
 3. **Check `configCompletion`** — verify applied config and column attributes make sense
-4. **For multi-predecessor nodes:** Confirm the join condition was set (call `coalesce_get_workspace_node` to verify `metadata.sourceMapping[].join.joinCondition` is not empty)
-5. **For aggregation nodes:** Verify GROUP BY is valid (`validation.valid: true` from `coalesce_convert_join_to_aggregation`)
+4. **For multi-predecessor nodes:** Confirm the join condition was set (call `get_workspace_node` to verify `metadata.sourceMapping[].join.joinCondition` is not empty)
+5. **For aggregation nodes:** Verify GROUP BY is valid (`validation.valid: true` from `convert_join_to_aggregation`)
 
 ### Materialization Strategy
 
@@ -340,12 +340,12 @@ IMPORTANT: `View` node types can ONLY materialize as views. If you need a table,
 
 ## After Building the Pipeline
 
-1. **Deploy**: `coalesce_start_run` with `runType: "deploy"`
-2. **Run**: `coalesce_start_run` with `runType: "refresh"`
-3. **Monitor**: `coalesce_run_status` or `coalesce_run_and_wait`
-4. **Troubleshoot**: `coalesce_get_run_results` for errors, `coalesce_retry_run` to re-run
+1. **Deploy**: `start_run` with `runType: "deploy"`
+2. **Run**: `start_run` with `runType: "refresh"`
+3. **Monitor**: `run_status` or `run_and_wait`
+4. **Troubleshoot**: `get_run_results` for errors, `retry_run` to re-run
 
-Scheduling is configured via Jobs in the Coalesce UI. Trigger existing jobs with `coalesce_start_run` and `jobID`. See `coalesce://context/run-operations` for full guidance.
+Scheduling is configured via Jobs in the Coalesce UI. Trigger existing jobs with `start_run` and `jobID`. See `coalesce://context/run-operations` for full guidance.
 
 ## Related Resources
 

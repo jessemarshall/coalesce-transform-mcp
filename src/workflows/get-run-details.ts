@@ -54,21 +54,21 @@ function serializeResultsError(error: unknown): JsonToolError {
 
 export function registerGetRunDetails(server: McpServer, client: CoalesceClient): void {
   server.registerTool(
-    "coalesce_get_run_details",
+    "get_run_details",
     {
       title: "Get Run Details",
       description:
-        "Get run metadata and execution results in a single call. Combines coalesce_get_run and coalesce_get_run_results.\n\nArgs:\n  - runID (string, required): Numeric run ID (integer). Use runCounter, not the UUID.\n\nReturns:\n  { run: RunObject, results: ResultsObject, resultsError?: ErrorObject }",
+        "Get run metadata and execution results in a single call. Combines get_run and get_run_results.\n\nArgs:\n  - runID (string, required): Numeric run ID (integer). Use runCounter, not the UUID.\n\nReturns:\n  { run: RunObject, results: ResultsObject, resultsError?: ErrorObject }",
       inputSchema: z.object({
-        runID: z.string().describe("The numeric run ID (integer, e.g. '401'). Use the runCounter value from coalesce_start_run or coalesce_run_status responses — not the UUID from run URLs."),
+        runID: z.string().describe("The numeric run ID (integer, e.g. '401'). Use the runCounter value from start_run or run_status responses — not the UUID from run URLs."),
       }),
-      outputSchema: getToolOutputSchema("coalesce_get_run_details"),
+      outputSchema: getToolOutputSchema("get_run_details"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await getRunDetails(client, params);
-        return buildJsonToolResponse("coalesce_get_run_details", sanitizeResponse(result));
+        return buildJsonToolResponse("get_run_details", sanitizeResponse(result));
       } catch (error) {
         return handleToolError(error);
       }

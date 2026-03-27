@@ -24,21 +24,21 @@ export function registerEnvironmentTools(
   client: CoalesceClient
 ): void {
   server.registerTool(
-    "coalesce_list_environments",
+    "list_environments",
     {
       title: "List Environments",
       description:
-        "List all available Coalesce environments with optional pagination.\n\nReturns environment IDs, names, and configuration. Use this to discover environment IDs needed by run, node, and job tools.\n\nArgs:\n  - limit (number, optional): Max results per page\n  - startingFrom (string, optional): Pagination cursor from previous response\n  - orderBy (string, optional): Sort field (requires startingFrom)\n  - orderByDirection ('asc'|'desc', optional): Sort direction\n  - detail (boolean, optional): Include expanded environment configuration\n\nReturns:\n  { data: Environment[], next?: string, total?: number }\n\nUse coalesce_get_environment for a single environment by ID.",
+        "List all available Coalesce environments with optional pagination.\n\nReturns environment IDs, names, and configuration. Use this to discover environment IDs needed by run, node, and job tools.\n\nArgs:\n  - limit (number, optional): Max results per page\n  - startingFrom (string, optional): Pagination cursor from previous response\n  - orderBy (string, optional): Sort field (requires startingFrom)\n  - orderByDirection ('asc'|'desc', optional): Sort direction\n  - detail (boolean, optional): Include expanded environment configuration\n\nReturns:\n  { data: Environment[], next?: string, total?: number }\n\nUse get_environment for a single environment by ID.",
       inputSchema: PaginationParams.extend({
         detail: z.boolean().optional().describe("When true, returns expanded environment info"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_list_environments"),
+      outputSchema: getToolOutputSchema("list_environments"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await listEnvironments(client, params);
-        return buildJsonToolResponse("coalesce_list_environments", result);
+        return buildJsonToolResponse("list_environments", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -46,7 +46,7 @@ export function registerEnvironmentTools(
   );
 
   server.registerTool(
-    "coalesce_get_environment",
+    "get_environment",
     {
       title: "Get Environment",
       description:
@@ -54,13 +54,13 @@ export function registerEnvironmentTools(
       inputSchema: z.object({
         environmentID: z.string().describe("The environment ID"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_get_environment"),
+      outputSchema: getToolOutputSchema("get_environment"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await getEnvironment(client, params);
-        return buildJsonToolResponse("coalesce_get_environment", result);
+        return buildJsonToolResponse("get_environment", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -68,7 +68,7 @@ export function registerEnvironmentTools(
   );
 
   server.registerTool(
-    "coalesce_create_environment",
+    "create_environment",
     {
       title: "Create Environment",
       description:
@@ -88,7 +88,7 @@ export function registerEnvironmentTools(
           .optional()
           .describe("Optional tag colors for the environment"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_create_environment"),
+      outputSchema: getToolOutputSchema("create_environment"),
       annotations: WRITE_ANNOTATIONS,
     },
     async (params) => {
@@ -96,7 +96,7 @@ export function registerEnvironmentTools(
         // Coalesce API expects `project` in the body
         const { projectID, ...rest } = params;
         const result = await createEnvironment(client, { project: projectID, ...rest });
-        return buildJsonToolResponse("coalesce_create_environment", result);
+        return buildJsonToolResponse("create_environment", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -104,7 +104,7 @@ export function registerEnvironmentTools(
   );
 
   server.registerTool(
-    "coalesce_update_environment",
+    "update_environment",
     {
       title: "Update Environment",
       description:
@@ -124,13 +124,13 @@ export function registerEnvironmentTools(
           .optional()
           .describe("Tag colors for the environment"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_update_environment"),
+      outputSchema: getToolOutputSchema("update_environment"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await updateEnvironment(client, params);
-        return buildJsonToolResponse("coalesce_update_environment", result);
+        return buildJsonToolResponse("update_environment", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -138,7 +138,7 @@ export function registerEnvironmentTools(
   );
 
   server.registerTool(
-    "coalesce_delete_environment",
+    "delete_environment",
     {
       title: "Delete Environment",
       description:
@@ -146,13 +146,13 @@ export function registerEnvironmentTools(
       inputSchema: z.object({
         environmentID: z.string().describe("The environment ID to delete"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_delete_environment"),
+      outputSchema: getToolOutputSchema("delete_environment"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await deleteEnvironment(client, params);
-        return buildJsonToolResponse("coalesce_delete_environment", result);
+        return buildJsonToolResponse("delete_environment", result);
       } catch (error) {
         return handleToolError(error);
       }

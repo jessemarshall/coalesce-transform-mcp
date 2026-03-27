@@ -182,7 +182,7 @@ function buildConfigReview(
     if (hasBusinessKeySelector && businessKeysApplied.length === 0 && context.columnPatterns.businessKeys.length === 0) {
       warnings.push(
         `${family} nodes require business keys but none were detected or set. ` +
-        `Set isBusinessKey: true on the appropriate column(s) via coalesce_replace_workspace_node_columns.`
+        `Set isBusinessKey: true on the appropriate column(s) via replace_workspace_node_columns.`
       );
     }
 

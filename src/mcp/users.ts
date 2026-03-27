@@ -26,19 +26,19 @@ export function registerUserTools(
   client: CoalesceClient
 ): void {
   server.registerTool(
-    "coalesce_list_org_users",
+    "list_org_users",
     {
       title: "List Org Users",
       description:
         "List all users in the Coalesce organization.\n\nArgs:\n  - limit, startingFrom, orderBy, orderByDirection: Pagination controls\n\nReturns:\n  { data: User[], next?: string, total?: number }",
       inputSchema: PaginationParams,
-      outputSchema: getToolOutputSchema("coalesce_list_org_users"),
+      outputSchema: getToolOutputSchema("list_org_users"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await listOrgUsers(client, params);
-        return buildJsonToolResponse("coalesce_list_org_users", result);
+        return buildJsonToolResponse("list_org_users", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -46,7 +46,7 @@ export function registerUserTools(
   );
 
   server.registerTool(
-    "coalesce_get_user_roles",
+    "get_user_roles",
     {
       title: "Get User Roles",
       description:
@@ -56,13 +56,13 @@ export function registerUserTools(
         projectID: z.string().optional().describe("Optional project scope filter"),
         environmentID: z.string().optional().describe("Optional environment scope filter"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_get_user_roles"),
+      outputSchema: getToolOutputSchema("get_user_roles"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await getUserRoles(client, params);
-        return buildJsonToolResponse("coalesce_get_user_roles", result);
+        return buildJsonToolResponse("get_user_roles", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -70,7 +70,7 @@ export function registerUserTools(
   );
 
   server.registerTool(
-    "coalesce_list_user_roles",
+    "list_user_roles",
     {
       title: "List User Roles",
       description:
@@ -79,13 +79,13 @@ export function registerUserTools(
         projectID: z.string().optional().describe("Optional project scope filter"),
         environmentID: z.string().optional().describe("Optional environment scope filter"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_list_user_roles"),
+      outputSchema: getToolOutputSchema("list_user_roles"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await listUserRoles(client, params);
-        return buildJsonToolResponse("coalesce_list_user_roles", result);
+        return buildJsonToolResponse("list_user_roles", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -93,7 +93,7 @@ export function registerUserTools(
   );
 
   server.registerTool(
-    "coalesce_set_org_role",
+    "set_org_role",
     {
       title: "Set Org Role",
       description:
@@ -102,14 +102,14 @@ export function registerUserTools(
         userID: z.string().describe("The user ID"),
         role: z.string().describe("The organization role to assign (e.g., 'admin', 'member', 'viewer')"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_set_org_role"),
+      outputSchema: getToolOutputSchema("set_org_role"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const { userID, ...body } = params;
         const result = await setOrgRole(client, { userID, body });
-        return buildJsonToolResponse("coalesce_set_org_role", result);
+        return buildJsonToolResponse("set_org_role", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -117,7 +117,7 @@ export function registerUserTools(
   );
 
   server.registerTool(
-    "coalesce_set_project_role",
+    "set_project_role",
     {
       title: "Set Project Role",
       description:
@@ -127,14 +127,14 @@ export function registerUserTools(
         projectID: z.string().describe("The project ID"),
         role: z.string().describe("The project role to assign (e.g., 'admin', 'developer', 'viewer')"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_set_project_role"),
+      outputSchema: getToolOutputSchema("set_project_role"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const { userID, projectID, ...body } = params;
         const result = await setProjectRole(client, { userID, projectID, body });
-        return buildJsonToolResponse("coalesce_set_project_role", result);
+        return buildJsonToolResponse("set_project_role", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -142,7 +142,7 @@ export function registerUserTools(
   );
 
   server.registerTool(
-    "coalesce_delete_project_role",
+    "delete_project_role",
     {
       title: "Delete Project Role",
       description:
@@ -151,13 +151,13 @@ export function registerUserTools(
         userID: z.string().describe("The user ID"),
         projectID: z.string().describe("The project ID"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_delete_project_role"),
+      outputSchema: getToolOutputSchema("delete_project_role"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await deleteProjectRole(client, params);
-        return buildJsonToolResponse("coalesce_delete_project_role", result);
+        return buildJsonToolResponse("delete_project_role", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -165,7 +165,7 @@ export function registerUserTools(
   );
 
   server.registerTool(
-    "coalesce_set_env_role",
+    "set_env_role",
     {
       title: "Set Env Role",
       description:
@@ -175,14 +175,14 @@ export function registerUserTools(
         environmentID: z.string().describe("The environment ID"),
         role: z.string().describe("The environment role to assign (e.g., 'admin', 'developer', 'viewer')"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_set_env_role"),
+      outputSchema: getToolOutputSchema("set_env_role"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const { userID, environmentID, ...body } = params;
         const result = await setEnvRole(client, { userID, environmentID, body });
-        return buildJsonToolResponse("coalesce_set_env_role", result);
+        return buildJsonToolResponse("set_env_role", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -190,7 +190,7 @@ export function registerUserTools(
   );
 
   server.registerTool(
-    "coalesce_delete_env_role",
+    "delete_env_role",
     {
       title: "Delete Env Role",
       description:
@@ -199,13 +199,13 @@ export function registerUserTools(
         userID: z.string().describe("The user ID"),
         environmentID: z.string().describe("The environment ID"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_delete_env_role"),
+      outputSchema: getToolOutputSchema("delete_env_role"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await deleteEnvRole(client, params);
-        return buildJsonToolResponse("coalesce_delete_env_role", result);
+        return buildJsonToolResponse("delete_env_role", result);
       } catch (error) {
         return handleToolError(error);
       }

@@ -6,7 +6,7 @@ The intelligent node configuration system automatically completes all required a
 
 ## Tools
 
-### `coalesce_complete_node_configuration`
+### `complete_node_configuration`
 
 Standalone tool that completes config for any workspace node.
 
@@ -36,9 +36,9 @@ Standalone tool that completes config for any workspace node.
 - `columnAttributeChanges`: Column-level attributes applied (isBusinessKey, isChangeTracking)
 - `reasoning`: Why each decision was made
 
-### `coalesce_convert_join_to_aggregation`
+### `convert_join_to_aggregation`
 
-Enhanced with automatic config completion. After transformation, automatically calls `coalesce_complete_node_configuration` to fill all remaining config fields.
+Enhanced with automatic config completion. After transformation, automatically calls `complete_node_configuration` to fill all remaining config fields.
 
 **New output field:** `configCompletion` with changes and analysis
 

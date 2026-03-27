@@ -35,7 +35,7 @@ describe("Node Tool Input Schemas", () => {
 
     registerNodeTools(server, createMockClient() as any);
 
-    const schema = getToolParamsSchema(toolSpy, "coalesce_create_workspace_node_from_scratch");
+    const schema = getToolParamsSchema(toolSpy, "create_workspace_node_from_scratch");
 
     expect(
       schema.safeParse({
@@ -82,8 +82,8 @@ describe("Node Tool Input Schemas", () => {
 
     registerNodeTools(server, createMockClient() as any);
 
-    const setSchema = getToolParamsSchema(toolSpy, "coalesce_set_workspace_node");
-    const updateSchema = getToolParamsSchema(toolSpy, "coalesce_update_workspace_node");
+    const setSchema = getToolParamsSchema(toolSpy, "set_workspace_node");
+    const updateSchema = getToolParamsSchema(toolSpy, "update_workspace_node");
 
     expect(
       setSchema.safeParse({
@@ -135,7 +135,7 @@ describe("Node Tool Input Schemas", () => {
 
     registerNodeTools(server, createMockClient() as any);
 
-    const schema = getToolParamsSchema(toolSpy, "coalesce_replace_workspace_node_columns");
+    const schema = getToolParamsSchema(toolSpy, "replace_workspace_node_columns");
 
     expect(
       schema.safeParse({
@@ -178,8 +178,8 @@ describe("Pipeline Tool Input Schemas", () => {
 
     registerPipelineTools(server, createMockClient() as any);
 
-    const planSchema = getToolParamsSchema(toolSpy, "coalesce_plan_pipeline");
-    const createFromSqlSchema = getToolParamsSchema(toolSpy, "coalesce_create_pipeline_from_sql");
+    const planSchema = getToolParamsSchema(toolSpy, "plan_pipeline");
+    const createFromSqlSchema = getToolParamsSchema(toolSpy, "create_pipeline_from_sql");
 
     expect(
       planSchema.safeParse({
@@ -220,7 +220,7 @@ describe("Pipeline Tool Input Schemas", () => {
 
     registerPipelineTools(server, createMockClient() as any);
 
-    const schema = getToolParamsSchema(toolSpy, "coalesce_create_pipeline_from_plan");
+    const schema = getToolParamsSchema(toolSpy, "create_pipeline_from_plan");
 
     const validPlan = {
       version: 1,

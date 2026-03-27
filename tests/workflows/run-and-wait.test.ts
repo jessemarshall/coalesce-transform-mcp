@@ -74,7 +74,7 @@ describe("run-and-wait workflow", () => {
 
     registerRunAndWait(server, client as any);
 
-    const toolCall = toolSpy.mock.calls.find((call) => call[0] === "coalesce_run_and_wait");
+    const toolCall = toolSpy.mock.calls.find((call) => call[0] === "run_and_wait");
     const handler = toolCall?.[2] as
       | ((params: {
           runDetails: { environmentID: string; jobID: string };

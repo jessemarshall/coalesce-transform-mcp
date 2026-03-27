@@ -41,7 +41,7 @@ export function registerCacheTools(
   client: CoalesceClient
 ): void {
   server.registerTool(
-    "coalesce_cache_workspace_nodes",
+    "cache_workspace_nodes",
     {
       title: "Cache Workspace Nodes",
       description:
@@ -54,13 +54,13 @@ export function registerCacheTools(
           .describe("When true, fetches expanded node details. Defaults to true."),
         ...SnapshotPaginationShape,
       }),
-      outputSchema: getToolOutputSchema("coalesce_cache_workspace_nodes"),
+      outputSchema: getToolOutputSchema("cache_workspace_nodes"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await cacheWorkspaceNodes(client, params);
-        return buildJsonToolResponse("coalesce_cache_workspace_nodes", result);
+        return buildJsonToolResponse("cache_workspace_nodes", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -68,7 +68,7 @@ export function registerCacheTools(
   );
 
   server.registerTool(
-    "coalesce_cache_environment_nodes",
+    "cache_environment_nodes",
     {
       title: "Cache Environment Nodes",
       description:
@@ -81,13 +81,13 @@ export function registerCacheTools(
           .describe("When true, fetches expanded node details. Defaults to true."),
         ...SnapshotPaginationShape,
       }),
-      outputSchema: getToolOutputSchema("coalesce_cache_environment_nodes"),
+      outputSchema: getToolOutputSchema("cache_environment_nodes"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await cacheEnvironmentNodes(client, params);
-        return buildJsonToolResponse("coalesce_cache_environment_nodes", result);
+        return buildJsonToolResponse("cache_environment_nodes", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -95,7 +95,7 @@ export function registerCacheTools(
   );
 
   server.registerTool(
-    "coalesce_cache_runs",
+    "cache_runs",
     {
       title: "Cache Runs",
       description:
@@ -113,13 +113,13 @@ export function registerCacheTools(
           .describe("When true, fetches expanded run details. Defaults to false."),
         ...SnapshotPaginationShape,
       }),
-      outputSchema: getToolOutputSchema("coalesce_cache_runs"),
+      outputSchema: getToolOutputSchema("cache_runs"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await cacheRuns(client, params);
-        return buildJsonToolResponse("coalesce_cache_runs", result);
+        return buildJsonToolResponse("cache_runs", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -127,7 +127,7 @@ export function registerCacheTools(
   );
 
   server.registerTool(
-    "coalesce_cache_org_users",
+    "cache_org_users",
     {
       title: "Cache Org Users",
       description:
@@ -135,13 +135,13 @@ export function registerCacheTools(
       inputSchema: z.object({
         ...SnapshotPaginationShape,
       }),
-      outputSchema: getToolOutputSchema("coalesce_cache_org_users"),
+      outputSchema: getToolOutputSchema("cache_org_users"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await cacheOrgUsers(client, params);
-        return buildJsonToolResponse("coalesce_cache_org_users", result);
+        return buildJsonToolResponse("cache_org_users", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -149,20 +149,20 @@ export function registerCacheTools(
   );
 
   server.registerTool(
-    "coalesce_clear_data_cache",
+    "clear_data_cache",
     {
       title: "Clear Data Cache",
       description:
         "Clear the MCP server's local data cache. Removes all cached artifacts from disk.\n\nReturns:\n  { deleted: boolean, fileCount: number, totalBytes: number, message: string }",
       inputSchema: z.object({}),
-      outputSchema: getToolOutputSchema("coalesce_clear_data_cache"),
+      outputSchema: getToolOutputSchema("clear_data_cache"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async () => {
       try {
         const cacheDir = getCacheDir();
         if (!existsSync(cacheDir)) {
-          return buildJsonToolResponse("coalesce_clear_data_cache", {
+          return buildJsonToolResponse("clear_data_cache", {
             deleted: false,
             message: `No cache directory found at ${CACHE_DIR_NAME}/`,
           });
@@ -195,7 +195,7 @@ export function registerCacheTools(
         rmSync(cacheDir, { recursive: true, force: true });
 
         const sizeMB = (totalBytes / (1024 * 1024)).toFixed(2);
-        return buildJsonToolResponse("coalesce_clear_data_cache", {
+        return buildJsonToolResponse("clear_data_cache", {
           deleted: true,
           fileCount,
           totalBytes,

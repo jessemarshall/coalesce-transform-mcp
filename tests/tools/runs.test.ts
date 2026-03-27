@@ -94,18 +94,18 @@ describe("Run Tools", () => {
 
     registerRunTools(server, client as any);
 
-    const listRunsHandler = toolSpy.mock.calls.find((call) => call[0] === "coalesce_list_runs")?.[2] as
+    const listRunsHandler = toolSpy.mock.calls.find((call) => call[0] === "list_runs")?.[2] as
       | ((params: Record<string, unknown>) => Promise<{ content: { text: string }[] }>)
       | undefined;
-    const getRunHandler = toolSpy.mock.calls.find((call) => call[0] === "coalesce_get_run")?.[2] as
+    const getRunHandler = toolSpy.mock.calls.find((call) => call[0] === "get_run")?.[2] as
       | ((params: { runID: string }) => Promise<{ content: { text: string }[] }>)
       | undefined;
     const getRunResultsHandler = toolSpy.mock.calls.find(
-      (call) => call[0] === "coalesce_get_run_results"
+      (call) => call[0] === "get_run_results"
     )?.[2] as
       | ((params: { runID: string }) => Promise<{ content: { text: string }[] }>)
       | undefined;
-    const runStatusHandler = toolSpy.mock.calls.find((call) => call[0] === "coalesce_run_status")?.[2] as
+    const runStatusHandler = toolSpy.mock.calls.find((call) => call[0] === "run_status")?.[2] as
       | ((params: { runCounter: number }) => Promise<{ content: { text: string }[] }>)
       | undefined;
 

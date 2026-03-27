@@ -89,7 +89,7 @@ describe("Pipeline Tools", () => {
     registerPipelineTools(server, client as any);
 
     const planToolCall = toolSpy.mock.calls.find(
-      (call) => call[0] === "coalesce_plan_pipeline"
+      (call) => call[0] === "plan_pipeline"
     );
     const handler = planToolCall?.[2] as
       | ((params: { workspaceID: string; sql: string }) => Promise<{
@@ -151,7 +151,7 @@ describe("Pipeline Tools", () => {
     registerPipelineTools(server, client as any);
 
     const planToolCall = toolSpy.mock.calls.find(
-      (call) => call[0] === "coalesce_plan_pipeline"
+      (call) => call[0] === "plan_pipeline"
     );
     const handler = planToolCall?.[2] as
       | ((params: {
@@ -240,7 +240,7 @@ describe("Pipeline Tools", () => {
     registerPipelineTools(server, client as any);
 
     const createToolCall = toolSpy.mock.calls.find(
-      (call) => call[0] === "coalesce_create_pipeline_from_sql"
+      (call) => call[0] === "create_pipeline_from_sql"
     );
     const handler = createToolCall?.[2] as
       | ((params: { workspaceID: string; sql: string }) => Promise<{
@@ -1690,7 +1690,7 @@ describe("Pipeline Tools", () => {
 
     const elicitSpy = vi.spyOn(server.server, "elicitInput");
     const createToolCall = toolSpy.mock.calls.find(
-      (call) => call[0] === "coalesce_create_pipeline_from_sql"
+      (call) => call[0] === "create_pipeline_from_sql"
     );
     const handler = createToolCall?.[2] as
       | ((params: { workspaceID: string; sql: string; confirmed?: boolean; confirmationToken?: string }) => Promise<{

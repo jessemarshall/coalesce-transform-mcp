@@ -27,7 +27,7 @@ export async function getEnvironmentOverview(
 
 export function registerGetEnvironmentOverview(server: McpServer, client: CoalesceClient): void {
   server.registerTool(
-    "coalesce_get_environment_overview",
+    "get_environment_overview",
     {
       title: "Get Environment Overview",
       description:
@@ -35,13 +35,13 @@ export function registerGetEnvironmentOverview(server: McpServer, client: Coales
       inputSchema: z.object({
         environmentID: z.string().describe("The environment ID"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_get_environment_overview"),
+      outputSchema: getToolOutputSchema("get_environment_overview"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await getEnvironmentOverview(client, params);
-        return buildJsonToolResponse("coalesce_get_environment_overview", result);
+        return buildJsonToolResponse("get_environment_overview", result);
       } catch (error) {
         return handleToolError(error);
       }

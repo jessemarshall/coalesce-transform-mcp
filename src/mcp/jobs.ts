@@ -24,7 +24,7 @@ export function registerJobTools(
   client: CoalesceClient
 ): void {
   server.registerTool(
-    "coalesce_list_environment_jobs",
+    "list_environment_jobs",
     {
       title: "List Environment Jobs",
       description:
@@ -32,13 +32,13 @@ export function registerJobTools(
       inputSchema: PaginationParams.extend({
         environmentID: z.string().describe("The environment ID"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_list_environment_jobs"),
+      outputSchema: getToolOutputSchema("list_environment_jobs"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await listEnvironmentJobs(client, params);
-        return buildJsonToolResponse("coalesce_list_environment_jobs", result);
+        return buildJsonToolResponse("list_environment_jobs", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -46,7 +46,7 @@ export function registerJobTools(
   );
 
   server.registerTool(
-    "coalesce_list_workspace_jobs",
+    "list_workspace_jobs",
     {
       title: "List Workspace Jobs",
       description:
@@ -54,13 +54,13 @@ export function registerJobTools(
       inputSchema: PaginationParams.extend({
         workspaceID: z.string().describe("The workspace ID"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_list_workspace_jobs"),
+      outputSchema: getToolOutputSchema("list_workspace_jobs"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await listWorkspaceJobs(client, params);
-        return buildJsonToolResponse("coalesce_list_workspace_jobs", result);
+        return buildJsonToolResponse("list_workspace_jobs", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -68,7 +68,7 @@ export function registerJobTools(
   );
 
   server.registerTool(
-    "coalesce_create_workspace_job",
+    "create_workspace_job",
     {
       title: "Create Workspace Job",
       description:
@@ -83,13 +83,13 @@ export function registerJobTools(
           .string()
           .describe("Node exclusion selector string. Same format as includeSelector. Use empty string to exclude nothing."),
       }),
-      outputSchema: getToolOutputSchema("coalesce_create_workspace_job"),
+      outputSchema: getToolOutputSchema("create_workspace_job"),
       annotations: WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await createWorkspaceJob(client, params);
-        return buildJsonToolResponse("coalesce_create_workspace_job", result);
+        return buildJsonToolResponse("create_workspace_job", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -97,7 +97,7 @@ export function registerJobTools(
   );
 
   server.registerTool(
-    "coalesce_get_environment_job",
+    "get_environment_job",
     {
       title: "Get Environment Job",
       description:
@@ -106,13 +106,13 @@ export function registerJobTools(
         environmentID: z.string().describe("The environment ID"),
         jobID: z.string().describe("The job ID"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_get_environment_job"),
+      outputSchema: getToolOutputSchema("get_environment_job"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await getEnvironmentJob(client, params);
-        return buildJsonToolResponse("coalesce_get_environment_job", result);
+        return buildJsonToolResponse("get_environment_job", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -120,7 +120,7 @@ export function registerJobTools(
   );
 
   server.registerTool(
-    "coalesce_update_workspace_job",
+    "update_workspace_job",
     {
       title: "Update Workspace Job",
       description:
@@ -136,13 +136,13 @@ export function registerJobTools(
           .string()
           .describe("Node exclusion selector string. Same format as includeSelector. Use empty string to exclude nothing."),
       }),
-      outputSchema: getToolOutputSchema("coalesce_update_workspace_job"),
+      outputSchema: getToolOutputSchema("update_workspace_job"),
       annotations: WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await updateWorkspaceJob(client, params);
-        return buildJsonToolResponse("coalesce_update_workspace_job", result);
+        return buildJsonToolResponse("update_workspace_job", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -150,7 +150,7 @@ export function registerJobTools(
   );
 
   server.registerTool(
-    "coalesce_delete_workspace_job",
+    "delete_workspace_job",
     {
       title: "Delete Workspace Job",
       description:
@@ -159,13 +159,13 @@ export function registerJobTools(
         workspaceID: z.string().describe("The workspace ID"),
         jobID: z.string().describe("The job ID to delete"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_delete_workspace_job"),
+      outputSchema: getToolOutputSchema("delete_workspace_job"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await deleteWorkspaceJob(client, params);
-        return buildJsonToolResponse("coalesce_delete_workspace_job", result);
+        return buildJsonToolResponse("delete_workspace_job", result);
       } catch (error) {
         return handleToolError(error);
       }

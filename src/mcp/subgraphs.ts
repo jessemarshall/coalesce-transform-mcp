@@ -23,7 +23,7 @@ export function registerSubgraphTools(
   client: CoalesceClient
 ): void {
   server.registerTool(
-    "coalesce_list_workspace_subgraphs",
+    "list_workspace_subgraphs",
     {
       title: "List Workspace Subgraphs",
       description:
@@ -31,13 +31,13 @@ export function registerSubgraphTools(
       inputSchema: PaginationParams.extend({
         workspaceID: z.string().describe("The workspace ID"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_list_workspace_subgraphs"),
+      outputSchema: getToolOutputSchema("list_workspace_subgraphs"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await listWorkspaceSubgraphs(client, params);
-        return buildJsonToolResponse("coalesce_list_workspace_subgraphs", result);
+        return buildJsonToolResponse("list_workspace_subgraphs", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -45,7 +45,7 @@ export function registerSubgraphTools(
   );
 
   server.registerTool(
-    "coalesce_get_workspace_subgraph",
+    "get_workspace_subgraph",
     {
       title: "Get Workspace Subgraph",
       description:
@@ -54,13 +54,13 @@ export function registerSubgraphTools(
         workspaceID: z.string().describe("The workspace ID"),
         subgraphID: z.string().describe("The subgraph ID"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_get_workspace_subgraph"),
+      outputSchema: getToolOutputSchema("get_workspace_subgraph"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await getWorkspaceSubgraph(client, params);
-        return buildJsonToolResponse("coalesce_get_workspace_subgraph", result);
+        return buildJsonToolResponse("get_workspace_subgraph", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -68,7 +68,7 @@ export function registerSubgraphTools(
   );
 
   server.registerTool(
-    "coalesce_create_workspace_subgraph",
+    "create_workspace_subgraph",
     {
       title: "Create Workspace Subgraph",
       description:
@@ -80,13 +80,13 @@ export function registerSubgraphTools(
           .array(z.string())
           .describe("Array of node IDs to include in the subgraph"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_create_workspace_subgraph"),
+      outputSchema: getToolOutputSchema("create_workspace_subgraph"),
       annotations: WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await createWorkspaceSubgraph(client, params);
-        return buildJsonToolResponse("coalesce_create_workspace_subgraph", result);
+        return buildJsonToolResponse("create_workspace_subgraph", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -94,7 +94,7 @@ export function registerSubgraphTools(
   );
 
   server.registerTool(
-    "coalesce_update_workspace_subgraph",
+    "update_workspace_subgraph",
     {
       title: "Update Workspace Subgraph",
       description:
@@ -107,13 +107,13 @@ export function registerSubgraphTools(
           .array(z.string())
           .describe("Updated array of node IDs to include in the subgraph"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_update_workspace_subgraph"),
+      outputSchema: getToolOutputSchema("update_workspace_subgraph"),
       annotations: WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await updateWorkspaceSubgraph(client, params);
-        return buildJsonToolResponse("coalesce_update_workspace_subgraph", result);
+        return buildJsonToolResponse("update_workspace_subgraph", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -121,7 +121,7 @@ export function registerSubgraphTools(
   );
 
   server.registerTool(
-    "coalesce_delete_workspace_subgraph",
+    "delete_workspace_subgraph",
     {
       title: "Delete Workspace Subgraph",
       description:
@@ -130,13 +130,13 @@ export function registerSubgraphTools(
         workspaceID: z.string().describe("The workspace ID"),
         subgraphID: z.string().describe("The subgraph ID to delete"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_delete_workspace_subgraph"),
+      outputSchema: getToolOutputSchema("delete_workspace_subgraph"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await deleteWorkspaceSubgraph(client, params);
-        return buildJsonToolResponse("coalesce_delete_workspace_subgraph", result);
+        return buildJsonToolResponse("delete_workspace_subgraph", result);
       } catch (error) {
         return handleToolError(error);
       }

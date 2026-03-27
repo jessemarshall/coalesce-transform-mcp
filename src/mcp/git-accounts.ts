@@ -25,7 +25,7 @@ export function registerGitAccountTools(
   const accountOwnerParam = z.string().optional().describe("User ID of the account owner (org admins can manage other users' accounts)");
 
   server.registerTool(
-    "coalesce_list_git_accounts",
+    "list_git_accounts",
     {
       title: "List Git Accounts",
       description:
@@ -33,13 +33,13 @@ export function registerGitAccountTools(
       inputSchema: z.object({
         accountOwner: accountOwnerParam,
       }),
-      outputSchema: getToolOutputSchema("coalesce_list_git_accounts"),
+      outputSchema: getToolOutputSchema("list_git_accounts"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await listGitAccounts(client, params);
-        return buildJsonToolResponse("coalesce_list_git_accounts", result);
+        return buildJsonToolResponse("list_git_accounts", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -47,7 +47,7 @@ export function registerGitAccountTools(
   );
 
   server.registerTool(
-    "coalesce_get_git_account",
+    "get_git_account",
     {
       title: "Get Git Account",
       description:
@@ -56,13 +56,13 @@ export function registerGitAccountTools(
         gitAccountID: z.string().describe("The git account ID"),
         accountOwner: accountOwnerParam,
       }),
-      outputSchema: getToolOutputSchema("coalesce_get_git_account"),
+      outputSchema: getToolOutputSchema("get_git_account"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await getGitAccount(client, params);
-        return buildJsonToolResponse("coalesce_get_git_account", result);
+        return buildJsonToolResponse("get_git_account", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -70,7 +70,7 @@ export function registerGitAccountTools(
   );
 
   server.registerTool(
-    "coalesce_create_git_account",
+    "create_git_account",
     {
       title: "Create Git Account",
       description:
@@ -81,14 +81,14 @@ export function registerGitAccountTools(
         accessToken: z.string().optional().describe("Personal access token for the git provider"),
         accountOwner: accountOwnerParam,
       }),
-      outputSchema: getToolOutputSchema("coalesce_create_git_account"),
+      outputSchema: getToolOutputSchema("create_git_account"),
       annotations: WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const { accountOwner, ...body } = params;
         const result = await createGitAccount(client, { body, accountOwner });
-        return buildJsonToolResponse("coalesce_create_git_account", result);
+        return buildJsonToolResponse("create_git_account", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -96,7 +96,7 @@ export function registerGitAccountTools(
   );
 
   server.registerTool(
-    "coalesce_update_git_account",
+    "update_git_account",
     {
       title: "Update Git Account",
       description:
@@ -108,14 +108,14 @@ export function registerGitAccountTools(
         accessToken: z.string().optional().describe("Updated personal access token"),
         accountOwner: accountOwnerParam,
       }),
-      outputSchema: getToolOutputSchema("coalesce_update_git_account"),
+      outputSchema: getToolOutputSchema("update_git_account"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const { gitAccountID, accountOwner, ...body } = params;
         const result = await updateGitAccount(client, { gitAccountID, body, accountOwner });
-        return buildJsonToolResponse("coalesce_update_git_account", result);
+        return buildJsonToolResponse("update_git_account", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -123,7 +123,7 @@ export function registerGitAccountTools(
   );
 
   server.registerTool(
-    "coalesce_delete_git_account",
+    "delete_git_account",
     {
       title: "Delete Git Account",
       description:
@@ -132,13 +132,13 @@ export function registerGitAccountTools(
         gitAccountID: z.string().describe("The git account ID"),
         accountOwner: accountOwnerParam,
       }),
-      outputSchema: getToolOutputSchema("coalesce_delete_git_account"),
+      outputSchema: getToolOutputSchema("delete_git_account"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await deleteGitAccount(client, params);
-        return buildJsonToolResponse("coalesce_delete_git_account", result);
+        return buildJsonToolResponse("delete_git_account", result);
       } catch (error) {
         return handleToolError(error);
       }

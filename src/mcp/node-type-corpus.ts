@@ -57,7 +57,7 @@ export function registerNodeTypeCorpusTools(
   client: CoalesceClient
 ): void {
   server.registerTool(
-    "coalesce_search_node_type_variants",
+    "search_node_type_variants",
     {
       title: "Search Node Type Variants",
       description: "Search the generated node-type corpus snapshot by normalized family, package, primitive, or support status. This tool queries the committed snapshot and does not require access to the original external node source repo at runtime.",
@@ -86,7 +86,7 @@ export function registerNodeTypeCorpusTools(
           .optional()
           .describe("Maximum number of matches to return. Defaults to 25, max 200."),
       }),
-      outputSchema: getToolOutputSchema("coalesce_search_node_type_variants"),
+      outputSchema: getToolOutputSchema("search_node_type_variants"),
       annotations: READ_ONLY_LOCAL_ANNOTATIONS,
     },
     async (params) => {
@@ -96,7 +96,7 @@ export function registerNodeTypeCorpusTools(
           summary: summarizeNodeTypeCorpus(snapshot),
           ...searchNodeTypeCorpusVariants(snapshot, params),
         };
-        return buildJsonToolResponse("coalesce_search_node_type_variants", result);
+        return buildJsonToolResponse("search_node_type_variants", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -104,14 +104,14 @@ export function registerNodeTypeCorpusTools(
   );
 
   server.registerTool(
-    "coalesce_get_node_type_variant",
+    "get_node_type_variant",
     {
       title: "Get Node Type Variant",
-      description: "Get one node-type corpus variant from the committed snapshot by variantKey. Use coalesce_search_node_type_variants first when you need discovery.",
+      description: "Get one node-type corpus variant from the committed snapshot by variantKey. Use search_node_type_variants first when you need discovery.",
       inputSchema: z.object({
         variantKey: z.string().describe("The exact node-type corpus variant key."),
       }),
-      outputSchema: getToolOutputSchema("coalesce_get_node_type_variant"),
+      outputSchema: getToolOutputSchema("get_node_type_variant"),
       annotations: READ_ONLY_LOCAL_ANNOTATIONS,
     },
     async (params) => {
@@ -119,7 +119,7 @@ export function registerNodeTypeCorpusTools(
         const snapshot = loadNodeTypeCorpusSnapshot();
         const variant = getNodeTypeCorpusVariant(snapshot, params.variantKey);
         return buildJsonToolResponse(
-          "coalesce_get_node_type_variant",
+          "get_node_type_variant",
           sanitizeVariantForResponse(variant)
         );
       } catch (error) {
@@ -129,10 +129,10 @@ export function registerNodeTypeCorpusTools(
   );
 
   server.registerTool(
-    "coalesce_generate_set_workspace_node_template_from_variant",
+    "generate_set_workspace_node_template_from_variant",
     {
       title: "Generate Set Workspace Node Template from Variant",
-      description: "Generate a coalesce_set_workspace_node body template from a node-type corpus variant stored in the committed snapshot. This avoids requiring the original external node source repo at runtime, rejects partial variants unless allowPartial=true, and can optionally compare the inferred template against a live workspace node. SQL override controls are removed from returned templates because they are disallowed in this project.",
+      description: "Generate a set_workspace_node body template from a node-type corpus variant stored in the committed snapshot. This avoids requiring the original external node source repo at runtime, rejects partial variants unless allowPartial=true, and can optionally compare the inferred template against a live workspace node. SQL override controls are removed from returned templates because they are disallowed in this project.",
       inputSchema: z.object({
         variantKey: z.string().describe("The exact node-type corpus variant key."),
         nodeName: z
@@ -168,7 +168,7 @@ export function registerNodeTypeCorpusTools(
           .optional()
           .describe("Optional node ID for comparing inferred mappings to a live workspace node."),
       }),
-      outputSchema: getToolOutputSchema("coalesce_generate_set_workspace_node_template_from_variant"),
+      outputSchema: getToolOutputSchema("generate_set_workspace_node_template_from_variant"),
       annotations: READ_ONLY_LOCAL_ANNOTATIONS,
     },
     async (params) => {
@@ -254,7 +254,7 @@ export function registerNodeTypeCorpusTools(
           ...(comparison ? { comparison } : {}),
         };
         return buildJsonToolResponse(
-          "coalesce_generate_set_workspace_node_template_from_variant",
+          "generate_set_workspace_node_template_from_variant",
           result
         );
       } catch (error) {

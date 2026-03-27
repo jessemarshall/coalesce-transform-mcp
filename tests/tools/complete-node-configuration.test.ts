@@ -67,7 +67,7 @@ describe("complete-node-configuration tool", () => {
     registerNodeTools(server, mockClient as any);
 
     const toolCall = toolSpy.mock.calls.find(
-      (call) => call[0] === "coalesce_complete_node_configuration"
+      (call) => call[0] === "complete_node_configuration"
     );
 
     expect(toolCall).toBeDefined();
@@ -87,7 +87,7 @@ describe("complete-node-configuration tool", () => {
     registerNodeTools(server, mockClient as any);
 
     const toolCall = toolSpy.mock.calls.find(
-      (call) => call[0] === "coalesce_complete_node_configuration"
+      (call) => call[0] === "complete_node_configuration"
     );
     const handler = toolCall?.[2] as
       | ((params: { workspaceID: string; nodeID: string; repoPath?: string }) => Promise<{ content: { text: string }[] }>)

@@ -74,7 +74,7 @@ describe("retry-and-wait workflow", () => {
 
     registerRetryAndWait(server, client as any);
 
-    const toolCall = toolSpy.mock.calls.find((call) => call[0] === "coalesce_retry_and_wait");
+    const toolCall = toolSpy.mock.calls.find((call) => call[0] === "retry_and_wait");
     const handler = toolCall?.[2] as
       | ((params: {
           runDetails: { runID: string };

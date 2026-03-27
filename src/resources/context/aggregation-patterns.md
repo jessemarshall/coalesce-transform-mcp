@@ -102,15 +102,15 @@ The `validation.valid` flag indicates whether GROUP BY is correct. When `valid: 
 
 ## groupByColumns is Analysis Data Only
 
-**CRITICAL**: The `groupByColumns` field returned by `coalesce_convert_join_to_aggregation` is for analysis only. It must NEVER be included in node metadata sent to the Coalesce API.
+**CRITICAL**: The `groupByColumns` field returned by `convert_join_to_aggregation` is for analysis only. It must NEVER be included in node metadata sent to the Coalesce API.
 
 The Coalesce API rejects it with: `"request/body must NOT have additional properties"`
 
-Our tools (`coalesce_convert_join_to_aggregation`, `coalesce_replace_workspace_node_columns`, `coalesce_update_workspace_node`) automatically strip `groupByColumns` from metadata. But if you call `coalesce_set_workspace_node` with a body containing `groupByColumns` in metadata, you'll get an error.
+Our tools (`convert_join_to_aggregation`, `replace_workspace_node_columns`, `update_workspace_node`) automatically strip `groupByColumns` from metadata. But if you call `set_workspace_node` with a body containing `groupByColumns` in metadata, you'll get an error.
 
 ## Automatic Config Completion
 
-`coalesce_convert_join_to_aggregation` automatically completes config fields after transformation:
+`convert_join_to_aggregation` automatically completes config fields after transformation:
 
 ### Column-Level Attributes
 

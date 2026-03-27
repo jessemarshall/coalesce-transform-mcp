@@ -15,19 +15,19 @@ export function registerWorkspaceTools(
   client: CoalesceClient
 ): void {
   server.registerTool(
-    "coalesce_list_workspaces",
+    "list_workspaces",
     {
       title: "List Workspaces",
       description:
-        "List all Coalesce workspaces with optional pagination.\n\nReturns workspace IDs needed by node, job, and subgraph tools. Prefer this over coalesce_list_projects with includeWorkspaces when you only need workspace-level data.\n\nArgs:\n  - limit (number, optional): Max results per page\n  - startingFrom (string, optional): Pagination cursor\n  - orderBy (string, optional): Sort field\n  - orderByDirection ('asc'|'desc', optional): Sort direction\n\nReturns:\n  { data: Workspace[], next?: string, total?: number }",
+        "List all Coalesce workspaces with optional pagination.\n\nReturns workspace IDs needed by node, job, and subgraph tools. Prefer this over list_projects with includeWorkspaces when you only need workspace-level data.\n\nArgs:\n  - limit (number, optional): Max results per page\n  - startingFrom (string, optional): Pagination cursor\n  - orderBy (string, optional): Sort field\n  - orderByDirection ('asc'|'desc', optional): Sort direction\n\nReturns:\n  { data: Workspace[], next?: string, total?: number }",
       inputSchema: PaginationParams,
-      outputSchema: getToolOutputSchema("coalesce_list_workspaces"),
+      outputSchema: getToolOutputSchema("list_workspaces"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await listWorkspaces(client, params);
-        return buildJsonToolResponse("coalesce_list_workspaces", result);
+        return buildJsonToolResponse("list_workspaces", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -35,7 +35,7 @@ export function registerWorkspaceTools(
   );
 
   server.registerTool(
-    "coalesce_get_workspace",
+    "get_workspace",
     {
       title: "Get Workspace",
       description:
@@ -43,13 +43,13 @@ export function registerWorkspaceTools(
       inputSchema: {
         workspaceID: z.string().describe("The workspace ID"),
       },
-      outputSchema: getToolOutputSchema("coalesce_get_workspace"),
+      outputSchema: getToolOutputSchema("get_workspace"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await getWorkspace(client, params);
-        return buildJsonToolResponse("coalesce_get_workspace", result);
+        return buildJsonToolResponse("get_workspace", result);
       } catch (error) {
         return handleToolError(error);
       }

@@ -66,7 +66,7 @@ Do not assume storage location names can be normalized for SQL style. They must 
 
 ## Editing Rules
 
-- Prefer `coalesce_update_workspace_node` for partial changes.
+- Prefer `update_workspace_node` for partial changes.
 - Treat arrays as full-replacement fields (see `coalesce://context/node-payloads` for array safety details).
 - Preserve existing hydrated structures you are not intentionally changing.
 - When working from scratch, provide `metadata.columns` explicitly if the user expects a configured node.

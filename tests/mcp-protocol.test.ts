@@ -27,7 +27,7 @@ describe("MCP Protocol Surface", () => {
         name: "coalesce-transform-mcp",
         version: expect.any(String),
       });
-      expect(harness.client.getInstructions()).toContain("coalesce_plan_pipeline");
+      expect(harness.client.getInstructions()).toContain("plan_pipeline");
 
       const capabilities = harness.client.getServerCapabilities();
       expect(capabilities?.tools).toBeDefined();
@@ -38,12 +38,12 @@ describe("MCP Protocol Surface", () => {
       expect(result.tools.length).toBeGreaterThan(70);
 
       const toolNames = result.tools.map((tool) => tool.name);
-      expect(toolNames).toContain("coalesce_set_workspace_node");
-      expect(toolNames).toContain("coalesce_replace_workspace_node_columns");
-      expect(toolNames).toContain("coalesce_create_pipeline_from_plan");
-      expect(toolNames).toContain("coalesce_clear_data_cache");
+      expect(toolNames).toContain("set_workspace_node");
+      expect(toolNames).toContain("replace_workspace_node_columns");
+      expect(toolNames).toContain("create_pipeline_from_plan");
+      expect(toolNames).toContain("clear_data_cache");
 
-      const setTool = result.tools.find((tool) => tool.name === "coalesce_set_workspace_node");
+      const setTool = result.tools.find((tool) => tool.name === "set_workspace_node");
       expect(setTool?.annotations).toMatchObject({
         readOnlyHint: false,
         idempotentHint: true,
@@ -69,7 +69,7 @@ describe("MCP Protocol Surface", () => {
       });
 
       const replaceColumnsTool = result.tools.find(
-        (tool) => tool.name === "coalesce_replace_workspace_node_columns"
+        (tool) => tool.name === "replace_workspace_node_columns"
       );
       expect(replaceColumnsTool?.inputSchema).toMatchObject({
         type: "object",
@@ -82,7 +82,7 @@ describe("MCP Protocol Surface", () => {
       });
 
       const createFromPlanTool = result.tools.find(
-        (tool) => tool.name === "coalesce_create_pipeline_from_plan"
+        (tool) => tool.name === "create_pipeline_from_plan"
       );
       expect(createFromPlanTool?.inputSchema).toMatchObject({
         type: "object",
@@ -97,13 +97,13 @@ describe("MCP Protocol Surface", () => {
       });
 
       const clearCacheTool = result.tools.find(
-        (tool) => tool.name === "coalesce_clear_data_cache"
+        (tool) => tool.name === "clear_data_cache"
       );
       expect(clearCacheTool?.annotations).toMatchObject({
         destructiveHint: true,
       });
 
-      const listRunsTool = result.tools.find((tool) => tool.name === "coalesce_list_runs");
+      const listRunsTool = result.tools.find((tool) => tool.name === "list_runs");
       expect(listRunsTool?.outputSchema).toMatchObject({
         type: "object",
         properties: expect.objectContaining({
@@ -115,7 +115,7 @@ describe("MCP Protocol Surface", () => {
       });
 
       const planPipelineTool = result.tools.find(
-        (tool) => tool.name === "coalesce_plan_pipeline"
+        (tool) => tool.name === "plan_pipeline"
       );
       expect(planPipelineTool?.description).toContain("planSummaryUri");
       expect(planPipelineTool?.description).not.toContain("data/plans/");
@@ -129,7 +129,7 @@ describe("MCP Protocol Surface", () => {
       });
 
       const runAndWaitTool = result.tools.find(
-        (tool) => tool.name === "coalesce_run_and_wait"
+        (tool) => tool.name === "run_and_wait"
       );
       expect(runAndWaitTool?.outputSchema).toMatchObject({
         type: "object",
@@ -160,7 +160,7 @@ describe("MCP Protocol Surface", () => {
           role: "user",
           content: expect.objectContaining({
             type: "text",
-            text: expect.stringContaining("Always call coalesce_plan_pipeline"),
+            text: expect.stringContaining("Always call plan_pipeline"),
           }),
         }),
       ]);
@@ -226,7 +226,7 @@ describe("MCP Protocol Surface", () => {
           uri: "coalesce://context/node-operations",
           mimeType: "text/markdown",
           text: expect.stringContaining(
-            "Pass the user's exact SQL unchanged to `coalesce_plan_pipeline` or `coalesce_create_pipeline_from_sql`"
+            "Pass the user's exact SQL unchanged to `plan_pipeline` or `create_pipeline_from_sql`"
           ),
         }),
       ]);
@@ -254,7 +254,7 @@ describe("MCP Protocol Surface", () => {
           uri: "coalesce://context/pipeline-workflows",
           mimeType: "text/markdown",
           text: expect.stringContaining(
-            "still call `coalesce_plan_pipeline` before creating anything"
+            "still call `plan_pipeline` before creating anything"
           ),
         }),
       ]);
@@ -302,7 +302,7 @@ describe("MCP Protocol Surface", () => {
 
     try {
       const listRunsResult = await harness.client.callTool({
-        name: "coalesce_list_runs",
+        name: "list_runs",
         arguments: {},
       });
 
@@ -318,7 +318,7 @@ describe("MCP Protocol Surface", () => {
       });
 
       const invalidSetNodeResult = await harness.client.callTool({
-        name: "coalesce_set_workspace_node",
+        name: "set_workspace_node",
         arguments: {
           workspaceID: "ws-1",
           nodeID: "node-1",
@@ -389,7 +389,7 @@ describe("MCP Protocol Surface", () => {
 
       // Step 1: call without confirmed — should return STOP_AND_CONFIRM with token
       const preview = await harness.client.callTool({
-        name: "coalesce_create_pipeline_from_sql",
+        name: "create_pipeline_from_sql",
         arguments: {
           workspaceID: "ws-1",
           sql: "SELECT * FROM RAW.CUSTOMER",
@@ -406,7 +406,7 @@ describe("MCP Protocol Surface", () => {
 
       // Step 2: call with confirmed=true and the matching token — should execute
       const result = await harness.client.callTool({
-        name: "coalesce_create_pipeline_from_sql",
+        name: "create_pipeline_from_sql",
         arguments: {
           workspaceID: "ws-1",
           sql: "SELECT * FROM RAW.CUSTOMER",
@@ -483,7 +483,7 @@ describe("MCP Protocol Surface", () => {
 
       // confirmed=true without a token should be rejected with STOP_AND_CONFIRM
       const result = await harness.client.callTool({
-        name: "coalesce_create_pipeline_from_sql",
+        name: "create_pipeline_from_sql",
         arguments: {
           workspaceID: "ws-1",
           sql: "SELECT * FROM RAW.CUSTOMER",

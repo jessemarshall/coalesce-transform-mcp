@@ -16,7 +16,7 @@ Follow exactly one dialect's rules per edit. Mixing dialect conventions in one n
 
 ### 1. Check Project Metadata First
 
-Use `coalesce_get_project` or `coalesce_list_projects` and inspect the returned project metadata for the warehouse or platform type.
+Use `get_project` or `list_projects` and inspect the returned project metadata for the warehouse or platform type.
 
 This is the best first signal because it reflects the project configuration directly.
 

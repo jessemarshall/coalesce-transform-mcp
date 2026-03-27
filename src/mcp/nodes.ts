@@ -46,7 +46,7 @@ export function registerNodeTools(
   client: CoalesceClient
 ): void {
   server.registerTool(
-    "coalesce_list_environment_nodes",
+    "list_environment_nodes",
     {
       title: "List Environment Nodes",
       description:
@@ -55,13 +55,13 @@ export function registerNodeTools(
         environmentID: z.string().describe("The environment ID"),
         detail: z.boolean().optional().describe("Include full node details in response"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_list_environment_nodes"),
+      outputSchema: getToolOutputSchema("list_environment_nodes"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await listEnvironmentNodes(client, params);
-        return buildJsonToolResponse("coalesce_list_environment_nodes", result);
+        return buildJsonToolResponse("list_environment_nodes", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -69,22 +69,22 @@ export function registerNodeTools(
   );
 
   server.registerTool(
-    "coalesce_list_workspace_nodes",
+    "list_workspace_nodes",
     {
       title: "List Workspace Nodes",
       description:
-        "List all nodes in a Coalesce workspace. Use coalesce_list_workspaces to find workspace IDs.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - detail (boolean, optional): Include full node details\n  - limit, startingFrom, orderBy, orderByDirection: Pagination\n\nReturns:\n  { data: Node[], next?: string, total?: number }",
+        "List all nodes in a Coalesce workspace. Use list_workspaces to find workspace IDs.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - detail (boolean, optional): Include full node details\n  - limit, startingFrom, orderBy, orderByDirection: Pagination\n\nReturns:\n  { data: Node[], next?: string, total?: number }",
       inputSchema: PaginationParams.extend({
         workspaceID: z.string().describe("The workspace ID"),
         detail: z.boolean().optional().describe("Include full node details in response"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_list_workspace_nodes"),
+      outputSchema: getToolOutputSchema("list_workspace_nodes"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await listWorkspaceNodes(client, params);
-        return buildJsonToolResponse("coalesce_list_workspace_nodes", result);
+        return buildJsonToolResponse("list_workspace_nodes", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -92,7 +92,7 @@ export function registerNodeTools(
   );
 
   server.registerTool(
-    "coalesce_get_environment_node",
+    "get_environment_node",
     {
       title: "Get Environment Node",
       description:
@@ -101,13 +101,13 @@ export function registerNodeTools(
         environmentID: z.string().describe("The environment ID"),
         nodeID: z.string().describe("The node ID"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_get_environment_node"),
+      outputSchema: getToolOutputSchema("get_environment_node"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await getEnvironmentNode(client, params);
-        return buildJsonToolResponse("coalesce_get_environment_node", result);
+        return buildJsonToolResponse("get_environment_node", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -115,22 +115,22 @@ export function registerNodeTools(
   );
 
   server.registerTool(
-    "coalesce_get_workspace_node",
+    "get_workspace_node",
     {
       title: "Get Workspace Node",
       description:
-        "Get details of a specific node in a workspace. Use coalesce_list_workspaces to find workspace IDs.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - nodeID (string, required): The node ID\n\nReturns:\n  Full workspace node with columns, transforms, joins, config, and metadata.",
+        "Get details of a specific node in a workspace. Use list_workspaces to find workspace IDs.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - nodeID (string, required): The node ID\n\nReturns:\n  Full workspace node with columns, transforms, joins, config, and metadata.",
       inputSchema: z.object({
         workspaceID: z.string().describe("The workspace ID"),
         nodeID: z.string().describe("The node ID"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_get_workspace_node"),
+      outputSchema: getToolOutputSchema("get_workspace_node"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await getWorkspaceNode(client, params);
-        return buildJsonToolResponse("coalesce_get_workspace_node", result);
+        return buildJsonToolResponse("get_workspace_node", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -138,14 +138,14 @@ export function registerNodeTools(
   );
 
   server.registerTool(
-    "coalesce_create_workspace_node_from_scratch",
+    "create_workspace_node_from_scratch",
     {
       title: "Create Workspace Node from Scratch",
       description:
-        "Create a workspace node from scratch with NO predecessors. Only use this when the node truly has no upstream nodes — for example, a standalone utility node. If the node has ANY upstream/source nodes, use coalesce_create_workspace_node_from_predecessor instead.\n\nREQUIRED: Before calling this tool, call coalesce_plan_pipeline with goal + repoPath to discover the correct nodeType. Do not guess or hardcode node types — the planner ranks all available types and returns the best match.\n\nSPECIALIZED TYPES WARNING: Do NOT use Dynamic Tables, Incremental Load, Materialized View, or other specialized types unless the user explicitly requests that pattern (e.g., 'near-real-time refresh', 'incremental processing'). For standard batch ETL, CTE decomposition, and general transforms, use Stage or Work. The response includes nodeTypeValidation.warning if a specialized pattern was detected without matching context.\n\nDefaults to completionLevel='configured', which REQUIRES both `name` and `metadata.columns` to be provided. If you don't have column definitions yet, set completionLevel to 'created' or 'named' instead.\n\nAUTOMATIC CONFIG: When repoPath is provided, this tool automatically runs intelligent config completion after creation — reading the node type definition, setting node-level config defaults, and applying column-level attributes. The configCompletion result shows what was applied.\n\nDo not use overrideSQL or override.* fields; SQL override is disallowed in this project.",
+        "Create a workspace node from scratch with NO predecessors. Only use this when the node truly has no upstream nodes — for example, a standalone utility node. If the node has ANY upstream/source nodes, use create_workspace_node_from_predecessor instead.\n\nREQUIRED: Before calling this tool, call plan_pipeline with goal + repoPath to discover the correct nodeType. Do not guess or hardcode node types — the planner ranks all available types and returns the best match.\n\nSPECIALIZED TYPES WARNING: Do NOT use Dynamic Tables, Incremental Load, Materialized View, or other specialized types unless the user explicitly requests that pattern (e.g., 'near-real-time refresh', 'incremental processing'). For standard batch ETL, CTE decomposition, and general transforms, use Stage or Work. The response includes nodeTypeValidation.warning if a specialized pattern was detected without matching context.\n\nDefaults to completionLevel='configured', which REQUIRES both `name` and `metadata.columns` to be provided. If you don't have column definitions yet, set completionLevel to 'created' or 'named' instead.\n\nAUTOMATIC CONFIG: When repoPath is provided, this tool automatically runs intelligent config completion after creation — reading the node type definition, setting node-level config defaults, and applying column-level attributes. The configCompletion result shows what was applied.\n\nDo not use overrideSQL or override.* fields; SQL override is disallowed in this project.",
       inputSchema: z.object({
         workspaceID: z.string().describe("The workspace ID"),
-        nodeType: z.string().describe("The type of node to create. IMPORTANT: Call coalesce_plan_pipeline first to discover and rank available node types — use the nodeType from its result. Format: 'PackageName:::ID' for package types (e.g., 'base-nodes:::Stage') or simple name ('Stage') for built-in types. Always prefer the package-prefixed format returned by coalesce_plan_pipeline."),
+        nodeType: z.string().describe("The type of node to create. IMPORTANT: Call plan_pipeline first to discover and rank available node types — use the nodeType from its result. Format: 'PackageName:::ID' for package types (e.g., 'base-nodes:::Stage') or simple name ('Stage') for built-in types. Always prefer the package-prefixed format returned by plan_pipeline."),
         completionLevel: z
           .enum(["created", "named", "configured"])
           .optional()
@@ -178,15 +178,15 @@ export function registerNodeTools(
         goal: z
           .string()
           .optional()
-          .describe("The goal or intent for this node (e.g., 'deduplicate customer records', 'aggregate daily sales'). Used to validate that the chosen nodeType is appropriate for the task. Same value you would pass to coalesce_plan_pipeline."),
+          .describe("The goal or intent for this node (e.g., 'deduplicate customer records', 'aggregate daily sales'). Used to validate that the chosen nodeType is appropriate for the task. Same value you would pass to plan_pipeline."),
       }),
-      outputSchema: getToolOutputSchema("coalesce_create_workspace_node_from_scratch"),
+      outputSchema: getToolOutputSchema("create_workspace_node_from_scratch"),
       annotations: WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await createWorkspaceNodeFromScratch(client, params);
-        return buildJsonToolResponse("coalesce_create_workspace_node_from_scratch", result);
+        return buildJsonToolResponse("create_workspace_node_from_scratch", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -194,11 +194,11 @@ export function registerNodeTools(
   );
 
   server.registerTool(
-    "coalesce_set_workspace_node",
+    "set_workspace_node",
     {
       title: "Set Workspace Node",
       description:
-        "Update a workspace node's full body. Reads current state, merges changes, validates, and writes back.\n\nThis is the primary mutation tool for workspace nodes. It handles column linkage preservation, passthrough transform stripping, required API field injection, and metadata cleaning automatically.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - nodeID (string, required): The node ID\n  - body (object, required): Fields to update — name, description, nodeType, config, metadata.columns, etc.\n\nReturns:\n  { nodeID, created, warning?, validation?, configCompletion? }\n\nDo NOT set overrideSQL or metadata.sourceMapping through this tool. Use coalesce_apply_join_condition or coalesce_convert_join_to_aggregation for join/aggregation changes.",
+        "Update a workspace node's full body. Reads current state, merges changes, validates, and writes back.\n\nThis is the primary mutation tool for workspace nodes. It handles column linkage preservation, passthrough transform stripping, required API field injection, and metadata cleaning automatically.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - nodeID (string, required): The node ID\n  - body (object, required): Fields to update — name, description, nodeType, config, metadata.columns, etc.\n\nReturns:\n  { nodeID, created, warning?, validation?, configCompletion? }\n\nDo NOT set overrideSQL or metadata.sourceMapping through this tool. Use apply_join_condition or convert_join_to_aggregation for join/aggregation changes.",
       inputSchema: z.object({
         workspaceID: z.string().describe("The workspace ID"),
         nodeID: z.string().describe("The node ID"),
@@ -206,13 +206,13 @@ export function registerNodeTools(
           "Complete node data to set. Common fields include name, description, nodeType, table, database, schema, locationName, storageLocations, config, and metadata. Do not include overrideSQL — it is auto-preserved."
         ),
       }),
-      outputSchema: getToolOutputSchema("coalesce_set_workspace_node"),
+      outputSchema: getToolOutputSchema("set_workspace_node"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         // Deep-check for override fields the agent may have included
-        assertNoSqlOverridePayload(params.body, "coalesce_set_workspace_node body");
+        assertNoSqlOverridePayload(params.body, "set_workspace_node body");
 
         // Fetch current node to preserve API-required fields
         const current = await getWorkspaceNode(client, {
@@ -240,7 +240,7 @@ export function registerNodeTools(
           nodeID: params.nodeID,
           body,
         });
-        return buildJsonToolResponse("coalesce_set_workspace_node", result);
+        return buildJsonToolResponse("set_workspace_node", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -248,11 +248,11 @@ export function registerNodeTools(
   );
 
   server.registerTool(
-    "coalesce_update_workspace_node",
+    "update_workspace_node",
     {
       title: "Update Workspace Node",
       description:
-        "Safely update selected fields of a workspace node by fetching the current node, applying partial changes, then writing back the full merged body. Object fields are deep-merged; arrays replace the existing array when provided. Use coalesce_list_workspaces to find workspace IDs.\n\nDo not use overrideSQL or override.* fields; SQL override is disallowed in this project.\n\nNOTE: Arrays (like metadata.columns) are replaced, not merged. For complex column transformations (e.g., converting from join to aggregation), consider using coalesce_replace_workspace_node_columns instead.\n\nFor guidance on SQL platforms and tool usage patterns, see resources: coalesce://context/sql-platform-selection, coalesce://context/tool-usage",
+        "Safely update selected fields of a workspace node by fetching the current node, applying partial changes, then writing back the full merged body. Object fields are deep-merged; arrays replace the existing array when provided. Use list_workspaces to find workspace IDs.\n\nDo not use overrideSQL or override.* fields; SQL override is disallowed in this project.\n\nNOTE: Arrays (like metadata.columns) are replaced, not merged. For complex column transformations (e.g., converting from join to aggregation), consider using replace_workspace_node_columns instead.\n\nFor guidance on SQL platforms and tool usage patterns, see resources: coalesce://context/sql-platform-selection, coalesce://context/tool-usage",
       inputSchema: z.object({
         workspaceID: z.string().describe("The workspace ID"),
         nodeID: z.string().describe("The node ID"),
@@ -260,13 +260,13 @@ export function registerNodeTools(
           "Partial node fields to update. Common fields include name, description, database, schema, locationName, storageLocations, config, and metadata. Object fields are deep-merged; arrays replace the existing array when provided."
         ),
       }),
-      outputSchema: getToolOutputSchema("coalesce_update_workspace_node"),
+      outputSchema: getToolOutputSchema("update_workspace_node"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await updateWorkspaceNode(client, params);
-        return buildJsonToolResponse("coalesce_update_workspace_node", result);
+        return buildJsonToolResponse("update_workspace_node", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -274,11 +274,11 @@ export function registerNodeTools(
   );
 
   server.registerTool(
-    "coalesce_replace_workspace_node_columns",
+    "replace_workspace_node_columns",
     {
       title: "Replace Workspace Node Columns",
       description:
-        "Replace all columns in a workspace node with a new set of columns, optionally applying a WHERE filter and additional changes in a single call.\n\nDo not use overrideSQL or override.* fields; SQL override is disallowed in this project.\n\nUse this when:\n- Applying column transforms (UPPER, LEFT, COALESCE, etc.) after node creation\n- Adding WHERE filters at the same time as column transforms\n- Converting from a simple join to GROUP BY aggregation\n- Completely replacing column definitions with aggregate functions\n\nPrefer this over separate coalesce_update_workspace_node calls. Combine column replacement + WHERE filter in one call.\n\nExample: Apply transforms and filter in one call:\n{\n  columns: [\n    { name: 'CUSTOMER_ID', transform: '\"CUSTOMER_LOYALTY\".\"CUSTOMER_ID\"' },\n    { name: 'CITY', transform: 'UPPER(\"CUSTOMER_LOYALTY\".\"CITY\")' },\n    { name: 'CONTACT_INFO', transform: 'COALESCE(\"CUSTOMER_LOYALTY\".\"E_MAIL\", \"CUSTOMER_LOYALTY\".\"PHONE_NUMBER\")' }\n  ],\n  whereCondition: '\"CUSTOMER_LOYALTY\".\"CUSTOMER_ID\" IS NOT NULL AND (\"CUSTOMER_LOYALTY\".\"E_MAIL\" IS NOT NULL OR \"CUSTOMER_LOYALTY\".\"PHONE_NUMBER\" IS NOT NULL)'\n}\n\nIMPORTANT: Use whereCondition for WHERE filters — do NOT construct {{ ref() }} syntax yourself. The FROM clause is already set up from node creation. The whereCondition is appended to the existing joinCondition automatically.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - nodeID (string, required): The node ID\n  - columns (array, required): Complete new columns array\n  - whereCondition (string, optional): WHERE filter to append\n  - additionalChanges (object, optional): Additional fields to update\n\nReturns:\n  { nodeID, warning?, validation? }",
+        "Replace all columns in a workspace node with a new set of columns, optionally applying a WHERE filter and additional changes in a single call.\n\nDo not use overrideSQL or override.* fields; SQL override is disallowed in this project.\n\nUse this when:\n- Applying column transforms (UPPER, LEFT, COALESCE, etc.) after node creation\n- Adding WHERE filters at the same time as column transforms\n- Converting from a simple join to GROUP BY aggregation\n- Completely replacing column definitions with aggregate functions\n\nPrefer this over separate update_workspace_node calls. Combine column replacement + WHERE filter in one call.\n\nExample: Apply transforms and filter in one call:\n{\n  columns: [\n    { name: 'CUSTOMER_ID', transform: '\"CUSTOMER_LOYALTY\".\"CUSTOMER_ID\"' },\n    { name: 'CITY', transform: 'UPPER(\"CUSTOMER_LOYALTY\".\"CITY\")' },\n    { name: 'CONTACT_INFO', transform: 'COALESCE(\"CUSTOMER_LOYALTY\".\"E_MAIL\", \"CUSTOMER_LOYALTY\".\"PHONE_NUMBER\")' }\n  ],\n  whereCondition: '\"CUSTOMER_LOYALTY\".\"CUSTOMER_ID\" IS NOT NULL AND (\"CUSTOMER_LOYALTY\".\"E_MAIL\" IS NOT NULL OR \"CUSTOMER_LOYALTY\".\"PHONE_NUMBER\" IS NOT NULL)'\n}\n\nIMPORTANT: Use whereCondition for WHERE filters — do NOT construct {{ ref() }} syntax yourself. The FROM clause is already set up from node creation. The whereCondition is appended to the existing joinCondition automatically.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - nodeID (string, required): The node ID\n  - columns (array, required): Complete new columns array\n  - whereCondition (string, optional): WHERE filter to append\n  - additionalChanges (object, optional): Additional fields to update\n\nReturns:\n  { nodeID, warning?, validation? }",
       inputSchema: z.object({
         workspaceID: z.string().describe("The workspace ID"),
         nodeID: z.string().describe("The node ID"),
@@ -291,15 +291,15 @@ export function registerNodeTools(
           .describe("Optional WHERE filter to append to the node's existing joinCondition. Just provide the condition — do NOT include the WHERE keyword or construct {{ ref() }} syntax. The FROM clause is already set from node creation. Example: '\"LOCATION\".\"LOCATION_ID\" IS NOT NULL AND \"LOCATION\".\"LOCATION_ID\" != 0'"),
         additionalChanges: WorkspaceNodeWriteInputSchema
           .optional()
-          .describe("Optional additional fields to update, such as name, description, config, or metadata. Object fields are deep-merged; arrays are replaced. Do NOT include metadata.sourceMapping or customSQL — use whereCondition for WHERE filters, coalesce_apply_join_condition for join setup, or coalesce_convert_join_to_aggregation for GROUP BY patterns."),
+          .describe("Optional additional fields to update, such as name, description, config, or metadata. Object fields are deep-merged; arrays are replaced. Do NOT include metadata.sourceMapping or customSQL — use whereCondition for WHERE filters, apply_join_condition for join setup, or convert_join_to_aggregation for GROUP BY patterns."),
       }),
-      outputSchema: getToolOutputSchema("coalesce_replace_workspace_node_columns"),
+      outputSchema: getToolOutputSchema("replace_workspace_node_columns"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await replaceWorkspaceNodeColumns(client, params);
-        return buildJsonToolResponse("coalesce_replace_workspace_node_columns", result);
+        return buildJsonToolResponse("replace_workspace_node_columns", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -307,7 +307,7 @@ export function registerNodeTools(
   );
 
   server.registerTool(
-    "coalesce_convert_join_to_aggregation",
+    "convert_join_to_aggregation",
     {
       title: "Convert Join to Aggregation",
       description:
@@ -341,13 +341,13 @@ export function registerNodeTools(
           .optional()
           .describe("Optional path to local Coalesce repository for intelligent config completion"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_convert_join_to_aggregation"),
+      outputSchema: getToolOutputSchema("convert_join_to_aggregation"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await convertJoinToAggregation(client, params);
-        return buildJsonToolResponse("coalesce_convert_join_to_aggregation", result);
+        return buildJsonToolResponse("convert_join_to_aggregation", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -355,7 +355,7 @@ export function registerNodeTools(
   );
 
   server.registerTool(
-    "coalesce_apply_join_condition",
+    "apply_join_condition",
     {
       title: "Apply Join Condition",
       description:
@@ -387,13 +387,13 @@ export function registerNodeTools(
           .optional()
           .describe("Explicit column mappings for joins when column names differ across predecessors. Overrides auto-detected common columns for the specified predecessor pair."),
       }),
-      outputSchema: getToolOutputSchema("coalesce_apply_join_condition"),
+      outputSchema: getToolOutputSchema("apply_join_condition"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await applyJoinCondition(client, params);
-        return buildJsonToolResponse("coalesce_apply_join_condition", result);
+        return buildJsonToolResponse("apply_join_condition", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -401,14 +401,14 @@ export function registerNodeTools(
   );
 
   server.registerTool(
-    "coalesce_create_workspace_node_from_predecessor",
+    "create_workspace_node_from_predecessor",
     {
       title: "Create Workspace Node from Predecessor",
       description:
-        "Create a workspace node from one or more predecessor nodes, fetch it, and verify that columns were auto-populated from those predecessors before applying any optional changes.\n\nSINGLE-CALL WORKFLOW: You can create a node AND apply column transforms, WHERE filters, or aggregation in one call:\n- columns + whereCondition: Replace auto-populated columns with specific transforms and add a WHERE filter — no separate coalesce_replace_workspace_node_columns needed\n- groupByColumns + aggregates: Convert to an aggregation node with GROUP BY — no separate coalesce_convert_join_to_aggregation needed\nThese are mutually exclusive: use columns OR groupByColumns+aggregates, not both.\n\nREQUIRED: Before calling this tool, call `coalesce_plan_pipeline` with `goal`, `sourceNodeIDs`, and `repoPath` to discover and rank available node types. Use the `nodeType` from the plan result — do NOT guess or hardcode node types like 'Stage', 'View', or numeric IDs like '65'. The planner scans all committed node type definitions and scores them against your use case.\n\nSPECIALIZED TYPES WARNING: Do NOT use Dynamic Tables, Incremental Load, Materialized View, or other specialized types unless the user explicitly requests that pattern (e.g., 'near-real-time refresh', 'continuous refresh', 'incremental processing'). For standard batch ETL, CTE decomposition, and general transforms, use Stage or Work. The response includes nodeTypeValidation.warning if a specialized pattern was detected without matching context — always check this field.\n\nJOIN INTELLIGENCE: For multi-predecessor nodes (joins), this tool automatically:\n- Analyzes common columns between each predecessor pair\n- Returns `joinSuggestions` with normalized column names and their left/right counterparts\n- Reports which predecessors are represented in the resulting column references\n- Warns if any predecessor is missing from the auto-populated columns\n\nAUTOMATIC CONFIG: When repoPath is provided, this tool automatically runs intelligent config completion after creation — reading the node type definition, setting node-level config defaults, and applying column-level attributes (isBusinessKey, isChangeTracking, etc.). The configCompletion result shows what was applied.\n\nDo not use overrideSQL or override.* fields; SQL override is disallowed in this project.\n\nFor guidance on node types, storage locations, and SQL patterns, see resources: coalesce://context/data-engineering-principles, coalesce://context/storage-mappings, coalesce://context/sql-platform-selection\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - nodeType (string, required): Node type from coalesce_plan_pipeline\n  - predecessorNodeIDs (string[], required): One or more predecessor node IDs\n  - changes (object, optional): Partial fields to apply after creation\n  - columns (array, optional): Replace auto-populated columns (mutually exclusive with groupByColumns)\n  - whereCondition (string, optional): WHERE filter (only with columns)\n  - groupByColumns (string[], optional): GROUP BY columns (with aggregates)\n  - aggregates (array, optional): Aggregate columns (with groupByColumns)\n  - joinType (string, optional): JOIN type for multi-predecessor aggregation\n  - repoPath (string, optional): Local repo path for config completion\n  - goal (string, optional): Intent for node type validation\n\nReturns:\n  { nodeID, created, joinSuggestions?, nodeTypeValidation?, configCompletion? }",
+        "Create a workspace node from one or more predecessor nodes, fetch it, and verify that columns were auto-populated from those predecessors before applying any optional changes.\n\nSINGLE-CALL WORKFLOW: You can create a node AND apply column transforms, WHERE filters, or aggregation in one call:\n- columns + whereCondition: Replace auto-populated columns with specific transforms and add a WHERE filter — no separate replace_workspace_node_columns needed\n- groupByColumns + aggregates: Convert to an aggregation node with GROUP BY — no separate convert_join_to_aggregation needed\nThese are mutually exclusive: use columns OR groupByColumns+aggregates, not both.\n\nREQUIRED: Before calling this tool, call `plan_pipeline` with `goal`, `sourceNodeIDs`, and `repoPath` to discover and rank available node types. Use the `nodeType` from the plan result — do NOT guess or hardcode node types like 'Stage', 'View', or numeric IDs like '65'. The planner scans all committed node type definitions and scores them against your use case.\n\nSPECIALIZED TYPES WARNING: Do NOT use Dynamic Tables, Incremental Load, Materialized View, or other specialized types unless the user explicitly requests that pattern (e.g., 'near-real-time refresh', 'continuous refresh', 'incremental processing'). For standard batch ETL, CTE decomposition, and general transforms, use Stage or Work. The response includes nodeTypeValidation.warning if a specialized pattern was detected without matching context — always check this field.\n\nJOIN INTELLIGENCE: For multi-predecessor nodes (joins), this tool automatically:\n- Analyzes common columns between each predecessor pair\n- Returns `joinSuggestions` with normalized column names and their left/right counterparts\n- Reports which predecessors are represented in the resulting column references\n- Warns if any predecessor is missing from the auto-populated columns\n\nAUTOMATIC CONFIG: When repoPath is provided, this tool automatically runs intelligent config completion after creation — reading the node type definition, setting node-level config defaults, and applying column-level attributes (isBusinessKey, isChangeTracking, etc.). The configCompletion result shows what was applied.\n\nDo not use overrideSQL or override.* fields; SQL override is disallowed in this project.\n\nFor guidance on node types, storage locations, and SQL patterns, see resources: coalesce://context/data-engineering-principles, coalesce://context/storage-mappings, coalesce://context/sql-platform-selection\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - nodeType (string, required): Node type from plan_pipeline\n  - predecessorNodeIDs (string[], required): One or more predecessor node IDs\n  - changes (object, optional): Partial fields to apply after creation\n  - columns (array, optional): Replace auto-populated columns (mutually exclusive with groupByColumns)\n  - whereCondition (string, optional): WHERE filter (only with columns)\n  - groupByColumns (string[], optional): GROUP BY columns (with aggregates)\n  - aggregates (array, optional): Aggregate columns (with groupByColumns)\n  - joinType (string, optional): JOIN type for multi-predecessor aggregation\n  - repoPath (string, optional): Local repo path for config completion\n  - goal (string, optional): Intent for node type validation\n\nReturns:\n  { nodeID, created, joinSuggestions?, nodeTypeValidation?, configCompletion? }",
       inputSchema: z.object({
         workspaceID: z.string().describe("The workspace ID"),
-        nodeType: z.string().describe("The type of node to create. IMPORTANT: Call coalesce_plan_pipeline first to discover and rank available node types — use the nodeType from its result. Format: 'PackageName:::ID' for package types (e.g., 'base-nodes:::Stage') or simple name ('Stage') for built-in types. Always prefer the package-prefixed format returned by coalesce_plan_pipeline."),
+        nodeType: z.string().describe("The type of node to create. IMPORTANT: Call plan_pipeline first to discover and rank available node types — use the nodeType from its result. Format: 'PackageName:::ID' for package types (e.g., 'base-nodes:::Stage') or simple name ('Stage') for built-in types. Always prefer the package-prefixed format returned by plan_pipeline."),
         predecessorNodeIDs: z
           .array(z.string())
           .min(1)
@@ -449,15 +449,15 @@ export function registerNodeTools(
         goal: z
           .string()
           .optional()
-          .describe("The goal or intent for this node (e.g., 'deduplicate customer records', 'join orders with customers'). Used to validate that the chosen nodeType is appropriate for the task. Same value you would pass to coalesce_plan_pipeline."),
+          .describe("The goal or intent for this node (e.g., 'deduplicate customer records', 'join orders with customers'). Used to validate that the chosen nodeType is appropriate for the task. Same value you would pass to plan_pipeline."),
       }),
-      outputSchema: getToolOutputSchema("coalesce_create_workspace_node_from_predecessor"),
+      outputSchema: getToolOutputSchema("create_workspace_node_from_predecessor"),
       annotations: WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await createWorkspaceNodeFromPredecessor(client, params);
-        return buildJsonToolResponse("coalesce_create_workspace_node_from_predecessor", result);
+        return buildJsonToolResponse("create_workspace_node_from_predecessor", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -465,15 +465,15 @@ export function registerNodeTools(
   );
 
   server.registerTool(
-    "coalesce_analyze_workspace_patterns",
+    "analyze_workspace_patterns",
     {
       title: "Analyze Workspace Patterns",
       description:
-        "Analyze workspace node patterns to detect package adoption, pipeline layers, data modeling methodology, and generate recommendations.\n\nThis tool examines existing workspace nodes to understand conventions before creating new nodes. Results are returned as a workspace profile summary. If you want a reusable local snapshot instead of inline data, use coalesce_cache_workspace_nodes.\n\nArgs:\n  - workspaceID (string, required): The workspace ID to analyze\n\nReturns:\n  Workspace profile with package adoption, pipeline layers, naming conventions, and recommendations.",
+        "Analyze workspace node patterns to detect package adoption, pipeline layers, data modeling methodology, and generate recommendations.\n\nThis tool examines existing workspace nodes to understand conventions before creating new nodes. Results are returned as a workspace profile summary. If you want a reusable local snapshot instead of inline data, use cache_workspace_nodes.\n\nArgs:\n  - workspaceID (string, required): The workspace ID to analyze\n\nReturns:\n  Workspace profile with package adoption, pipeline layers, naming conventions, and recommendations.",
       inputSchema: z.object({
         workspaceID: z.string().describe("The workspace ID to analyze"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_analyze_workspace_patterns"),
+      outputSchema: getToolOutputSchema("analyze_workspace_patterns"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
@@ -485,7 +485,7 @@ export function registerNodeTools(
         const nodes = toNodeSummaries(nodesResponse.items);
 
         const profile = buildWorkspaceProfile(params.workspaceID, nodes);
-        return buildJsonToolResponse("coalesce_analyze_workspace_patterns", profile);
+        return buildJsonToolResponse("analyze_workspace_patterns", profile);
       } catch (error) {
         return handleToolError(error);
       }
@@ -493,21 +493,21 @@ export function registerNodeTools(
   );
 
   server.registerTool(
-    "coalesce_list_workspace_node_types",
+    "list_workspace_node_types",
     {
       title: "List Workspace Node Types",
       description:
-        "List distinct node types observed in current workspace nodes. This scans existing nodes only; it is not a true installed-type registry.\n\nWARNING: Do NOT use these values directly as the nodeType parameter for coalesce_create_workspace_node_from_predecessor or coalesce_create_workspace_node_from_scratch. The observed values may be bare numeric IDs (e.g. '31') that differ from the proper package-prefixed format (e.g. 'base-nodes:::Stage'). Always call coalesce_plan_pipeline first to discover the correct nodeType.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n\nReturns:\n  { nodeTypes: { id, name, count }[] }",
+        "List distinct node types observed in current workspace nodes. This scans existing nodes only; it is not a true installed-type registry.\n\nWARNING: Do NOT use these values directly as the nodeType parameter for create_workspace_node_from_predecessor or create_workspace_node_from_scratch. The observed values may be bare numeric IDs (e.g. '31') that differ from the proper package-prefixed format (e.g. 'base-nodes:::Stage'). Always call plan_pipeline first to discover the correct nodeType.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n\nReturns:\n  { nodeTypes: { id, name, count }[] }",
       inputSchema: z.object({
         workspaceID: z.string().describe("The workspace ID"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_list_workspace_node_types"),
+      outputSchema: getToolOutputSchema("list_workspace_node_types"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await listWorkspaceNodeTypes(client, params);
-        return buildJsonToolResponse("coalesce_list_workspace_node_types", result);
+        return buildJsonToolResponse("list_workspace_node_types", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -515,7 +515,7 @@ export function registerNodeTools(
   );
 
   server.registerTool(
-    "coalesce_delete_workspace_node",
+    "delete_workspace_node",
     {
       title: "Delete Workspace Node",
       description:
@@ -524,13 +524,13 @@ export function registerNodeTools(
         workspaceID: z.string().describe("The workspace ID"),
         nodeID: z.string().describe("The node ID to delete"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_delete_workspace_node"),
+      outputSchema: getToolOutputSchema("delete_workspace_node"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await deleteWorkspaceNode(client, params);
-        return buildJsonToolResponse("coalesce_delete_workspace_node", result);
+        return buildJsonToolResponse("delete_workspace_node", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -538,7 +538,7 @@ export function registerNodeTools(
   );
 
   server.registerTool(
-    "coalesce_complete_node_configuration",
+    "complete_node_configuration",
     {
       title: "Complete Node Configuration",
       description:
@@ -548,13 +548,13 @@ export function registerNodeTools(
         nodeID: z.string().describe("The node ID to configure"),
         repoPath: z.string().optional().describe("Optional path to local Coalesce repository for schema resolution"),
       }),
-      outputSchema: getToolOutputSchema("coalesce_complete_node_configuration"),
+      outputSchema: getToolOutputSchema("complete_node_configuration"),
       annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     async (params) => {
       try {
         const result = await completeNodeConfiguration(client, params);
-        return buildJsonToolResponse("coalesce_complete_node_configuration", result);
+        return buildJsonToolResponse("complete_node_configuration", result);
       } catch (error) {
         return handleToolError(error);
       }
