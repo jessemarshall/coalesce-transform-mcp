@@ -15,7 +15,7 @@ import { registerSubgraphTools } from "./mcp/subgraphs.js";
 import { registerWorkspaceTools } from "./mcp/workspaces.js";
 import { registerCacheTools } from "./mcp/cache.js";
 import { registerWorkshopTools } from "./mcp/workshop.js";
-import { registerExplorationTools } from "./mcp/exploration.js";
+
 import { registerRunAndWait } from "./workflows/run-and-wait.js";
 import { registerRetryAndWait } from "./workflows/retry-and-wait.js";
 import { registerGetRunDetails } from "./workflows/get-run-details.js";
@@ -29,6 +29,7 @@ const { version } = require("../package.json") as { version: string };
 export const SERVER_NAME = "coalesce-transform-mcp";
 export const SERVER_VERSION = version;
 export const SERVER_INSTRUCTIONS = [
+  "This server manages Coalesce node definitions, pipelines, and workspace configuration — not live warehouse data. For Snowflake data questions (tables, schemas, row counts, sample data), use a Snowflake-capable tool if available.",
   "Resolve IDs before mutating. Use list_workspaces for workspace IDs, list_environments for environment IDs, list_environment_jobs for job IDs.",
   "Always use plan_pipeline before creating pipeline nodes, and wait for explicit user approval before calling creation tools.",
   "Inspect warning, validation, resultsError, incomplete, timedOut, and cleanupFailures fields before continuing.",
@@ -51,7 +52,7 @@ export function registerServerSurface(server: McpServer, client: CoalesceClient)
   registerWorkspaceTools(server, client);
   registerCacheTools(server, client);
   registerWorkshopTools(server, client);
-  registerExplorationTools(server, client);
+
   registerRunAndWait(server, client);
   registerRetryAndWait(server, client);
   registerGetRunDetails(server, client);

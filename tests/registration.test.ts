@@ -2,17 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerServerSurface } from "../src/server.js";
 
-vi.mock("node:child_process", async (importOriginal) => {
-  const original = await importOriginal<typeof import("node:child_process")>();
-  return {
-    ...original,
-    execFileSync: vi.fn(),
-  };
-});
-
-import { execFileSync } from "node:child_process";
-const mockExecFileSync = vi.mocked(execFileSync);
-
 function createMockClient() {
   return {
     get: vi.fn(),
@@ -23,13 +12,6 @@ function createMockClient() {
   };
 }
 
-// Cortex tools are conditionally registered based on whether the cortex CLI is installed.
-const CORTEX_TOOL_NAMES = [
-  "explore_data_source",
-  "query_snowflake",
-  "search_snowflake_objects",
-  "list_snowflake_connections",
-];
 const BASE_TOOL_COUNT = 84;
 
 describe("Tool Registration", () => {
@@ -39,14 +21,9 @@ describe("Tool Registration", () => {
   beforeEach(() => {
     server = new McpServer({ name: "test", version: "0.0.1" });
     toolSpy = vi.spyOn(server, "registerTool");
-    vi.clearAllMocks();
-    toolSpy = vi.spyOn(server, "registerTool");
   });
 
-  it("registers base tools when cortex is not installed", async () => {
-    mockExecFileSync.mockImplementation(() => {
-      throw new Error("command not found");
-    });
+  it("registers all tools", async () => {
     const client = createMockClient();
     registerServerSurface(server, client as any);
 
@@ -102,10 +79,11 @@ describe("Tool Registration", () => {
     expect(toolNames).toContain("list_workspace_node_types");
     expect(toolNames).toContain("complete_node_configuration");
 
-    // Cortex tools NOT registered
-    for (const name of CORTEX_TOOL_NAMES) {
-      expect(toolNames).not.toContain(name);
-    }
+    // Cortex tools NOT registered (removed — use cortex CLI directly)
+    expect(toolNames).not.toContain("explore_data_source");
+    expect(toolNames).not.toContain("query_snowflake");
+    expect(toolNames).not.toContain("search_snowflake_objects");
+    expect(toolNames).not.toContain("list_snowflake_connections");
 
     const clearCacheCall = toolSpy.mock.calls.find(
       (call: unknown[]) => call[0] === "clear_data_cache"
@@ -118,23 +96,5 @@ describe("Tool Registration", () => {
       destructiveHint: true,
       },
     });
-  });
-
-  it("registers cortex tools when cortex is installed", async () => {
-    mockExecFileSync.mockReturnValue(Buffer.from("1.2.3"));
-    const client = createMockClient();
-    registerServerSurface(server, client as any);
-
-    const toolNames = toolSpy.mock.calls.map(
-      (call: unknown[]) => call[0] as string
-    );
-
-    expect(toolSpy).toHaveBeenCalledTimes(
-      BASE_TOOL_COUNT + CORTEX_TOOL_NAMES.length
-    );
-
-    for (const name of CORTEX_TOOL_NAMES) {
-      expect(toolNames).toContain(name);
-    }
   });
 });

@@ -116,7 +116,7 @@ Determine the platform first, then load exactly one dialect resource:
 
 - **Previewing compiled SQL** — compilation happens at deploy/run time
 - **Changing node type** — set at creation time, cannot be changed via API. Create a new node of the desired type instead
-- **Data preview / row counts** — this server manages node definitions, not live warehouse data
+- **Data preview / row counts** — this server manages node definitions, not live warehouse data. Use a Snowflake-capable tool if available
 - **Cross-workspace replication** — no clone tool; recreate each node bottom-up in the target workspace
 - Creating/modifying node type templates, source nodes, or macros
 

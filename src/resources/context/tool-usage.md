@@ -2,6 +2,7 @@
 
 ## Core Rules
 
+- **Snowflake data questions are out of scope for this server.** This server manages node *definitions* (what's designed), not live warehouse data (what exists). If the user asks about data by database or schema name (e.g. "what tables are in JESSE_DEV?", "show me rows from ANALYTICS.SALES"), use a Snowflake-capable tool if one is available.
 - Only call tools that actually exist in this MCP server. Do not invent tool names.
 - Prefer the smallest sufficient tool: list for discovery, get for detail, workflow helpers for multi-step operations.
 - If the request is exploratory or ambiguous, ask clarifying questions before mutating anything.

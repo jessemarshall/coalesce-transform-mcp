@@ -263,23 +263,31 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 - `get_run_details` - Get run metadata and results in one call
 - `get_environment_overview` - Get environment details with full node list
 
-#### Snowflake Exploration (via Cortex Code)
+## Snowflake Exploration via Cortex Code
 
-These tools query Snowflake directly via the [Cortex Code](https://ai.snowflake.com) CLI. They are **optional** — the tools only register when Cortex Code is installed. Without it, these tools don't appear and the rest of the MCP server works normally.
+This server manages node definitions, not live warehouse data. For Snowflake data questions (tables, schemas, row counts, sample data, permissions), add [Cortex Code](https://ai.snowflake.com) as a companion MCP server. The agent will automatically route Snowflake questions to cortex tools.
 
-- `explore_data_source` - Search Coalesce first, then query Snowflake via Cortex Code if not found. Answers questions about tables, columns, schemas, and data
-- `query_snowflake` - Ask any question about Snowflake directly (data, schemas, permissions, performance, Cortex AI). Skips Coalesce search
-- `search_snowflake_objects` - Search for tables, views, schemas, and other Snowflake objects using Cortex Code's semantic search
-- `list_snowflake_connections` - List available Snowflake connections configured in Cortex Code
+**Setup:**
 
-**Setup:** Install Cortex Code and configure a Snowflake connection:
+1. Install Cortex Code and configure a Snowflake connection:
 
-```bash
-curl -LsS https://ai.snowflake.com/static/cc-scripts/install.sh | sh
-cortex connections  # interactive connection setup
-```
+   ```bash
+   curl -LsS https://ai.snowflake.com/static/cc-scripts/install.sh | sh
+   cortex connections  # interactive connection setup
+   ```
 
-No additional environment variables needed — Cortex Code manages its own Snowflake authentication.
+2. Add cortex as an MCP server in your `.mcp.json`:
+
+   ```json
+   {
+     "cortex": {
+       "command": "cortex",
+       "args": ["--mcp-server"]
+     }
+   }
+   ```
+
+The agent will see both servers' tools and route Snowflake data questions to cortex and node/pipeline questions to Coalesce tools.
 
 ## Notes
 
