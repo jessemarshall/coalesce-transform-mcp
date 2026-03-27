@@ -19,3 +19,4 @@ src/generated/
 RELEASE.md
 .sfdx/
 CLAUDE.md
+tests/services/intent-simulation.test.ts

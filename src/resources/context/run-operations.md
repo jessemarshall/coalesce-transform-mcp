@@ -15,6 +15,7 @@ Use these run tools and workflows:
 - `run_and_wait`
 - `retry_run`
 - `retry_and_wait`
+- `diagnose_run_failure`
 - `cancel_run`
 
 ## Identifier And Status Model
@@ -39,6 +40,7 @@ Use these run tools and workflows:
 - Use `run_status` for live scheduler state by `runCounter`.
 - Use `get_run_details` when you want run metadata and results together.
 - Use `get_run` or `get_run_results` when you only need one side of that data.
+- Use `diagnose_run_failure` when a run has failed and the user wants to understand why and how to fix it. It classifies node-level errors (SQL, permissions, missing objects, timeouts, data types, config) and returns actionable fix suggestions.
 - Use `cancel_run` only with `runID`, `environmentID`, and org context.
 
 ## Practical Checks

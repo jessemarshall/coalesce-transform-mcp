@@ -10,6 +10,7 @@ import {
   retryRun,
   cancelRun,
 } from "../coalesce/api/runs.js";
+import { diagnoseRunFailure } from "../services/runs/diagnostics.js";
 import {
   PaginationParams,
   StartRunParams,
@@ -152,6 +153,35 @@ export function registerRunTools(
       try {
         const result = await retryRun(client, params);
         return buildJsonToolResponse("retry_run", sanitizeResponse(result));
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.registerTool(
+    "diagnose_run_failure",
+    {
+      title: "Diagnose Run Failure",
+      description:
+        "Diagnose a failed Coalesce run. Fetches run metadata and per-node results, classifies each failure " +
+        "(SQL error, missing object, permission issue, data type mismatch, timeout, configuration error), " +
+        "and returns actionable fix suggestions.\n\n" +
+        "Use this when a run has failed and the user wants to understand what went wrong and how to fix it. " +
+        "Works best with completed (failed) runs — for in-progress runs, use run_status instead.\n\n" +
+        "Returns: run summary, per-node failure diagnosis with error classification, and prioritized recommendations.",
+      inputSchema: z.object({
+        runID: z.string().describe(
+          "The numeric run ID (integer, e.g. '401'). Use the runCounter value from start_run or run_status responses — not the UUID from run URLs."
+        ),
+      }),
+      outputSchema: getToolOutputSchema("diagnose_run_failure"),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    async (params) => {
+      try {
+        const result = await diagnoseRunFailure(client, params);
+        return buildJsonToolResponse("diagnose_run_failure", result);
       } catch (error) {
         return handleToolError(error);
       }
