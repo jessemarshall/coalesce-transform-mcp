@@ -8,6 +8,7 @@ import {
   IDEMPOTENT_WRITE_ANNOTATIONS,
   buildJsonToolResponse,
   handleToolError,
+  getToolOutputSchema,
 } from "../coalesce/types.js";
 import { getCacheDir, CACHE_DIR_NAME } from "../cache-dir.js";
 import {
@@ -39,103 +40,129 @@ export function registerCacheTools(
   server: McpServer,
   client: CoalesceClient
 ): void {
-  server.tool(
-    "cache-workspace-nodes",
-    "Fetch every page of workspace nodes from the Coalesce API, save the collected snapshot to disk, and return only cache metadata. Use this when the full node list would be too large for chat context or will be reused across multiple steps.",
+  server.registerTool(
+    "cache_workspace_nodes",
     {
-      workspaceID: z.string().describe("The workspace ID"),
-      detail: z
-        .boolean()
-        .optional()
-        .describe("When true, fetches expanded node details. Defaults to true."),
-      ...SnapshotPaginationShape,
+      title: "Cache Workspace Nodes",
+      description:
+        "Fetch and cache all workspace nodes to disk for efficient repeated access. Useful when working with large workspaces where inline responses exceed the auto-cache threshold.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - detail (boolean, optional): Fetch expanded node details. Defaults to true\n  - pageSize (number, optional): API page size for collection. Defaults to 250, max 1000\n  - orderBy (string, optional): Sort field for paginated collection. Defaults to id\n  - orderByDirection ('asc'|'desc', optional): Sort direction\n\nReturns:\n  Cache metadata with resourceUri (coalesce://cache/...) for accessing the cached data via MCP resource read.",
+      inputSchema: z.object({
+        workspaceID: z.string().describe("The workspace ID"),
+        detail: z
+          .boolean()
+          .optional()
+          .describe("When true, fetches expanded node details. Defaults to true."),
+        ...SnapshotPaginationShape,
+      }),
+      outputSchema: getToolOutputSchema("cache_workspace_nodes"),
+      annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
-    IDEMPOTENT_WRITE_ANNOTATIONS,
     async (params) => {
       try {
         const result = await cacheWorkspaceNodes(client, params);
-        return buildJsonToolResponse("cache-workspace-nodes", result);
+        return buildJsonToolResponse("cache_workspace_nodes", result);
       } catch (error) {
         return handleToolError(error);
       }
     }
   );
 
-  server.tool(
-    "cache-environment-nodes",
-    "Fetch every page of environment nodes from the Coalesce API, save the collected snapshot to disk, and return only cache metadata. Use this when the full node list would be too large for chat context or will be reused across multiple steps.",
+  server.registerTool(
+    "cache_environment_nodes",
     {
-      environmentID: z.string().describe("The environment ID"),
-      detail: z
-        .boolean()
-        .optional()
-        .describe("When true, fetches expanded node details. Defaults to true."),
-      ...SnapshotPaginationShape,
+      title: "Cache Environment Nodes",
+      description:
+        "Fetch and cache all environment nodes to disk for efficient repeated access.\n\nArgs:\n  - environmentID (string, required): The environment ID\n  - detail (boolean, optional): Fetch expanded node details. Defaults to true\n  - pageSize (number, optional): API page size for collection. Defaults to 250, max 1000\n  - orderBy (string, optional): Sort field for paginated collection. Defaults to id\n  - orderByDirection ('asc'|'desc', optional): Sort direction\n\nReturns:\n  Cache metadata with resourceUri (coalesce://cache/...) for accessing the cached data via MCP resource read.",
+      inputSchema: z.object({
+        environmentID: z.string().describe("The environment ID"),
+        detail: z
+          .boolean()
+          .optional()
+          .describe("When true, fetches expanded node details. Defaults to true."),
+        ...SnapshotPaginationShape,
+      }),
+      outputSchema: getToolOutputSchema("cache_environment_nodes"),
+      annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
-    IDEMPOTENT_WRITE_ANNOTATIONS,
     async (params) => {
       try {
         const result = await cacheEnvironmentNodes(client, params);
-        return buildJsonToolResponse("cache-environment-nodes", result);
+        return buildJsonToolResponse("cache_environment_nodes", result);
       } catch (error) {
         return handleToolError(error);
       }
     }
   );
 
-  server.tool(
-    "cache-runs",
-    "Fetch every page of list-runs results from the Coalesce API, save the collected snapshot to disk, and return only cache metadata. Use this when the run list would be too large for chat context or should be preserved outside the conversation.",
+  server.registerTool(
+    "cache_runs",
     {
-      runType: z.enum(["deploy", "refresh"]).optional().describe("Optional run type filter"),
-      runStatus: z
-        .enum(["completed", "failed", "canceled", "running", "waitingToRun"])
-        .optional()
-        .describe("Optional run status filter"),
-      environmentID: z.string().optional().describe("Optional environment ID filter"),
-      detail: z
-        .boolean()
-        .optional()
-        .describe("When true, fetches expanded run details. Defaults to false."),
-      ...SnapshotPaginationShape,
+      title: "Cache Runs",
+      description:
+        "Fetch and cache runs to disk with optional filters for efficient repeated access.\n\nArgs:\n  - runType (enum, optional): Filter by 'deploy' or 'refresh'\n  - runStatus (enum, optional): Filter by 'completed' | 'failed' | 'canceled' | 'running' | 'waitingToRun'\n  - environmentID (string, optional): Filter by environment ID\n  - detail (boolean, optional): Fetch expanded run details. Defaults to false\n  - pageSize (number, optional): API page size for collection. Defaults to 250, max 1000\n  - orderBy (string, optional): Sort field for paginated collection. Defaults to id\n  - orderByDirection ('asc'|'desc', optional): Sort direction\n\nReturns:\n  Cache metadata with resourceUri (coalesce://cache/...) for accessing the cached data via MCP resource read.",
+      inputSchema: z.object({
+        runType: z.enum(["deploy", "refresh"]).optional().describe("Optional run type filter"),
+        runStatus: z
+          .enum(["completed", "failed", "canceled", "running", "waitingToRun"])
+          .optional()
+          .describe("Optional run status filter"),
+        environmentID: z.string().optional().describe("Optional environment ID filter"),
+        detail: z
+          .boolean()
+          .optional()
+          .describe("When true, fetches expanded run details. Defaults to false."),
+        ...SnapshotPaginationShape,
+      }),
+      outputSchema: getToolOutputSchema("cache_runs"),
+      annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
     },
-    IDEMPOTENT_WRITE_ANNOTATIONS,
     async (params) => {
       try {
         const result = await cacheRuns(client, params);
-        return buildJsonToolResponse("cache-runs", result);
+        return buildJsonToolResponse("cache_runs", result);
       } catch (error) {
         return handleToolError(error);
       }
     }
   );
 
-  server.tool(
-    "cache-org-users",
-    "Fetch every page of organization users from the Coalesce API, save the collected snapshot to disk, and return only cache metadata. Use this when the user list would be too large for chat context or should be preserved outside the conversation.",
-    SnapshotPaginationShape,
-    IDEMPOTENT_WRITE_ANNOTATIONS,
+  server.registerTool(
+    "cache_org_users",
+    {
+      title: "Cache Org Users",
+      description:
+        "Fetch and cache all organization users to disk for efficient repeated access.\n\nArgs:\n  - pageSize (number, optional): API page size for collection. Defaults to 250, max 1000\n  - orderBy (string, optional): Sort field for paginated collection. Defaults to id\n  - orderByDirection ('asc'|'desc', optional): Sort direction\n\nReturns:\n  Cache metadata with resourceUri (coalesce://cache/...) for accessing the cached data via MCP resource read.",
+      inputSchema: z.object({
+        ...SnapshotPaginationShape,
+      }),
+      outputSchema: getToolOutputSchema("cache_org_users"),
+      annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
+    },
     async (params) => {
       try {
         const result = await cacheOrgUsers(client, params);
-        return buildJsonToolResponse("cache-org-users", result);
+        return buildJsonToolResponse("cache_org_users", result);
       } catch (error) {
         return handleToolError(error);
       }
     }
   );
 
-  server.tool(
-    "clear_coalesce_transform_mcp_data_cache",
-    "Delete all cached data files created by this MCP server, including snapshots, auto-cached responses, and plan summaries. " +
-    "Returns a summary of what was deleted. Use this when the user wants to free disk space or start fresh.",
-    {},
-    DESTRUCTIVE_ANNOTATIONS,
+  server.registerTool(
+    "clear_data_cache",
+    {
+      title: "Clear Data Cache",
+      description:
+        "Clear the MCP server's local data cache. Removes all cached artifacts from disk.\n\nReturns:\n  { deleted: boolean, fileCount: number, totalBytes: number, message: string }",
+      inputSchema: z.object({}),
+      outputSchema: getToolOutputSchema("clear_data_cache"),
+      annotations: DESTRUCTIVE_ANNOTATIONS,
+    },
     async () => {
       try {
         const cacheDir = getCacheDir();
         if (!existsSync(cacheDir)) {
-          return buildJsonToolResponse("clear_coalesce_transform_mcp_data_cache", {
+          return buildJsonToolResponse("clear_data_cache", {
             deleted: false,
             message: `No cache directory found at ${CACHE_DIR_NAME}/`,
           });
@@ -168,7 +195,7 @@ export function registerCacheTools(
         rmSync(cacheDir, { recursive: true, force: true });
 
         const sizeMB = (totalBytes / (1024 * 1024)).toFixed(2);
-        return buildJsonToolResponse("clear_coalesce_transform_mcp_data_cache", {
+        return buildJsonToolResponse("clear_data_cache", {
           deleted: true,
           fileCount,
           totalBytes,

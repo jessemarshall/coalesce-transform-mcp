@@ -7,7 +7,6 @@ import {
   type CacheResourceLink,
 } from "../cache-dir.js";
 import { z } from "zod";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CoalesceApiError } from "../client.js";
 
 const SESSION_START_TIME = new Date();
@@ -55,28 +54,38 @@ export const READ_ONLY_ANNOTATIONS = {
   readOnlyHint: true,
   idempotentHint: true,
   destructiveHint: false,
+  openWorldHint: true,
+} as const;
+
+export const READ_ONLY_LOCAL_ANNOTATIONS = {
+  readOnlyHint: true,
+  idempotentHint: true,
+  destructiveHint: false,
+  openWorldHint: false,
 } as const;
 
 export const WRITE_ANNOTATIONS = {
   readOnlyHint: false,
   idempotentHint: false,
   destructiveHint: false,
+  openWorldHint: true,
 } as const;
 
 export const IDEMPOTENT_WRITE_ANNOTATIONS = {
   readOnlyHint: false,
   idempotentHint: true,
   destructiveHint: false,
+  openWorldHint: true,
 } as const;
 
 export const DESTRUCTIVE_ANNOTATIONS = {
   readOnlyHint: false,
   idempotentHint: false,
   destructiveHint: true,
+  openWorldHint: true,
 } as const;
 
 const DEFAULT_AUTO_CACHE_MAX_BYTES = 32 * 1024;
-const JSON_TOOL_OUTPUT_SCHEMA_PATCHED = Symbol("jsonToolOutputSchemaPatched");
 
 const JsonObjectSchema = z.object({}).passthrough();
 
@@ -291,78 +300,78 @@ const PipelineCreateOutputSchema = z.object({
 }).passthrough();
 
 const LIST_TOOL_NAMES = new Set([
-  "list-environments",
-  "list-projects",
-  "list-environment-jobs",
-  "list-runs",
-  "list-environment-nodes",
-  "list-workspace-nodes",
-  "list-org-users",
-  "list-user-roles",
-  "list-git-accounts",
-  "list-workspaces",
-  "list-workspace-subgraphs",
-  "list-workspace-jobs",
+  "list_environments",
+  "list_projects",
+  "list_environment_jobs",
+  "list_runs",
+  "list_environment_nodes",
+  "list_workspace_nodes",
+  "list_org_users",
+  "list_user_roles",
+  "list_git_accounts",
+  "list_workspaces",
+  "list_workspace_subgraphs",
+  "list_workspace_jobs",
 ]);
 
 const ENTITY_TOOL_NAMES = new Set([
-  "get-environment",
-  "create-environment",
-  "update-environment",
-  "delete-environment",
-  "get-project",
-  "create-project",
-  "update-project",
-  "delete-project",
-  "get-environment-job",
-  "get-workspace",
-  "create-workspace-job",
-  "update-workspace-job",
-  "delete-workspace-job",
-  "get-run",
-  "get-run-results",
-  "get-environment-node",
-  "get-workspace-node",
-  "get-user-roles",
-  "set-org-role",
-  "set-project-role",
-  "delete-project-role",
-  "set-env-role",
-  "delete-env-role",
-  "get-git-account",
-  "create-git-account",
-  "update-git-account",
-  "delete-git-account",
-  "get-workspace-subgraph",
-  "create-workspace-subgraph",
-  "update-workspace-subgraph",
-  "delete-workspace-subgraph",
+  "get_environment",
+  "create_environment",
+  "update_environment",
+  "delete_environment",
+  "get_project",
+  "create_project",
+  "update_project",
+  "delete_project",
+  "get_environment_job",
+  "get_workspace",
+  "create_workspace_job",
+  "update_workspace_job",
+  "delete_workspace_job",
+  "get_run",
+  "get_run_results",
+  "get_environment_node",
+  "get_workspace_node",
+  "get_user_roles",
+  "set_org_role",
+  "set_project_role",
+  "delete_project_role",
+  "set_env_role",
+  "delete_env_role",
+  "get_git_account",
+  "create_git_account",
+  "update_git_account",
+  "delete_git_account",
+  "get_workspace_subgraph",
+  "create_workspace_subgraph",
+  "update_workspace_subgraph",
+  "delete_workspace_subgraph",
 ]);
 
 const WORKSPACE_NODE_MUTATION_TOOL_NAMES = new Set([
-  "create-workspace-node-from-scratch",
-  "set-workspace-node",
-  "update-workspace-node",
-  "replace-workspace-node-columns",
-  "convert-join-to-aggregation",
-  "apply-join-condition",
-  "create-workspace-node-from-predecessor",
-  "delete-workspace-node",
-  "complete-node-configuration",
+  "create_workspace_node_from_scratch",
+  "set_workspace_node",
+  "update_workspace_node",
+  "replace_workspace_node_columns",
+  "convert_join_to_aggregation",
+  "apply_join_condition",
+  "create_workspace_node_from_predecessor",
+  "delete_workspace_node",
+  "complete_node_configuration",
 ]);
 
 const CACHE_TOOL_NAMES = new Set([
-  "cache-workspace-nodes",
-  "cache-environment-nodes",
-  "cache-runs",
-  "cache-org-users",
+  "cache_workspace_nodes",
+  "cache_environment_nodes",
+  "cache_runs",
+  "cache_org_users",
 ]);
 
 export const JsonToolOutputSchema = JsonObjectSchema.describe(
   "Tool-specific JSON object output. Oversized responses may be replaced with cache metadata including resourceUri."
 );
 
-function getToolOutputSchema(toolName: string) {
+export function getToolOutputSchema(toolName: string) {
   if (LIST_TOOL_NAMES.has(toolName)) {
     return ListToolOutputSchema;
   }
@@ -377,41 +386,41 @@ function getToolOutputSchema(toolName: string) {
   }
 
   switch (toolName) {
-    case "clear_coalesce_transform_mcp_data_cache":
+    case "clear_data_cache":
       return ClearCacheOutputSchema;
-    case "analyze-workspace-patterns":
+    case "analyze_workspace_patterns":
       return WorkspaceAnalysisOutputSchema;
-    case "list-workspace-node-types":
+    case "list_workspace_node_types":
       return WorkspaceNodeTypesOutputSchema;
-    case "run-status":
-    case "start-run":
-    case "retry-run":
-    case "cancel-run":
+    case "run_status":
+    case "start_run":
+    case "retry_run":
+    case "cancel_run":
       return RunSchedulerOutputSchema;
-    case "get-run-details":
+    case "get_run_details":
       return RunDetailsOutputSchema;
-    case "run-and-wait":
-    case "retry-and-wait":
+    case "run_and_wait":
+    case "retry_and_wait":
       return RunWaitOutputSchema;
-    case "get-environment-overview":
+    case "get_environment_overview":
       return EnvironmentOverviewOutputSchema;
-    case "list-repo-packages":
+    case "list_repo_packages":
       return RepoPackagesOutputSchema;
-    case "list-repo-node-types":
+    case "list_repo_node_types":
       return RepoNodeTypesOutputSchema;
-    case "get-repo-node-type-definition":
+    case "get_repo_node_type_definition":
       return RepoNodeTypeDefinitionOutputSchema;
-    case "generate-set-workspace-node-template":
-    case "generate-set-workspace-node-template-from-variant":
+    case "generate_set_workspace_node_template":
+    case "generate_set_workspace_node_template_from_variant":
       return WorkspaceNodeTemplateOutputSchema;
-    case "search-node-type-variants":
+    case "search_node_type_variants":
       return CorpusSearchOutputSchema;
-    case "get-node-type-variant":
+    case "get_node_type_variant":
       return CorpusVariantOutputSchema;
-    case "plan-pipeline":
+    case "plan_pipeline":
       return PipelinePlanOutputSchema;
-    case "create-pipeline-from-plan":
-    case "create-pipeline-from-sql":
+    case "create_pipeline_from_plan":
+    case "create_pipeline_from_sql":
       return PipelineCreateOutputSchema;
     default:
       return JsonToolOutputSchema;
@@ -776,7 +785,9 @@ export function buildJsonToolResponse(
   try {
     writeFileSync(filePath, `${text}\n`, "utf8");
     cleanupStaleAutoCacheFiles(dirname(filePath));
-  } catch {
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`[coalesce-transform-mcp] auto-cache write failed for ${toolName}: ${reason}\n`);
     return buildInlineJsonResponse(
       externalizedResult,
       [...resourceLinks.values()]
@@ -852,72 +863,6 @@ export function handleToolError(
   };
 }
 
-export function ensureJsonToolOutputSchemas(server: McpServer): void {
-  const looksLikeToolAnnotations = (value: unknown): boolean =>
-    typeof value === "object" &&
-    value !== null &&
-    ("readOnlyHint" in value ||
-      "idempotentHint" in value ||
-      "destructiveHint" in value);
-
-  const patchedServer = server as McpServer & {
-    tool: (...args: unknown[]) => unknown;
-    registerTool: (...args: unknown[]) => unknown;
-    [JSON_TOOL_OUTPUT_SCHEMA_PATCHED]?: boolean;
-  };
-
-  if (patchedServer[JSON_TOOL_OUTPUT_SCHEMA_PATCHED]) {
-    return;
-  }
-
-  const originalRegisterTool = patchedServer.registerTool.bind(server) as (
-    ...args: unknown[]
-  ) => unknown;
-
-  patchedServer.tool = ((...args: unknown[]) => {
-    const [name, ...rest] = args;
-    if (typeof name !== "string") {
-      throw new Error("Tool name must be a string");
-    }
-
-    const callback = rest.at(-1);
-    if (typeof callback !== "function") {
-      throw new Error("Tool callback must be a function");
-    }
-
-    const configArgs = [...rest.slice(0, -1)];
-    const config: Record<string, unknown> = {
-      outputSchema: getToolOutputSchema(name),
-    };
-
-    if (typeof configArgs[0] === "string") {
-      config.description = configArgs.shift();
-    }
-
-    if (configArgs.length === 1) {
-      if (looksLikeToolAnnotations(configArgs[0])) {
-        config.annotations = configArgs[0];
-      } else {
-        config.inputSchema = configArgs[0];
-      }
-    }
-
-    if (configArgs.length === 2) {
-      config.inputSchema = configArgs[0];
-      config.annotations = configArgs[1];
-    }
-
-    if (configArgs.length > 2) {
-      throw new Error(
-        "Unsupported tool registration signature while applying output schemas"
-      );
-    }
-
-    return originalRegisterTool(name, config, callback);
-  }) as typeof patchedServer.tool;
-
-  patchedServer[JSON_TOOL_OUTPUT_SCHEMA_PATCHED] = true;
-}
 
 export function buildStartRunBody(params: StartRunInput) {
   const { runDetails } = params;

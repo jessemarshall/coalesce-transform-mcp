@@ -56,7 +56,7 @@ vi.mock("../../src/services/config/intelligent.js", () => ({
 describe("complete-node-configuration tool", () => {
   it("registers complete-node-configuration tool", () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
     const mockClient = {
       get: vi.fn(),
       post: vi.fn(),
@@ -67,16 +67,16 @@ describe("complete-node-configuration tool", () => {
     registerNodeTools(server, mockClient as any);
 
     const toolCall = toolSpy.mock.calls.find(
-      (call) => call[0] === "complete-node-configuration"
+      (call) => call[0] === "complete_node_configuration"
     );
 
     expect(toolCall).toBeDefined();
-    expect(toolCall?.[1]).toContain("Intelligently complete");
+    expect(toolCall?.[1]?.description).toContain("intelligent configuration completion");
   });
 
   it("executes complete-node-configuration and returns structured result", async () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
-    const toolSpy = vi.spyOn(server, "tool");
+    const toolSpy = vi.spyOn(server, "registerTool");
     const mockClient = {
       get: vi.fn(),
       post: vi.fn(),
@@ -87,9 +87,9 @@ describe("complete-node-configuration tool", () => {
     registerNodeTools(server, mockClient as any);
 
     const toolCall = toolSpy.mock.calls.find(
-      (call) => call[0] === "complete-node-configuration"
+      (call) => call[0] === "complete_node_configuration"
     );
-    const handler = toolCall?.[4] as
+    const handler = toolCall?.[2] as
       | ((params: { workspaceID: string; nodeID: string; repoPath?: string }) => Promise<{ content: { text: string }[] }>)
       | undefined;
 

@@ -245,7 +245,7 @@ describe("handleToolError", () => {
 describe("buildJsonToolResponse", () => {
   it("returns small payloads inline", () => {
     const result = buildJsonToolResponse(
-      "list-environments",
+      "list_environments",
       { data: [{ id: "env-1" }] },
       { maxInlineBytes: 4096 }
     );
@@ -271,7 +271,7 @@ describe("buildJsonToolResponse", () => {
       totalNodes: 2,
     };
 
-    const result = buildJsonToolResponse("cache-workspace-nodes", payload, {
+    const result = buildJsonToolResponse("cache_workspace_nodes", payload, {
       baseDir,
       maxInlineBytes: 4096,
     });
@@ -328,7 +328,7 @@ describe("buildJsonToolResponse", () => {
       ],
     };
 
-    const result = buildJsonToolResponse("list-workspace-nodes", payload, {
+    const result = buildJsonToolResponse("list_workspace_nodes", payload, {
       baseDir,
       maxInlineBytes: 128,
     });
@@ -336,7 +336,7 @@ describe("buildJsonToolResponse", () => {
     const metadata = JSON.parse(result.content[0]!.text);
     expect(metadata).toMatchObject({
       autoCached: true,
-      toolName: "list-workspace-nodes",
+      toolName: "list_workspace_nodes",
       resourceUri: expect.stringContaining("coalesce://cache/"),
       maxInlineBytes: 128,
     });

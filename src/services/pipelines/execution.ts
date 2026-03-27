@@ -371,7 +371,7 @@ export async function createPipelineFromPlan(
         !validation.predecessorCoverageSatisfied
       ) {
         throw new Error(
-          `Saved pipeline node ${nodePlan.name} did not match the planned body after set-workspace-node.`
+          `Saved pipeline node ${nodePlan.name} did not match the planned body after set_workspace_node.`
         );
       }
 

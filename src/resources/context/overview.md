@@ -72,9 +72,9 @@ joinCondition:
 
 **Required workflow for creating nodes:**
 
-1. **Always call `plan-pipeline` first** — it discovers all available node types from the repo and ranks them for your use case. Do NOT guess node types like "Stage" or "View".
-2. **Use `create-workspace-node-from-predecessor`** (or `create-workspace-node-from-scratch` for nodes with no upstream). Pass `repoPath` for automatic config completion.
-3. **Use `create-workspace-node-from-predecessor`** (or `create-workspace-node-from-scratch` for nodes with no upstream) — they handle validation, config completion, and column-level attributes automatically.
+1. **Always call `plan_pipeline` first** — it discovers all available node types from the repo and ranks them for your use case. Do NOT guess node types like "Stage" or "View".
+2. **Use `create_workspace_node_from_predecessor`** (or `create_workspace_node_from_scratch` for nodes with no upstream). Pass `repoPath` for automatic config completion.
+3. **Use `create_workspace_node_from_predecessor`** (or `create_workspace_node_from_scratch` for nodes with no upstream) — they handle validation, config completion, and column-level attributes automatically.
 
 Config completion is automatic when `repoPath` is provided — the response includes `configCompletion` showing what node-level config and column-level attributes were applied.
 
@@ -82,23 +82,23 @@ Config completion is automatic when `repoPath` is provided — the response incl
 
 1. Check `nextSteps` in the creation response — follow all required steps (especially join setup for multi-predecessor nodes)
 2. Check `validation.allPredecessorsRepresented` — if false, the join is incomplete
-3. For multi-predecessor nodes: set up the join condition via `convert-join-to-aggregation` (aggregation), `apply-join-condition` (row-level joins), or `update-workspace-node` (manual)
-4. Verify the final node with `get-workspace-node` — confirm columns, joinCondition, and config are correct
+3. For multi-predecessor nodes: set up the join condition via `convert_join_to_aggregation` (aggregation), `apply_join_condition` (row-level joins), or `update_workspace_node` (manual)
+4. Verify the final node with `get_workspace_node` — confirm columns, joinCondition, and config are correct
 5. Follow naming conventions: STG_ for staging, DIM_ for dimensions, FACT_ for facts, INT_ for intermediate (e.g., `STG_LOCATION`, `FACT_ORDERS`). Default to UPPERCASE for Snowflake, but **respect the user's chosen casing**
 
 **Anti-pattern — writing SQL and passing it to the planner:**
 
-Do NOT author SQL yourself to pass to `plan-pipeline` or `create-pipeline-from-sql`. The `sql` parameter exists solely for converting SQL that the **user** provided. When building a pipeline, use declarative tools:
+Do NOT author SQL yourself to pass to `plan_pipeline` or `create_pipeline_from_sql`. The `sql` parameter exists solely for converting SQL that the **user** provided. When building a pipeline, use declarative tools:
 
-1. `create-workspace-node-from-predecessor` to create nodes
-2. `update-workspace-node` to set joinCondition
-3. `replace-workspace-node-columns` or `convert-join-to-aggregation` for column transforms
+1. `create_workspace_node_from_predecessor` to create nodes
+2. `update_workspace_node` to set joinCondition
+3. `replace_workspace_node_columns` or `convert_join_to_aggregation` for column transforms
 
 ### Writing SQL for Nodes
 
 Determine the platform first, then load exactly one dialect resource:
 
-1. **Detect**: `get-project` for warehouse type, or check existing node SQL (see `coalesce://context/sql-platform-selection`)
+1. **Detect**: `get_project` for warehouse type, or check existing node SQL (see `coalesce://context/sql-platform-selection`)
 2. **Load one**: Snowflake -> `coalesce://context/sql-snowflake`, Databricks -> `coalesce://context/sql-databricks`, BigQuery -> `coalesce://context/sql-bigquery`
 3. **Follow that dialect's rules** for the entire edit
 
@@ -124,7 +124,7 @@ Determine the platform first, then load exactly one dialect resource:
 
 Only generate descriptions when explicitly requested. Focus on disambiguation — what makes this column the one the user is looking for? If you lack context, ask.
 
-Apply all descriptions in one call using `replace-workspace-node-columns`.
+Apply all descriptions in one call using `replace_workspace_node_columns`.
 
 ## Documentation
 

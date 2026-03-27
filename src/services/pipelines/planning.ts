@@ -1614,7 +1614,7 @@ async function getWorkspaceNodeTypeInventory(
       total: 0,
       warnings: [
         `Observed workspace node types could not be fetched for workspace ${workspaceID} (${reason}). ` +
-          `Use list-workspace-node-types or cache-workspace-nodes to inspect current workspace usage and confirm installation before execution.`,
+          `Use list_workspace_node_types or cache_workspace_nodes to inspect current workspace usage and confirm installation before execution.`,
       ],
     };
   }
@@ -1804,7 +1804,7 @@ function buildPlanFromSql(
     ],
     assumptions: [
       `Planner ${params.nodeTypeSelection.strategy} selected ${nodeType} from repo/workspace candidates.`,
-      "The generated plan uses create-workspace-node-from-predecessor followed by set-workspace-node when the selected type is projection-capable.",
+      "The generated plan uses create_workspace_node_from_predecessor followed by set_workspace_node when the selected type is projection-capable.",
     ],
     openQuestions: planOpenQuestions,
     warnings: [...parseResult.warnings, ...warnings],
@@ -2121,9 +2121,9 @@ function buildCteNodeInstruction(cte: ParsedCte, nodeType: string): string {
   const passthroughCols = cte.columns.filter((c) => !c.isTransform);
 
   if (cte.hasGroupBy) {
-    lines.push(`- AGGREGATION NODE: pass groupByColumns + aggregates directly to create-workspace-node-from-predecessor (single call)`);
+    lines.push(`- AGGREGATION NODE: pass groupByColumns + aggregates directly to create_workspace_node_from_predecessor (single call)`);
   } else if (cte.columns.length > 0) {
-    lines.push(`- Pass columns array + whereCondition directly to create-workspace-node-from-predecessor (single call)`);
+    lines.push(`- Pass columns array + whereCondition directly to create_workspace_node_from_predecessor (single call)`);
   }
 
   if (transforms.length > 0) {
@@ -2146,7 +2146,7 @@ function buildCteNodeInstruction(cte: ParsedCte, nodeType: string): string {
   }
 
   if (cte.hasJoin) {
-    lines.push(`- Has JOIN — use apply-join-condition or update-workspace-node for join setup`);
+    lines.push(`- Has JOIN — use apply_join_condition or update_workspace_node for join setup`);
   }
 
   return lines.join("\n");
@@ -2284,7 +2284,7 @@ function buildCtePlan(
     cteNodeSummary,
     assumptions: [
       `Parsed ${ctes.length} CTEs with ${allTransformCount} column transforms and ${allFilterCount} WHERE filters.`,
-      `Staging and aggregation CTEs: 1 call per node. Multi-source JOIN CTEs: 2 calls (create + apply-join-condition).`,
+      `Staging and aggregation CTEs: 1 call per node. Multi-source JOIN CTEs: 2 calls (create + apply_join_condition).`,
     ],
     openQuestions: [
       `STOP: Present this pipeline summary to the user and ask "Should I proceed with creating these ${ctes.length} nodes?" Do NOT create nodes until the user confirms.`,
@@ -2294,15 +2294,15 @@ function buildCtePlan(
         ? [`CTE dependencies (create in order):\n${cteDependencies.map((d) => `  - ${d}`).join("\n")}`]
         : []),
       ...(finalSelectNote ? [finalSelectNote] : []),
-      `Node type guidance (do NOT use list-workspace-node-types):\n` +
+      `Node type guidance (do NOT use list_workspace_node_types):\n` +
         `- Staging CTEs (single-source): nodeType "${stagingType}"\n` +
         `- Join/transform CTEs (multi-source): nodeType "${multiSourceType}"\n` +
         `- Aggregation CTEs (GROUP BY): nodeType "${aggregationType}"`,
       `Workflow per CTE:\n` +
-        `create-workspace-node-from-predecessor accepts columns, whereCondition, groupByColumns, and aggregates directly:\n` +
+        `create_workspace_node_from_predecessor accepts columns, whereCondition, groupByColumns, and aggregates directly:\n` +
         `- For staging/transform CTEs (single-source): 1 call — pass columns (from cteNodeSummary.columnsParam) + whereCondition\n` +
         `- For GROUP BY CTEs: 1 call — pass groupByColumns (from cteNodeSummary.groupByColumnsParam) + aggregates (from cteNodeSummary.aggregatesParam)\n` +
-        `- For multi-source JOIN CTEs: 2 calls — first create-workspace-node-from-predecessor with columns + whereCondition, then apply-join-condition to set up FROM/JOIN/ON\n` +
+        `- For multi-source JOIN CTEs: 2 calls — first create_workspace_node_from_predecessor with columns + whereCondition, then apply_join_condition to set up FROM/JOIN/ON\n` +
         `- Do NOT construct {{ ref() }} syntax — the FROM clause and joins are auto-generated\n` +
         `- Pass repoPath to each call for automatic config completion`,
     ],
