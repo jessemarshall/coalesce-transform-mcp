@@ -62,15 +62,16 @@ export function registerGitAccountTools(
     "create-git-account",
     "Create a new Coalesce git account",
     {
-      body: z
-        .record(z.unknown())
-        .describe("The git account creation request body"),
+      name: z.string().describe("Name for the git account"),
+      provider: z.enum(["github", "gitlab", "bitbucket", "azureDevOps"]).optional().describe("Git provider type"),
+      accessToken: z.string().optional().describe("Personal access token for the git provider"),
       accountOwner: accountOwnerParam,
     },
     WRITE_ANNOTATIONS,
     async (params) => {
       try {
-        const result = await createGitAccount(client, params);
+        const { accountOwner, ...body } = params;
+        const result = await createGitAccount(client, { body, accountOwner });
         return buildJsonToolResponse("create-git-account", result);
       } catch (error) {
         return handleToolError(error);
@@ -83,15 +84,16 @@ export function registerGitAccountTools(
     "Update an existing Coalesce git account (partial update — only provided fields are changed)",
     {
       gitAccountID: z.string().describe("The git account ID"),
-      body: z
-        .record(z.unknown())
-        .describe("The git account update request body (partial — only include fields to change)"),
+      name: z.string().optional().describe("Updated name for the git account"),
+      provider: z.enum(["github", "gitlab", "bitbucket", "azureDevOps"]).optional().describe("Git provider type"),
+      accessToken: z.string().optional().describe("Updated personal access token"),
       accountOwner: accountOwnerParam,
     },
     IDEMPOTENT_WRITE_ANNOTATIONS,
     async (params) => {
       try {
-        const result = await updateGitAccount(client, params);
+        const { gitAccountID, accountOwner, ...body } = params;
+        const result = await updateGitAccount(client, { gitAccountID, body, accountOwner });
         return buildJsonToolResponse("update-git-account", result);
       } catch (error) {
         return handleToolError(error);

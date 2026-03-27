@@ -298,7 +298,7 @@ When output data looks wrong after a successful run:
 - **All nodes**: `list-workspace-nodes` with `detail: true`
 - **Specific node**: `get-workspace-node` — full body with columns, config, sourceMapping
 - **Node types**: `list-workspace-node-types` — distinct types observed
-- **Projects**: `list-projects` with `includeWorkspaces: true`
+- **Workspaces**: `list-workspaces` or `list-workspaces({ projectID })`
 - **Environments**: `list-environments` — deployment targets (DEV, QA, PROD)
 
 **Large workspaces (100+ nodes)**: Use `list-workspace-nodes` WITHOUT `detail` first, find target by name, then `get-workspace-node` on its ID. Use `cache-workspace-nodes` for repeated searches.

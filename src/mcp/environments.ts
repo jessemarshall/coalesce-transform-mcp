@@ -5,6 +5,7 @@ import {
   listEnvironments,
   getEnvironment,
   createEnvironment,
+  updateEnvironment,
   deleteEnvironment,
 } from "../coalesce/api/environments.js";
 import {
@@ -13,6 +14,7 @@ import {
   handleToolError,
   READ_ONLY_ANNOTATIONS,
   WRITE_ANNOTATIONS,
+  IDEMPOTENT_WRITE_ANNOTATIONS,
   DESTRUCTIVE_ANNOTATIONS,
 } from "../coalesce/types.js";
 
@@ -58,7 +60,7 @@ export function registerEnvironmentTools(
     "create-environment",
     "Create a new Coalesce environment within a project.",
     {
-      project: z.string().describe("The project ID to create the environment in"),
+      projectID: z.string().describe("The project ID to create the environment in"),
       name: z.string().describe("Name for the new environment"),
       oauthEnabled: z.boolean().optional().describe("Whether OAuth is enabled. Defaults to false."),
       devEnv: z.boolean().optional().describe("Defaults to false."),
@@ -75,8 +77,39 @@ export function registerEnvironmentTools(
     WRITE_ANNOTATIONS,
     async (params) => {
       try {
-        const result = await createEnvironment(client, params);
+        // Coalesce API expects `project` in the body
+        const { projectID, ...rest } = params;
+        const result = await createEnvironment(client, { project: projectID, ...rest });
         return buildJsonToolResponse("create-environment", result);
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "update-environment",
+    "Update an existing Coalesce environment (partial update — only provided fields are changed).",
+    {
+      environmentID: z.string().describe("The environment ID to update"),
+      name: z.string().optional().describe("Updated name for the environment"),
+      oauthEnabled: z.boolean().optional().describe("Whether OAuth is enabled"),
+      devEnv: z.boolean().optional().describe("Whether this is a dev environment"),
+      connectionAccount: z.string().optional().describe("Connection account identifier"),
+      runTimeParameters: z.record(z.unknown()).optional().describe("Runtime parameters"),
+      tagColors: z
+        .object({
+          backgroundColor: z.string().optional(),
+          textColor: z.string().optional(),
+        })
+        .optional()
+        .describe("Tag colors for the environment"),
+    },
+    IDEMPOTENT_WRITE_ANNOTATIONS,
+    async (params) => {
+      try {
+        const result = await updateEnvironment(client, params);
+        return buildJsonToolResponse("update-environment", result);
       } catch (error) {
         return handleToolError(error);
       }

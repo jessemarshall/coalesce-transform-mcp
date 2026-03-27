@@ -23,8 +23,8 @@ export function registerJobTools(
   client: CoalesceClient
 ): void {
   server.tool(
-    "list-jobs",
-    "List all jobs in a Coalesce environment. For workspace-scoped listing, use list-workspace-jobs instead.",
+    "list-environment-jobs",
+    "List all jobs in a Coalesce environment. Jobs are read via the environment endpoint but created/updated/deleted via the workspace endpoint. For workspace-scoped listing, use list-workspace-jobs instead.",
     PaginationParams.extend({
       environmentID: z.string().describe("The environment ID"),
     }).shape,
@@ -32,7 +32,7 @@ export function registerJobTools(
     async (params) => {
       try {
         const result = await listEnvironmentJobs(client, params);
-        return buildJsonToolResponse("list-jobs", result);
+        return buildJsonToolResponse("list-environment-jobs", result);
       } catch (error) {
         return handleToolError(error);
       }
@@ -81,8 +81,8 @@ export function registerJobTools(
   );
 
   server.tool(
-    "get-job",
-    "Get details of a specific job. Jobs are read via the environment endpoint.",
+    "get-environment-job",
+    "Get details of a specific job. Jobs are read via the environment endpoint but created/updated/deleted via the workspace endpoint.",
     {
       environmentID: z.string().describe("The environment ID"),
       jobID: z.string().describe("The job ID"),
@@ -91,7 +91,7 @@ export function registerJobTools(
     async (params) => {
       try {
         const result = await getEnvironmentJob(client, params);
-        return buildJsonToolResponse("get-job", result);
+        return buildJsonToolResponse("get-environment-job", result);
       } catch (error) {
         return handleToolError(error);
       }

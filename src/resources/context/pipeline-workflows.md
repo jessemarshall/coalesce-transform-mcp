@@ -51,7 +51,7 @@ Node type format: `"Stage"` (simple) or `"IncrementalLoading:::230"` (PackageNam
 ### Step 1: Discover the Workspace
 
 ```javascript
-list-projects({ includeWorkspaces: true })
+list-workspaces()
 ```
 
 ### Step 2: Find Source Nodes
