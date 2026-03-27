@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
@@ -19,6 +20,19 @@ import {
   searchCoalesceForTable,
 } from "../services/exploration/search.js";
 
+/**
+ * Checks if the cortex CLI binary exists in PATH at registration time.
+ * Uses `cortex --version` (cross-platform) instead of `which` (unix-only).
+ */
+export function isCortexInstalled(): boolean {
+  try {
+    execFileSync("cortex", ["--version"], { timeout: 5_000, stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const CORTEX_INSTALL_HINT =
   "Install Cortex Code to enable Snowflake exploration: curl -LsS https://ai.snowflake.com/static/cc-scripts/install.sh | sh";
 
@@ -26,12 +40,20 @@ export function registerExplorationTools(
   server: McpServer,
   client: CoalesceClient
 ): void {
+  if (!isCortexInstalled()) {
+    console.error(
+      "[coalesce-transform-mcp] Cortex Code CLI not found — Snowflake exploration tools will not be registered. " +
+        CORTEX_INSTALL_HINT
+    );
+    return;
+  }
+
   server.registerTool(
     "explore_data_source",
     {
       title: "Explore Data Source",
       description:
-        "Find information about a table, column, or data source. Searches Coalesce workspaces first — if not found, queries Snowflake directly via Cortex Code CLI.\n\nUse this when questions arise about data or tables that may or may not be managed in Coalesce. The tool automatically falls back to Snowflake exploration when the object isn't in Coalesce.\n\nArgs:\n  - question (string, required): Question about a table, column, schema, or data — e.g. 'what columns does RAW.CUSTOMERS have?', 'show me sample data from ANALYTICS.REVENUE', 'what tables exist in the RAW database'\n  - workspaceID (string, optional): Coalesce workspace to search. Omit to search all accessible workspaces\n  - connection (string, optional): Snowflake connection name for Cortex Code (e.g. 'dev', 'FKA56740'). Uses active connection if omitted\n\nReturns:\n  { source, coalesceResult?, snowflakeResult?, cortexAvailable, installHint? }",
+        "Find information about a table, column, or data source. Searches Coalesce workspaces first — if not found, queries Snowflake directly via Cortex Code CLI.\n\nUse this when questions arise about data or tables that may or may not be managed in Coalesce. The tool automatically falls back to Snowflake exploration when the object isn't in Coalesce.\n\nArgs:\n  - question (string, required): Question about a table, column, schema, or data — e.g. 'what columns does RAW.CUSTOMERS have?', 'show me sample data from ANALYTICS.REVENUE', 'what tables exist in the RAW database'\n  - workspaceID (string, optional): Coalesce workspace to search. Omit to search all accessible workspaces\n  - connection (string, optional): Snowflake connection name for Cortex Code (e.g. 'dev', 'prod'). Uses active connection if omitted\n\nReturns:\n  { source, coalesceResult?, snowflakeResult?, cortexAvailable, installHint? }",
       inputSchema: z.object({
         question: z
           .string()
@@ -48,7 +70,7 @@ export function registerExplorationTools(
           .string()
           .optional()
           .describe(
-            "Snowflake connection name for Cortex Code (e.g. 'dev', 'FKA56740'). Uses active connection if omitted."
+            "Snowflake connection name for Cortex Code (e.g. 'dev', 'prod'). Uses active connection if omitted."
           ),
       }),
       outputSchema: getToolOutputSchema("explore_data_source"),
@@ -90,7 +112,8 @@ export function registerExplorationTools(
           });
         }
 
-        // Not in Coalesce — try Cortex Code
+        // Defense-in-depth: cortex was present at registration but may have been
+        // uninstalled during server lifetime. The runtime check gracefully degrades.
         const cortexAvailable = await isCortexAvailable();
         if (!cortexAvailable) {
           return buildJsonToolResponse("explore_data_source", {
@@ -150,7 +173,7 @@ export function registerExplorationTools(
           .string()
           .optional()
           .describe(
-            "Snowflake connection name for Cortex Code (e.g. 'dev', 'FKA56740'). Uses active connection if omitted."
+            "Snowflake connection name for Cortex Code (e.g. 'dev', 'prod'). Uses active connection if omitted."
           ),
       }),
       outputSchema: getToolOutputSchema("query_snowflake"),

@@ -265,7 +265,7 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 
 #### Snowflake Exploration (via Cortex Code)
 
-These tools query Snowflake directly via the [Cortex Code](https://ai.snowflake.com) CLI. They're available when Cortex Code is installed — without it, the tools return install instructions.
+These tools query Snowflake directly via the [Cortex Code](https://ai.snowflake.com) CLI. They are **optional** — the tools only register when Cortex Code is installed. Without it, these tools don't appear and the rest of the MCP server works normally.
 
 - `explore_data_source` - Search Coalesce first, then query Snowflake via Cortex Code if not found. Answers questions about tables, columns, schemas, and data
 - `query_snowflake` - Ask any question about Snowflake directly (data, schemas, permissions, performance, Cortex AI). Skips Coalesce search
