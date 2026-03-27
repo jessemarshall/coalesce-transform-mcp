@@ -1376,7 +1376,7 @@ export async function createWorkspaceNodeFromScratch(
       node: finalNode,
       validation,
       nextSteps,
-      configCompletionSkipped: `Config completion failed (${reason}) — call complete-node-configuration with repoPath after creation to apply node type config and column-level attributes.`,
+      configCompletionSkipped: `Config completion failed (${reason}) — call coalesce_complete_node_configuration with repoPath after creation to apply node type config and column-level attributes.`,
       ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
     };
   }
@@ -1712,7 +1712,7 @@ export async function createWorkspaceNodeFromPredecessor(
       predecessors: predecessorNodes,
       joinSuggestions,
       validation,
-      configCompletionSkipped: `Config completion failed (${reason}) — call complete-node-configuration with repoPath after creation to apply node type config and column-level attributes.`,
+      configCompletionSkipped: `Config completion failed (${reason}) — call coalesce_complete_node_configuration with repoPath after creation to apply node type config and column-level attributes.`,
       nextSteps,
       ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
     };
@@ -2032,7 +2032,7 @@ export async function convertJoinToAggregation(
         valid: groupByAnalysis.validation.valid && warnings.length === 0,
         warnings,
       },
-      configCompletionSkipped: `Config completion failed (${reason}) — call complete-node-configuration with repoPath after creation to apply node type config and column-level attributes.`,
+      configCompletionSkipped: `Config completion failed (${reason}) — call coalesce_complete_node_configuration with repoPath after creation to apply node type config and column-level attributes.`,
     };
   }
 }
