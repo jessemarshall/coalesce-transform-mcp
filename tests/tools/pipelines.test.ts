@@ -2400,6 +2400,86 @@ describe("Pipeline Tools", () => {
       expect(finalNote).toBeDefined();
     });
 
+    it("planPipeline handles CTE bodies with double-quoted identifiers containing parens", async () => {
+      const client = createMockClient();
+
+      client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+        if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+          return Promise.resolve({ data: [{ nodeType: "Stage" }] });
+        }
+        return Promise.resolve({ data: [] });
+      });
+
+      const result = await planPipeline(client as any, {
+        workspaceID: "ws-1",
+        sql: `WITH stg_data AS (
+          SELECT "col(x)" AS col_x, name FROM my_table
+        ),
+        stg_other AS (
+          SELECT id, value FROM other_table
+        )
+        SELECT * FROM stg_data JOIN stg_other ON stg_data.col_x = stg_other.id`,
+      });
+
+      expect(result.status).toBe("needs_clarification");
+      // Both CTEs must be found despite the double-quoted identifier with parens
+      expect(result.cteNodeSummary).toHaveLength(2);
+      expect(result.cteNodeSummary![0]!.name).toBe("STG_DATA");
+      expect(result.cteNodeSummary![1]!.name).toBe("STG_OTHER");
+    });
+
+    it("planPipeline ignores CTE-like keywords inside string literals", async () => {
+      const client = createMockClient();
+
+      client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+        if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+          return Promise.resolve({ data: [{ nodeType: "Stage" }] });
+        }
+        return Promise.resolve({ data: [] });
+      });
+
+      const result = await planPipeline(client as any, {
+        workspaceID: "ws-1",
+        sql: `WITH stg_data AS (
+          SELECT id, 'WHERE x > 1' AS label FROM my_table
+        )
+        SELECT * FROM stg_data`,
+      });
+
+      expect(result.status).toBe("needs_clarification");
+      expect(result.cteNodeSummary).toHaveLength(1);
+      // The string 'WHERE x > 1' should NOT be parsed as a WHERE clause
+      expect(result.cteNodeSummary![0]!.whereFilter).toBeNull();
+    });
+
+    it("planPipeline handles block comments with parens in CTE bodies", async () => {
+      const client = createMockClient();
+
+      client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+        if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+          return Promise.resolve({ data: [{ nodeType: "Stage" }] });
+        }
+        return Promise.resolve({ data: [] });
+      });
+
+      const result = await planPipeline(client as any, {
+        workspaceID: "ws-1",
+        sql: `WITH stg_data AS (
+          SELECT id, /* func() */ name FROM my_table
+        ),
+        stg_next AS (
+          SELECT a, b FROM next_table
+        )
+        SELECT * FROM stg_data JOIN stg_next ON stg_data.id = stg_next.a`,
+      });
+
+      expect(result.status).toBe("needs_clarification");
+      // Block comment with parens must not corrupt paren depth
+      expect(result.cteNodeSummary).toHaveLength(2);
+      expect(result.cteNodeSummary![0]!.name).toBe("STG_DATA");
+      expect(result.cteNodeSummary![1]!.name).toBe("STG_NEXT");
+    });
+
     it("planPipeline allows SQL without CTEs", async () => {
       const client = createMockClient();
       const sourceNode = buildSourceNode("source-1", "CUSTOMER");
