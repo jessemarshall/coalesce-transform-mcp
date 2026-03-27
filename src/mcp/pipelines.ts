@@ -252,8 +252,10 @@ function cleanupOldPlanFiles(dir: string, workspaceID: string, maxToKeep: number
     for (const file of files.slice(maxToKeep)) {
       unlinkSync(join(dir, file));
     }
-  } catch {
-    // Best-effort cleanup — don't fail the write
+  } catch (error) {
+    // Best-effort cleanup — don't fail the write, but log for traceability
+    const reason = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`[coalesce-transform-mcp] plan file cleanup failed: ${reason}\n`);
   }
 }
 
@@ -503,7 +505,11 @@ export function registerPipelineTools(
         }
 
         const result = await createPipelineFromPlan(client, params);
-        return buildJsonToolResponse("create-pipeline-from-plan", result);
+        const response = buildJsonToolResponse("create-pipeline-from-plan", result);
+        if (isPlainObject(result) && result.isError) {
+          return { ...response, isError: true };
+        }
+        return response;
       } catch (error) {
         return handleToolError(error);
       }
@@ -585,7 +591,11 @@ export function registerPipelineTools(
           plan,
           ...((isPlainObject(execution) ? execution : { execution }) as Record<string, unknown>),
         };
-        return buildJsonToolResponse("create-pipeline-from-sql", result);
+        const response = buildJsonToolResponse("create-pipeline-from-sql", result);
+        if (isPlainObject(execution) && execution.isError) {
+          return { ...response, isError: true };
+        }
+        return response;
       } catch (error) {
         return handleToolError(error);
       }

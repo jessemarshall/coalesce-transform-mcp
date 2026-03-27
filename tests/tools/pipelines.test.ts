@@ -927,9 +927,9 @@ describe("Pipeline Tools", () => {
     });
 
     expect(result.status).toBe("needs_clarification");
-    expect(result.warnings).toContain(
-      "Observed workspace node types could not be fetched for workspace ws-1. Use list-workspace-node-types or cache-workspace-nodes to inspect current workspace usage and confirm installation before execution."
-    );
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain("Observed workspace node types could not be fetched for workspace ws-1");
+    expect(result.warnings[0]).toContain("workspace list unavailable");
   });
 
   it("planPipeline warns but still returns a plan when COALESCE_REPO_PATH is stale", async () => {

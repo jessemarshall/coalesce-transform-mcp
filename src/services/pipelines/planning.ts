@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import type { CoalesceClient } from "../../client.js";
+import { CoalesceApiError, type CoalesceClient } from "../../client.js";
 import { validatePathSegment } from "../../coalesce/types.js";
 import {
   getWorkspaceNode,
@@ -1602,13 +1602,18 @@ async function getWorkspaceNodeTypeInventory(
       total: result.total ?? 0,
       warnings: [],
     };
-  } catch {
+  } catch (error) {
+    // Auth and network errors indicate a broken session — let them propagate
+    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
+      throw error;
+    }
+    const reason = error instanceof Error ? error.message : String(error);
     return {
       nodeTypes: [],
       counts: {},
       total: 0,
       warnings: [
-        `Observed workspace node types could not be fetched for workspace ${workspaceID}. ` +
+        `Observed workspace node types could not be fetched for workspace ${workspaceID} (${reason}). ` +
           `Use list-workspace-node-types or cache-workspace-nodes to inspect current workspace usage and confirm installation before execution.`,
       ],
     };
