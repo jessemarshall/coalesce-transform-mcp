@@ -1,128 +1,73 @@
 import { describe, it, expect, vi } from "vitest";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerWorkspaceTools } from "../../src/mcp/workspaces.js";
-import { listWorkspaces } from "../../src/coalesce/api/workspaces.js";
+import { listWorkspaces, getWorkspace } from "../../src/coalesce/api/workspaces.js";
+import { CoalesceApiError } from "../../src/client.js";
 
 function createMockClient() {
   return {
-    get: vi.fn().mockResolvedValue([]),
-    post: vi.fn(),
-    put: vi.fn(),
-    patch: vi.fn(),
-    delete: vi.fn(),
+    get: vi.fn().mockResolvedValue({}),
+    post: vi.fn().mockResolvedValue({}),
+    put: vi.fn().mockResolvedValue({}),
+    delete: vi.fn().mockResolvedValue({}),
   };
 }
 
-describe("Workspace Tools", () => {
-  it("registers list-workspaces tool", () => {
-    const server = new McpServer({ name: "test", version: "0.0.1" });
-    const client = createMockClient();
-    registerWorkspaceTools(server, client as any);
-    expect(true).toBe(true);
-  });
-
-  it("listWorkspaces without projectID calls GET /api/v1/projects with includeWorkspaces", async () => {
-    const client = createMockClient();
-    client.get.mockResolvedValue([
-      {
-        id: "proj-1",
-        name: "Project One",
-        workspaces: [
-          { id: "ws-1", name: "Dev Workspace" },
-          { id: "ws-2", name: "Prod Workspace" },
-        ],
-      },
-    ]);
-
-    const result = await listWorkspaces(client as any);
-
-    expect(client.get).toHaveBeenCalledWith("/api/v1/projects", {
-      includeWorkspaces: true,
-    });
-    expect(result).toEqual({
-      workspaces: [
-        { id: "ws-1", name: "Dev Workspace", projectID: "proj-1", projectName: "Project One" },
-        { id: "ws-2", name: "Prod Workspace", projectID: "proj-1", projectName: "Project One" },
-      ],
-    });
-  });
-
-  it("listWorkspaces with projectID calls GET /api/v1/projects/{id} with includeWorkspaces", async () => {
+describe("Workspace API", () => {
+  it("listWorkspaces calls GET /api/v1/workspaces", async () => {
     const client = createMockClient();
     client.get.mockResolvedValue({
-      id: "proj-1",
-      name: "Project One",
-      workspaces: [{ id: "ws-1", name: "Dev" }],
+      data: [
+        { id: "ws-1", name: "Development" },
+        { id: "ws-2", name: "Production" },
+      ],
     });
 
-    const result = await listWorkspaces(client as any, { projectID: "proj-1" });
+    const result = await listWorkspaces(client as any);
 
-    expect(client.get).toHaveBeenCalledWith("/api/v1/projects/proj-1", {
-      includeWorkspaces: true,
-    });
+    expect(client.get).toHaveBeenCalledWith("/api/v1/workspaces", {});
     expect(result).toEqual({
-      workspaces: [
-        { id: "ws-1", name: "Dev", projectID: "proj-1", projectName: "Project One" },
+      data: [
+        { id: "ws-1", name: "Development" },
+        { id: "ws-2", name: "Production" },
       ],
     });
   });
 
-  it("returns empty workspaces when API returns non-array for all-projects path", async () => {
+  it("listWorkspaces passes pagination params", async () => {
     const client = createMockClient();
-    client.get.mockResolvedValue("unexpected string");
+    client.get.mockResolvedValue({ data: [] });
 
-    const result = await listWorkspaces(client as any);
+    await listWorkspaces(client as any, { limit: 10, orderBy: "name" });
 
-    expect(result).toEqual({ workspaces: [] });
-  });
-
-  it("handles project with no workspaces field", async () => {
-    const client = createMockClient();
-    client.get.mockResolvedValue([{ id: "proj-1", name: "Empty" }]);
-
-    const result = await listWorkspaces(client as any);
-
-    expect(result).toEqual({ workspaces: [] });
-  });
-
-  it("skips workspaces with no valid id", async () => {
-    const client = createMockClient();
-    client.get.mockResolvedValue([
-      {
-        id: "proj-1",
-        name: "Test",
-        workspaces: [
-          { id: "ws-1", name: "Good" },
-          { id: "", name: "Empty ID" },
-          { id: null, name: "Null ID" },
-          { name: "Missing ID" },
-        ],
-      },
-    ]);
-
-    const result = await listWorkspaces(client as any);
-
-    expect(result).toEqual({
-      workspaces: [
-        { id: "ws-1", name: "Good", projectID: "proj-1", projectName: "Test" },
-      ],
+    expect(client.get).toHaveBeenCalledWith("/api/v1/workspaces", {
+      limit: 10,
+      orderBy: "name",
     });
   });
 
-  it("flattens workspaces from multiple projects", async () => {
+  it("getWorkspace calls GET /api/v1/workspaces/{workspaceID}", async () => {
     const client = createMockClient();
-    client.get.mockResolvedValue([
-      { id: "p1", name: "P1", workspaces: [{ id: "ws-1", name: "W1" }] },
-      { id: "p2", name: "P2", workspaces: [{ id: "ws-2", name: "W2" }] },
-    ]);
+    client.get.mockResolvedValue({ id: "ws-1", name: "Development" });
 
-    const result = await listWorkspaces(client as any);
+    const result = await getWorkspace(client as any, { workspaceID: "ws-1" });
 
-    expect(result).toEqual({
-      workspaces: [
-        { id: "ws-1", name: "W1", projectID: "p1", projectName: "P1" },
-        { id: "ws-2", name: "W2", projectID: "p2", projectName: "P2" },
-      ],
-    });
+    expect(client.get).toHaveBeenCalledWith("/api/v1/workspaces/ws-1", {});
+    expect(result).toEqual({ id: "ws-1", name: "Development" });
+  });
+
+  it("getWorkspace rejects path traversal in workspaceID", async () => {
+    const client = createMockClient();
+
+    await expect(
+      getWorkspace(client as any, { workspaceID: "../escape" })
+    ).rejects.toThrow("workspaceID");
+  });
+
+  it("propagates CoalesceApiError from client", async () => {
+    const client = createMockClient();
+    client.get.mockRejectedValue(new CoalesceApiError("Unauthorized", 401));
+
+    await expect(
+      listWorkspaces(client as any)
+    ).rejects.toThrow("Unauthorized");
   });
 });

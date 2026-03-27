@@ -9,6 +9,7 @@ import {
   deleteWorkspaceSubgraph,
 } from "../coalesce/api/subgraphs.js";
 import {
+  PaginationParams,
   buildJsonToolResponse,
   handleToolError,
   READ_ONLY_ANNOTATIONS,
@@ -22,10 +23,10 @@ export function registerSubgraphTools(
 ): void {
   server.tool(
     "list-workspace-subgraphs",
-    "List all subgraphs in a Coalesce workspace. Subgraphs group nodes together visually.",
-    {
+    "List all subgraphs in a Coalesce workspace. Use this to discover subgraph IDs for get, update, or delete operations.",
+    PaginationParams.extend({
       workspaceID: z.string().describe("The workspace ID"),
-    },
+    }).shape,
     READ_ONLY_ANNOTATIONS,
     async (params) => {
       try {

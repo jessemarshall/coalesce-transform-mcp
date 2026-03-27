@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import type { CoalesceClient } from "../../client.js";
+import { CoalesceApiError, type CoalesceClient } from "../../client.js";
 import { validatePathSegment } from "../../coalesce/types.js";
 import {
   getWorkspaceNode,
@@ -1602,13 +1602,18 @@ async function getWorkspaceNodeTypeInventory(
       total: result.total ?? 0,
       warnings: [],
     };
-  } catch {
+  } catch (error) {
+    // Auth and network errors indicate a broken session — let them propagate
+    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
+      throw error;
+    }
+    const reason = error instanceof Error ? error.message : String(error);
     return {
       nodeTypes: [],
       counts: {},
       total: 0,
       warnings: [
-        `Observed workspace node types could not be fetched for workspace ${workspaceID}. ` +
+        `Observed workspace node types could not be fetched for workspace ${workspaceID} (${reason}). ` +
           `Use list-workspace-node-types or cache-workspace-nodes to inspect current workspace usage and confirm installation before execution.`,
       ],
     };
@@ -1834,38 +1839,54 @@ type CteColumn = {
 
 /**
  * Extract CTEs with their bodies from SQL.
- * Handles nested parentheses to find each CTE body.
+ * Uses quoting-aware scanning to find CTE headers and balanced parentheses,
+ * avoiding false matches inside string literals, quoted identifiers, and comments.
  */
 function extractCtes(sql: string): ParsedCte[] {
   const trimmed = sql.trim();
-  if (!/^with\b/i.test(trimmed)) {
-    return [];
-  }
+
+  // Check for leading WITH keyword using quoting-aware search
+  const withIdx = findTopLevelKeywordIndex(trimmed, "WITH");
+  if (withIdx !== 0) return [];
 
   const ctes: ParsedCte[] = [];
-  // Match CTE header: WITH name AS ( or , name AS (
-  const pattern = /(?:^with|,)\s+([A-Za-z_][\w$]*|"[^"]+"|`[^`]+`)\s+AS\s*\(/gi;
-  const matches = [...trimmed.matchAll(pattern)];
+  // Scan for CTE definitions: name AS ( ... )
+  // After WITH, and after each CTE body followed by a comma, look for: identifier AS (
+  let cursor = withIdx + 4; // skip past "WITH"
 
-  for (let i = 0; i < matches.length; i++) {
-    const match = matches[i]!;
-    const rawName = match[1] ? stripIdentifierQuotes(match[1]) : null;
-    if (!rawName) continue;
+  while (cursor < trimmed.length) {
+    // Skip whitespace and commas between CTEs
+    const rest = trimmed.slice(cursor);
+    const leadingMatch = rest.match(/^[\s,]+/);
+    if (leadingMatch) cursor += leadingMatch[0].length;
+    if (cursor >= trimmed.length) break;
 
+    // Try to match: identifier AS (
+    // identifier can be unquoted, double-quoted, backtick-quoted, or bracket-quoted
+    const headerMatch = trimmed.slice(cursor).match(
+      /^([A-Za-z_][\w$]*|"[^"]+"|`[^`]+`|\[[^\]]+\])\s+AS\s*\(/i
+    );
+    if (!headerMatch) break; // No more CTE headers — rest is the final SELECT
+
+    const rawName = stripIdentifierQuotes(headerMatch[1]!);
     const name = rawName.toUpperCase();
-    // Find the CTE body: start after the opening '(' of "AS ("
-    const bodyStart = match.index! + match[0].length;
+    const bodyStart = cursor + headerMatch[0].length;
     const body = extractParenBody(trimmed, bodyStart);
 
-    if (body) {
+    const closeIdx = findClosingParen(trimmed, bodyStart);
+    if (closeIdx >= 0) {
+      const body = trimmed.slice(bodyStart, closeIdx).trim();
       const columns = parseCteColumns(body);
       const whereClause = extractCteWhereClause(body);
       const sourceTable = extractCteSourceTable(body);
-      const hasGroupBy = /\bGROUP\s+BY\b/i.test(body);
-      const hasJoin = /\bJOIN\b/i.test(body);
+      const hasGroupBy = findTopLevelKeywordIndex(body, "GROUP") >= 0;
+      const hasJoin = findTopLevelKeywordIndex(body, "JOIN") >= 0;
       ctes.push({ name, body, columns, whereClause, sourceTable, hasGroupBy, hasJoin });
+      // Move cursor past the closing paren
+      cursor = closeIdx + 1;
     } else {
       ctes.push({ name, body: "", columns: [], whereClause: null, sourceTable: null, hasGroupBy: false, hasJoin: false });
+      break;
     }
   }
 
@@ -1873,32 +1894,77 @@ function extractCtes(sql: string): ParsedCte[] {
 }
 
 /**
+ * Find the index of the closing parenthesis that balances the opening one.
+ * `startIndex` should be the position right after the opening '('.
+ * Returns the index of the closing ')' or -1 if unbalanced.
+ *
+ * Handles all SQL quoting contexts: single-quoted strings, double-quoted
+ * identifiers, backtick-quoted identifiers, bracket-quoted identifiers,
+ * line comments (`--`), and block comments.
+ */
+function findClosingParen(sql: string, startIndex: number): number {
+  let depth = 1;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inBacktick = false;
+  let inBracket = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = startIndex; i < sql.length; i++) {
+    const ch = sql[i]!;
+    const next = sql[i + 1];
+
+    if (inLineComment) {
+      if (ch === "\n") inLineComment = false;
+      continue;
+    }
+    if (inBlockComment) {
+      if (ch === "*" && next === "/") { inBlockComment = false; i++; }
+      continue;
+    }
+    if (inSingleQuote) {
+      if (ch === "'" && next === "'") { i++; } else if (ch === "'") { inSingleQuote = false; }
+      continue;
+    }
+    if (inDoubleQuote) {
+      if (ch === '"') inDoubleQuote = false;
+      continue;
+    }
+    if (inBacktick) {
+      if (ch === "`") inBacktick = false;
+      continue;
+    }
+    if (inBracket) {
+      if (ch === "]") inBracket = false;
+      continue;
+    }
+
+    if (ch === "'") { inSingleQuote = true; continue; }
+    if (ch === '"') { inDoubleQuote = true; continue; }
+    if (ch === "`") { inBacktick = true; continue; }
+    if (ch === "[") { inBracket = true; continue; }
+    if (ch === "-" && next === "-") { inLineComment = true; i++; continue; }
+    if (ch === "/" && next === "*") { inBlockComment = true; i++; continue; }
+
+    if (ch === "(") {
+      depth++;
+    } else if (ch === ")") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
  * Extract the body between balanced parentheses.
  * `startIndex` should be the position right after the opening '('.
  */
 function extractParenBody(sql: string, startIndex: number): string | null {
-  let depth = 1;
-  let i = startIndex;
-  while (i < sql.length && depth > 0) {
-    const ch = sql[i];
-    if (ch === "'") {
-      // Skip string literal
-      i++;
-      while (i < sql.length && sql[i] !== "'") {
-        if (sql[i] === "'" && i + 1 < sql.length && sql[i + 1] === "'") i++; // escaped quote
-        i++;
-      }
-    } else if (ch === "(") {
-      depth++;
-    } else if (ch === ")") {
-      depth--;
-      if (depth === 0) {
-        return sql.slice(startIndex, i).trim();
-      }
-    }
-    i++;
-  }
-  return null;
+  const closeIdx = findClosingParen(sql, startIndex);
+  if (closeIdx < 0) return null;
+  return sql.slice(startIndex, closeIdx).trim();
 }
 
 /**
@@ -1983,28 +2049,25 @@ function extractBareColumnName(expr: string): string | null {
 
 /**
  * Extract WHERE clause from a CTE body (ignoring subqueries).
+ * Uses quoting-aware keyword search to avoid matching inside strings or comments.
  */
 function extractCteWhereClause(body: string): string | null {
-  // Find WHERE that's not inside parentheses
-  const upperBody = body.toUpperCase();
-  let depth = 0;
-  for (let i = 0; i < body.length; i++) {
-    if (body[i] === "(") depth++;
-    else if (body[i] === ")") depth--;
-    else if (depth === 0 && upperBody.startsWith("WHERE", i)) {
-      // Check it's a word boundary
-      const before = i > 0 ? body[i - 1] : " ";
-      const after = i + 5 < body.length ? body[i + 5] : " ";
-      if (/\s/.test(before) && /\s/.test(after)) {
-        // Extract until GROUP BY, ORDER BY, HAVING, LIMIT, QUALIFY, or end
-        const rest = body.slice(i + 5);
-        const endMatch = rest.search(/\b(?:GROUP\s+BY|ORDER\s+BY|HAVING|LIMIT|QUALIFY)\b/i);
-        const clause = endMatch >= 0 ? rest.slice(0, endMatch).trim() : rest.trim();
-        return clause || null;
-      }
+  const whereIdx = findTopLevelKeywordIndex(body, "WHERE");
+  if (whereIdx < 0) return null;
+
+  const afterWhere = whereIdx + 5; // "WHERE".length
+  // Find the first clause terminator after WHERE
+  const terminators = ["GROUP", "ORDER", "HAVING", "LIMIT", "QUALIFY"] as const;
+  let endIdx = body.length;
+  for (const kw of terminators) {
+    const idx = findTopLevelKeywordIndex(body, kw, afterWhere);
+    if (idx >= 0 && idx < endIdx) {
+      endIdx = idx;
     }
   }
-  return null;
+
+  const clause = body.slice(afterWhere, endIdx).trim();
+  return clause || null;
 }
 
 const AGGREGATE_FUNCTIONS = new Set([
@@ -2021,10 +2084,15 @@ function isAggregateFn(name: string): boolean {
 
 /**
  * Extract the main source table from a CTE body's FROM clause.
+ * Uses quoting-aware keyword search to avoid matching FROM inside strings or comments.
  */
 function extractCteSourceTable(body: string): string | null {
-  const match = body.match(/\bFROM\s+([A-Za-z_][\w$.]*(?:\.[A-Za-z_][\w$]*)*)/i);
-  return match?.[1]?.toUpperCase() ?? null;
+  const fromIdx = findTopLevelKeywordIndex(body, "FROM");
+  if (fromIdx < 0) return null;
+
+  const afterFrom = body.slice(fromIdx + 4).trimStart();
+  const tableMatch = afterFrom.match(/^([A-Za-z_][\w$.]*(?:\.[A-Za-z_][\w$]*)*)/);
+  return tableMatch?.[1]?.toUpperCase() ?? null;
 }
 
 /**
@@ -2252,31 +2320,37 @@ function buildCtePlan(
 /**
  * Extract information about the final SELECT after all CTEs.
  */
+/**
+ * Escape a string for use in a RegExp constructor, ensuring special characters
+ * like `$` in CTE names are treated as literals.
+ */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function extractFinalSelectFromCteQuery(sql: string, cteNames: Set<string>): string | null {
-  // Find the final SELECT that comes after the last CTE
-  // It's the SELECT that's not inside any CTE body
+  // Find the last top-level SELECT using quoting-aware scanning.
   const trimmed = sql.trim();
-  // Find last top-level SELECT
   let lastSelectIdx = -1;
-  let depth = 0;
-  const upper = trimmed.toUpperCase();
-  for (let i = 0; i < trimmed.length; i++) {
-    if (trimmed[i] === "(") depth++;
-    else if (trimmed[i] === ")") depth--;
-    else if (depth === 0 && upper.startsWith("SELECT", i)) {
-      const before = i > 0 ? trimmed[i - 1] : " ";
-      if (/[\s,)]/.test(before) || i === 0) {
-        lastSelectIdx = i;
-      }
+
+  scanTopLevel(trimmed, (_char, index, parenDepth) => {
+    if (
+      parenDepth === 0 &&
+      trimmed.slice(index, index + 6).toUpperCase() === "SELECT" &&
+      !isIdentifierChar(trimmed[index - 1]) &&
+      !isIdentifierChar(trimmed[index + 6])
+    ) {
+      lastSelectIdx = index;
     }
-  }
+    return true;
+  });
 
   if (lastSelectIdx < 0) return null;
 
   const finalSelect = trimmed.slice(lastSelectIdx).trim();
-  // Check which CTEs the final SELECT references
+  // Check which CTEs the final SELECT references (escape names for safe regex)
   const referencedCtes = [...cteNames].filter((name) =>
-    new RegExp(`\\b${name}\\b`, "i").test(finalSelect)
+    new RegExp(`\\b${escapeRegExp(name)}\\b`, "i").test(finalSelect)
   );
 
   if (referencedCtes.length === 0) return null;
@@ -2816,86 +2890,4 @@ export function buildStageSourceMappingFromPlan(
           : [],
     },
   ];
-}
-
-function buildStageNodeBodyFromPlan(
-  currentNode: Record<string, unknown>,
-  nodePlan: PlannedPipelineNode
-): Record<string, unknown> {
-  const updatedNode = deepClone(currentNode);
-  updatedNode.name = nodePlan.name;
-  if (nodePlan.description !== null) {
-    updatedNode.description = nodePlan.description;
-  }
-
-  if (Object.keys(nodePlan.location).length > 0) {
-    Object.assign(updatedNode, nodePlan.location);
-  }
-
-  updatedNode.config = {
-    ...DEFAULT_STAGE_CONFIG,
-    ...(isPlainObject(updatedNode.config) ? updatedNode.config : {}),
-    ...nodePlan.configOverrides,
-  };
-
-  const plannedColumns: Record<string, unknown>[] = [];
-  for (const selectItem of nodePlan.selectItems) {
-    const baseColumn = findMatchingBaseColumn(updatedNode, selectItem);
-    if (!baseColumn) {
-      throw new Error(
-        `Could not map planned output column ${selectItem.outputName ?? selectItem.expression} onto the created predecessor-based node body.`
-      );
-    }
-    baseColumn.name = selectItem.outputName ?? baseColumn.name;
-    if (isPlainObject(baseColumn.columnReference)) {
-      baseColumn.columnReference = {
-        ...baseColumn.columnReference,
-        columnCounter: randomUUID(),
-      };
-    }
-    if (typeof baseColumn.columnID === "string") {
-      baseColumn.columnID = randomUUID();
-    }
-    plannedColumns.push(baseColumn);
-  }
-
-  const currentMetadata = isPlainObject(updatedNode.metadata)
-    ? updatedNode.metadata
-    : {};
-  updatedNode.metadata = {
-    ...currentMetadata,
-    columns: plannedColumns,
-    sourceMapping: buildStageSourceMappingFromPlan(updatedNode, nodePlan),
-  };
-
-  return renameSourceMappingEntries(updatedNode, nodePlan.name);
-}
-
-async function deleteWorkspaceNode(
-  client: CoalesceClient,
-  workspaceID: string,
-  nodeID: string
-): Promise<void> {
-  await client.delete(
-    `/api/v1/workspaces/${validatePathSegment(workspaceID, "workspaceID")}/nodes/${validatePathSegment(nodeID, "nodeID")}`
-  );
-}
-
-async function rollbackCreatedPipelineNodes(
-  client: CoalesceClient,
-  workspaceID: string,
-  nodeIDs: string[]
-): Promise<string[]> {
-  const rollbackFailures: string[] = [];
-  const uniqueNodeIDs = Array.from(new Set(nodeIDs));
-
-  for (const nodeID of uniqueNodeIDs.reverse()) {
-    try {
-      await deleteWorkspaceNode(client, workspaceID, nodeID);
-    } catch {
-      rollbackFailures.push(nodeID);
-    }
-  }
-
-  return rollbackFailures;
 }

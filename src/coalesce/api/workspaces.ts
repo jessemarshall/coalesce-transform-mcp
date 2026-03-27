@@ -1,64 +1,19 @@
-import type { CoalesceClient } from "../../client.js";
+import type { CoalesceClient, QueryParams } from "../../client.js";
 import { validatePathSegment } from "../types.js";
-import { isPlainObject } from "../../utils.js";
 
 export async function listWorkspaces(
   client: CoalesceClient,
-  params?: { projectID?: string }
+  params: QueryParams = {}
 ): Promise<unknown> {
-  if (params?.projectID) {
-    // Single project — fetch with workspaces included
-    const validProjectID = validatePathSegment(params.projectID, "projectID");
-    const project = await client.get(`/api/v1/projects/${validProjectID}`, {
-      includeWorkspaces: true,
-    });
-    return extractWorkspacesFromProjects(
-      Array.isArray(project) ? project : [project]
-    );
-  }
+  return client.get("/api/v1/workspaces", params);
+}
 
-  // All projects — fetch with workspaces included
-  const projects = await client.get("/api/v1/projects", {
-    includeWorkspaces: true,
-  });
-  return extractWorkspacesFromProjects(
-    Array.isArray(projects) ? projects : isPlainObject(projects) ? [projects] : []
+export async function getWorkspace(
+  client: CoalesceClient,
+  params: { workspaceID: string }
+): Promise<unknown> {
+  return client.get(
+    `/api/v1/workspaces/${validatePathSegment(params.workspaceID, "workspaceID")}`,
+    {}
   );
 }
-
-function extractWorkspacesFromProjects(
-  projects: unknown[]
-): { workspaces: WorkspaceSummary[] } {
-  const workspaces: WorkspaceSummary[] = [];
-
-  for (const project of projects) {
-    if (!isPlainObject(project)) continue;
-    const projectID = typeof project.id === "string" ? project.id : undefined;
-    const projectName =
-      typeof project.name === "string" ? project.name : undefined;
-
-    const nested = Array.isArray(project.workspaces)
-      ? project.workspaces
-      : [];
-    for (const ws of nested) {
-      if (!isPlainObject(ws)) continue;
-      const id = typeof ws.id === "string" ? ws.id : String(ws.id ?? "");
-      if (!id) continue;
-      workspaces.push({
-        id,
-        name: typeof ws.name === "string" ? ws.name : undefined,
-        projectID,
-        projectName,
-      });
-    }
-  }
-
-  return { workspaces };
-}
-
-type WorkspaceSummary = {
-  id: string;
-  name?: string;
-  projectID?: string;
-  projectName?: string;
-};

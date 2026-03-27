@@ -392,6 +392,7 @@ export async function createPipelineFromPlan(
       if (rollbackFailures.length > 0) {
         return {
           created: false,
+          isError: true,
           incomplete: true,
           failedPlanNodeID: nodePlan.planNodeID,
           createdNodes,

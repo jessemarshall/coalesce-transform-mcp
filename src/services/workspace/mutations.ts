@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { CoalesceClient } from "../../client.js";
+import { CoalesceApiError, type CoalesceClient } from "../../client.js";
 import {
   getWorkspaceNode,
   setWorkspaceNode,
@@ -111,6 +111,10 @@ async function validateNodeTypeChoice(
 
     return validation;
   } catch (error) {
+    // Auth and network errors indicate a broken session — let them propagate
+    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
+      throw error;
+    }
     // Re-throw hard block errors — exclusion and specialized pattern blocks
     if (error instanceof Error && (
       error.message.includes("is excluded") ||
@@ -1363,12 +1367,16 @@ export async function createWorkspaceNodeFromScratch(
       configCompletion,
       ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
+      throw error;
+    }
+    const reason = error instanceof Error ? error.message : String(error);
     return {
       node: finalNode,
       validation,
       nextSteps,
-      configCompletionSkipped: "Config completion failed — call complete-node-configuration with repoPath after creation to apply node type config and column-level attributes.",
+      configCompletionSkipped: `Config completion failed (${reason}) — call complete-node-configuration with repoPath after creation to apply node type config and column-level attributes.`,
       ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
     };
   }
@@ -1688,19 +1696,23 @@ export async function createWorkspaceNodeFromPredecessor(
       nextSteps,
       ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
+      throw error;
+    }
     // Re-fetch the node after any changes were applied
     const hasChanges = (params.changes && Object.keys(params.changes).length > 0) || params.columns;
     const latestNode = hasChanges
       ? await getWorkspaceNode(client, { workspaceID: params.workspaceID, nodeID: created.id })
       : createdNode;
 
+    const reason = error instanceof Error ? error.message : String(error);
     return {
       node: latestNode,
       predecessors: predecessorNodes,
       joinSuggestions,
       validation,
-      configCompletionSkipped: "Config completion failed — call complete-node-configuration with repoPath after creation to apply node type config and column-level attributes.",
+      configCompletionSkipped: `Config completion failed (${reason}) — call complete-node-configuration with repoPath after creation to apply node type config and column-level attributes.`,
       nextSteps,
       ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
     };
@@ -2007,7 +2019,11 @@ export async function convertJoinToAggregation(
       },
       configCompletion,
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
+      throw error;
+    }
+    const reason = error instanceof Error ? error.message : String(error);
     return {
       node: updated,
       joinSQL,
@@ -2016,7 +2032,7 @@ export async function convertJoinToAggregation(
         valid: groupByAnalysis.validation.valid && warnings.length === 0,
         warnings,
       },
-      configCompletionSkipped: "Config completion failed — call complete-node-configuration with repoPath after creation to apply node type config and column-level attributes.",
+      configCompletionSkipped: `Config completion failed (${reason}) — call complete-node-configuration with repoPath after creation to apply node type config and column-level attributes.`,
     };
   }
 }

@@ -30,8 +30,14 @@ describe("Tool Registration", () => {
       (call: unknown[]) => call[0] as string
     );
 
-    expect(toolSpy).toHaveBeenCalledTimes(75);
+    expect(toolSpy).toHaveBeenCalledTimes(77);
+    expect(toolNames).toContain("list-workspaces");
+    expect(toolNames).toContain("get-workspace");
     expect(toolNames).toContain("list-environment-jobs");
+    expect(toolNames).toContain("list-workspace-jobs");
+    expect(toolNames).toContain("list-workspace-subgraphs");
+    expect(toolNames).toContain("update-environment");
+    expect(toolNames).toContain("get-environment-job");
     expect(toolNames).toContain("list-environments");
     expect(toolNames).toContain("get-environment");
     expect(toolNames).toContain("list-environment-nodes");
@@ -62,10 +68,6 @@ describe("Tool Registration", () => {
     expect(toolNames).toContain("analyze-workspace-patterns");
     expect(toolNames).toContain("list-workspace-node-types");
     expect(toolNames).toContain("complete-node-configuration");
-    expect(toolNames).toContain("list-workspaces");
-    expect(toolNames).toContain("list-workspace-subgraphs");
-    expect(toolNames).toContain("update-environment");
-    expect(toolNames).toContain("get-environment-job");
 
     const clearCacheCall = toolSpy.mock.calls.find(
       (call: unknown[]) => call[0] === "clear_coalesce_transform_mcp_data_cache"

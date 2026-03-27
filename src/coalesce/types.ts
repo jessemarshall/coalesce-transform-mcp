@@ -302,6 +302,7 @@ const LIST_TOOL_NAMES = new Set([
   "list-git-accounts",
   "list-workspaces",
   "list-workspace-subgraphs",
+  "list-workspace-jobs",
 ]);
 
 const ENTITY_TOOL_NAMES = new Set([
@@ -314,6 +315,7 @@ const ENTITY_TOOL_NAMES = new Set([
   "update-project",
   "delete-project",
   "get-environment-job",
+  "get-workspace",
   "create-workspace-job",
   "update-workspace-job",
   "delete-workspace-job",

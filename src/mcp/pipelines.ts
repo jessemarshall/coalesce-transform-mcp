@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { CACHE_DIR_NAME } from "../cache-dir.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
-import { buildPlanConfirmationToken } from "../services/pipelines/confirmation.js";
+import { buildPlanConfirmationToken, sortJsonValue } from "../services/pipelines/confirmation.js";
 import {
   PipelinePlanSchema,
   planPipeline,
@@ -25,36 +25,6 @@ import {
 import { isPlainObject } from "../utils.js";
 
 export { buildPlanConfirmationToken };
-
-/**
- * Recursively sorts JSON values to ensure deterministic serialization.
- *
- * Object keys are sorted alphabetically to guarantee that structurally
- * identical objects produce identical JSON strings when serialized.
- * This is essential for generating consistent confirmation tokens via
- * hashing, where the same plan content must always yield the same hash
- * regardless of key insertion order.
- *
- * @param value - The value to sort (arrays, objects, or primitives)
- * @returns A deep copy with all object keys sorted alphabetically
- */
-function sortJsonValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortJsonValue);
-  }
-  if (!isPlainObject(value)) {
-    return value;
-  }
-
-  const sorted: Record<string, unknown> = {};
-  for (const key of Object.keys(value).sort()) {
-    const nested = sortJsonValue(value[key]);
-    if (nested !== undefined) {
-      sorted[key] = nested;
-    }
-  }
-  return sorted;
-}
 
 function normalizePlanFingerprintSelection(selection: unknown): Record<string, unknown> | null {
   if (!isPlainObject(selection)) {
@@ -252,8 +222,10 @@ function cleanupOldPlanFiles(dir: string, workspaceID: string, maxToKeep: number
     for (const file of files.slice(maxToKeep)) {
       unlinkSync(join(dir, file));
     }
-  } catch {
-    // Best-effort cleanup — don't fail the write
+  } catch (error) {
+    // Best-effort cleanup — don't fail the write, but log for traceability
+    const reason = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`[coalesce-transform-mcp] plan file cleanup failed: ${reason}\n`);
   }
 }
 
@@ -503,7 +475,11 @@ export function registerPipelineTools(
         }
 
         const result = await createPipelineFromPlan(client, params);
-        return buildJsonToolResponse("create-pipeline-from-plan", result);
+        const response = buildJsonToolResponse("create-pipeline-from-plan", result);
+        if (isPlainObject(result) && result.isError) {
+          return { ...response, isError: true };
+        }
+        return response;
       } catch (error) {
         return handleToolError(error);
       }
@@ -585,7 +561,11 @@ export function registerPipelineTools(
           plan,
           ...((isPlainObject(execution) ? execution : { execution }) as Record<string, unknown>),
         };
-        return buildJsonToolResponse("create-pipeline-from-sql", result);
+        const response = buildJsonToolResponse("create-pipeline-from-sql", result);
+        if (isPlainObject(execution) && execution.isError) {
+          return { ...response, isError: true };
+        }
+        return response;
       } catch (error) {
         return handleToolError(error);
       }
