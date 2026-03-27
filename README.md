@@ -79,7 +79,7 @@ Only `COALESCE_ACCESS_TOKEN` is required. Everything else is optional.
 
 ### Snowflake (for run tools only)
 
-Required for `start-run`, `retry-run`, `run-and-wait`, and `retry-and-wait`. The server starts without them — they're validated when you first use a run tool.
+Required for `coalesce_start_run`, `coalesce_retry_run`, `coalesce_run_and_wait`, and `coalesce_retry_and_wait`. The server starts without them — they're validated when you first use a run tool.
 
 <!-- ENV_METADATA_SNOWFLAKE_TABLE_START -->
 | Variable | Required | Description |
@@ -139,72 +139,80 @@ Coalesce Platform Tools: manage workspaces, environments, projects, runs, and ot
 
 #### Environments
 
-- `list-environments` - List all available environments
-- `get-environment` - Get details of a specific environment
-- `create-environment` - Create a new environment within a project
-- `delete-environment` - Delete an environment ⚠️
+- `coalesce_list_environments` - List all available environments
+- `coalesce_get_environment` - Get details of a specific environment
+- `coalesce_create_environment` - Create a new environment within a project
+- `coalesce_update_environment` - Update an existing environment
+- `coalesce_delete_environment` - Delete an environment ⚠️
+
+#### Workspaces
+
+- `coalesce_list_workspaces` - List all workspaces
+- `coalesce_get_workspace` - Get details of a specific workspace
 
 #### Nodes
 
-- `list-environment-nodes` - List nodes in an environment
-- `list-workspace-nodes` - List nodes in a workspace
-- `get-environment-node` - Get a specific environment node
-- `get-workspace-node` - Get a specific workspace node
-- `set-workspace-node` - Replace a workspace node with a full body
-- `update-workspace-node` - Safely update selected fields of a workspace node
-- `delete-workspace-node` - Delete a node from a workspace ⚠️
+- `coalesce_list_environment_nodes` - List nodes in an environment
+- `coalesce_list_workspace_nodes` - List nodes in a workspace
+- `coalesce_get_environment_node` - Get a specific environment node
+- `coalesce_get_workspace_node` - Get a specific workspace node
+- `coalesce_set_workspace_node` - Replace a workspace node with a full body
+- `coalesce_update_workspace_node` - Safely update selected fields of a workspace node
+- `coalesce_delete_workspace_node` - Delete a node from a workspace ⚠️
 
 #### Jobs
 
-- `list-jobs` - List all jobs for an environment
-- `create-workspace-job` - Create a job in a workspace with node include/exclude selectors
-- `get-job` - Get details of a specific job (via environment)
-- `update-workspace-job` - Update a job's name and node selectors
-- `delete-workspace-job` - Delete a job ⚠️
+- `coalesce_list_environment_jobs` - List all jobs for an environment
+- `coalesce_list_workspace_jobs` - List all jobs for a workspace
+- `coalesce_create_workspace_job` - Create a job in a workspace with node include/exclude selectors
+- `coalesce_get_environment_job` - Get details of a specific job (via environment)
+- `coalesce_update_workspace_job` - Update a job's name and node selectors
+- `coalesce_delete_workspace_job` - Delete a job ⚠️
 
 #### Subgraphs
 
-- `get-workspace-subgraph` - Get details of a specific subgraph
-- `create-workspace-subgraph` - Create a subgraph to group nodes visually
-- `update-workspace-subgraph` - Update a subgraph's name and node membership
-- `delete-workspace-subgraph` - Delete a subgraph (nodes are NOT deleted) ⚠️
+- `coalesce_list_workspace_subgraphs` - List subgraphs in a workspace
+- `coalesce_get_workspace_subgraph` - Get details of a specific subgraph
+- `coalesce_create_workspace_subgraph` - Create a subgraph to group nodes visually
+- `coalesce_update_workspace_subgraph` - Update a subgraph's name and node membership
+- `coalesce_delete_workspace_subgraph` - Delete a subgraph (nodes are NOT deleted) ⚠️
 
 #### Runs
 
-- `list-runs` - List runs with optional filters
-- `get-run` - Get details of a specific run
-- `get-run-results` - Get results of a completed run
-- `start-run` - Start a new run; requires Snowflake Key Pair auth (credentials from env vars)
-- `run-status` - Check status of a running job
-- `retry-run` - Retry a failed run; requires Snowflake Key Pair auth (credentials from env vars)
-- `cancel-run` - Cancel a running job (requires `runID` and `environmentID`; `orgID` may come from `COALESCE_ORG_ID`) ⚠️
+- `coalesce_list_runs` - List runs with optional filters
+- `coalesce_get_run` - Get details of a specific run
+- `coalesce_get_run_results` - Get results of a completed run
+- `coalesce_start_run` - Start a new run; requires Snowflake Key Pair auth (credentials from env vars)
+- `coalesce_run_status` - Check status of a running job
+- `coalesce_retry_run` - Retry a failed run; requires Snowflake Key Pair auth (credentials from env vars)
+- `coalesce_cancel_run` - Cancel a running job (requires `runID` and `environmentID`; `orgID` may come from `COALESCE_ORG_ID`) ⚠️
 
 #### Projects
 
-- `list-projects` - List all projects
-- `get-project` - Get project details
-- `create-project` - Create a new project
-- `update-project` - Update a project
-- `delete-project` - Delete a project ⚠️
+- `coalesce_list_projects` - List all projects
+- `coalesce_get_project` - Get project details
+- `coalesce_create_project` - Create a new project
+- `coalesce_update_project` - Update a project
+- `coalesce_delete_project` - Delete a project ⚠️
 
 #### Git Accounts
 
-- `list-git-accounts` - List all git accounts
-- `get-git-account` - Get git account details
-- `create-git-account` - Create a new git account
-- `update-git-account` - Update a git account
-- `delete-git-account` - Delete a git account ⚠️
+- `coalesce_list_git_accounts` - List all git accounts
+- `coalesce_get_git_account` - Get git account details
+- `coalesce_create_git_account` - Create a new git account
+- `coalesce_update_git_account` - Update a git account
+- `coalesce_delete_git_account` - Delete a git account ⚠️
 
 #### Users
 
-- `list-org-users` - List all organization users
-- `get-user-roles` - Get roles for a specific user
-- `list-user-roles` - List all user roles
-- `set-org-role` - Set organization role for a user
-- `set-project-role` - Set project role for a user
-- `delete-project-role` - Remove project role from a user ⚠️
-- `set-env-role` - Set environment role for a user
-- `delete-env-role` - Remove environment role from a user ⚠️
+- `coalesce_list_org_users` - List all organization users
+- `coalesce_get_user_roles` - Get roles for a specific user
+- `coalesce_list_user_roles` - List all user roles
+- `coalesce_set_org_role` - Set organization role for a user
+- `coalesce_set_project_role` - Set project role for a user
+- `coalesce_delete_project_role` - Remove project role from a user ⚠️
+- `coalesce_set_env_role` - Set environment role for a user
+- `coalesce_delete_env_role` - Remove environment role from a user ⚠️
 
 ### Intelligent Tools
 
@@ -212,52 +220,52 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 
 #### Node Creation and Configuration
 
-- `create-workspace-node-from-scratch` - Create a workspace node with no predecessors, apply fields to the requested completion level, and run automatic config completion
-- `create-workspace-node-from-predecessor` - Create a node from predecessor nodes, verify column coverage, suggest join columns, and run automatic config completion
-- `replace-workspace-node-columns` - Replace `metadata.columns` wholesale and optionally apply additional changes for complex column rewrites
-- `convert-join-to-aggregation` - Convert a join-style node into an aggregated fact-style node with generated JOIN/GROUP BY analysis
-- `apply-join-condition` - Auto-generate and write a FROM/JOIN/ON clause for a multi-predecessor node
-- `complete-node-configuration` - Intelligently complete a node's configuration by analyzing context and applying best-practice rules
-- `list-workspace-node-types` - List distinct node types observed in current workspace nodes
-- `analyze-workspace-patterns` - Analyze workspace nodes to detect package adoption, pipeline layers, methodology, and generate recommendations
+- `coalesce_create_workspace_node_from_scratch` - Create a workspace node with no predecessors, apply fields to the requested completion level, and run automatic config completion
+- `coalesce_create_workspace_node_from_predecessor` - Create a node from predecessor nodes, verify column coverage, suggest join columns, and run automatic config completion
+- `coalesce_replace_workspace_node_columns` - Replace `metadata.columns` wholesale and optionally apply additional changes for complex column rewrites
+- `coalesce_convert_join_to_aggregation` - Convert a join-style node into an aggregated fact-style node with generated JOIN/GROUP BY analysis
+- `coalesce_apply_join_condition` - Auto-generate and write a FROM/JOIN/ON clause for a multi-predecessor node
+- `coalesce_complete_node_configuration` - Intelligently complete a node's configuration by analyzing context and applying best-practice rules
+- `coalesce_list_workspace_node_types` - List distinct node types observed in current workspace nodes
+- `coalesce_analyze_workspace_patterns` - Analyze workspace nodes to detect package adoption, pipeline layers, methodology, and generate recommendations
 
 #### Pipeline Planning and Execution
 
-- `plan-pipeline` - Plan a pipeline from SQL or a natural-language goal without mutating the workspace; ranks best-fit node types from the local repo
-- `create-pipeline-from-plan` - Execute an approved pipeline plan using predecessor-based creation
-- `create-pipeline-from-sql` - Plan and create a pipeline directly from SQL
+- `coalesce_plan_pipeline` - Plan a pipeline from SQL or a natural-language goal without mutating the workspace; ranks best-fit node types from the local repo
+- `coalesce_create_pipeline_from_plan` - Execute an approved pipeline plan using predecessor-based creation
+- `coalesce_create_pipeline_from_sql` - Plan and create a pipeline directly from SQL
 
 #### Repo-Backed Node Types and Templates
 
-- `list-repo-packages` - Inspect a committed local Coalesce repo and list package aliases plus enabled node-type coverage from `packages/*.yml`
-- `list-repo-node-types` - List exact resolvable committed node-type identifiers from `nodeTypes/`, optionally scoped to one package alias or currently in-use types
-- `get-repo-node-type-definition` - Resolve one exact committed node type from a local repo and return its outer definition plus raw and parsed `metadata.nodeMetadataSpec`
-- `generate-set-workspace-node-template` - Generate a YAML-friendly `set-workspace-node` body template from either a raw definition object or an exact committed repo definition resolved by `repoPath` or `COALESCE_REPO_PATH`
+- `coalesce_list_repo_packages` - Inspect a committed local Coalesce repo and list package aliases plus enabled node-type coverage from `packages/*.yml`
+- `coalesce_list_repo_node_types` - List exact resolvable committed node-type identifiers from `nodeTypes/`, optionally scoped to one package alias or currently in-use types
+- `coalesce_get_repo_node_type_definition` - Resolve one exact committed node type from a local repo and return its outer definition plus raw and parsed `metadata.nodeMetadataSpec`
+- `coalesce_generate_set_workspace_node_template` - Generate a YAML-friendly `coalesce_set_workspace_node` body template from either a raw definition object or an exact committed repo definition resolved by `repoPath` or `COALESCE_REPO_PATH`
 
 #### Node Type Corpus
 
-- `search-node-type-variants` - Search the committed node-type corpus snapshot by normalized family, package, primitive, or support status
-- `get-node-type-variant` - Load one exact node-type corpus variant by variant key
-- `generate-set-workspace-node-template-from-variant` - Generate a `set-workspace-node` body template from a committed corpus variant without needing the original external source repo at runtime; partial variants are rejected unless `allowPartial=true`
+- `coalesce_search_node_type_variants` - Search the committed node-type corpus snapshot by normalized family, package, primitive, or support status
+- `coalesce_get_node_type_variant` - Load one exact node-type corpus variant by variant key
+- `coalesce_generate_set_workspace_node_template_from_variant` - Generate a `coalesce_set_workspace_node` body template from a committed corpus variant without needing the original external source repo at runtime; partial variants are rejected unless `allowPartial=true`
 
 #### Cache and Snapshots
 
-- `cache-workspace-nodes` - Fetch every page of workspace nodes, write the full snapshot to `coalesce_transform_mcp_data_cache/nodes/`, and return only cache metadata
-- `cache-environment-nodes` - Fetch every page of environment nodes, write the full snapshot to `coalesce_transform_mcp_data_cache/nodes/`, and return only cache metadata
-- `cache-runs` - Fetch every page of run results, write the full snapshot to `coalesce_transform_mcp_data_cache/runs/`, and return only cache metadata
-- `cache-org-users` - Fetch every page of organization users, write the full snapshot to `coalesce_transform_mcp_data_cache/users/`, and return only cache metadata
-- `clear_coalesce_transform_mcp_data_cache` - Delete all cached snapshots, auto-cached responses, and plan summaries under `coalesce_transform_mcp_data_cache/` ⚠️
+- `coalesce_cache_workspace_nodes` - Fetch every page of workspace nodes, write the full snapshot to `coalesce_transform_mcp_data_cache/nodes/`, and return only cache metadata
+- `coalesce_cache_environment_nodes` - Fetch every page of environment nodes, write the full snapshot to `coalesce_transform_mcp_data_cache/nodes/`, and return only cache metadata
+- `coalesce_cache_runs` - Fetch every page of run results, write the full snapshot to `coalesce_transform_mcp_data_cache/runs/`, and return only cache metadata
+- `coalesce_cache_org_users` - Fetch every page of organization users, write the full snapshot to `coalesce_transform_mcp_data_cache/users/`, and return only cache metadata
+- `coalesce_clear_data_cache` - Delete all cached snapshots, auto-cached responses, and plan summaries under `coalesce_transform_mcp_data_cache/` ⚠️
 
 #### Workflows
 
-- `run-and-wait` - Start a run and poll until completion; requires Snowflake Key Pair auth
-- `retry-and-wait` - Retry a failed run and poll until completion; requires Snowflake Key Pair auth
-- `get-run-details` - Get run metadata and results in one call
-- `get-environment-overview` - Get environment details with full node list
+- `coalesce_run_and_wait` - Start a run and poll until completion; requires Snowflake Key Pair auth
+- `coalesce_retry_and_wait` - Retry a failed run and poll until completion; requires Snowflake Key Pair auth
+- `coalesce_get_run_details` - Get run metadata and results in one call
+- `coalesce_get_environment_overview` - Get environment details with full node list
 
 ## Notes
 
-- **Caching:** Large responses are auto-cached to disk. Use `cache-workspace-nodes` and similar tools when you want a reusable snapshot. Configure the threshold with `COALESCE_MCP_AUTO_CACHE_MAX_BYTES`.
+- **Caching:** Large responses are auto-cached to disk. Use `coalesce_cache_workspace_nodes` and similar tools when you want a reusable snapshot. Configure the threshold with `COALESCE_MCP_AUTO_CACHE_MAX_BYTES`.
 - **Repo-backed tools:** Set `COALESCE_REPO_PATH` to your local Coalesce repo root (containing `nodeTypes/`, `nodes/`, `packages/`) or pass `repoPath` on individual tool calls. The server does not clone repos or install packages.
 - **SQL override is disallowed.** Nodes are built via YAML/config (columns, transforms, join conditions), not raw SQL. Template generation strips `overrideSQLToggle`, and write helpers reject `overrideSQL` fields.
 
