@@ -1,6 +1,6 @@
 # Pipeline Workshop Guide
 
-The pipeline workshop provides an iterative, conversational interface for building pipelines step by step. Unlike `build-pipeline-from-intent` (which parses a single description and creates nodes immediately), the workshop lets users refine a plan across multiple turns before creating anything.
+The pipeline workshop provides an iterative, conversational interface for building pipelines step by step. Unlike `build_pipeline_from_intent` (which parses a single description and creates nodes immediately), the workshop lets users refine a plan across multiple turns before creating anything.
 
 ## When to Use
 
@@ -11,20 +11,20 @@ Use the workshop when:
 - The user wants to see and approve the full plan before any nodes are created
 
 Do NOT use when:
-- The user has a clear, complete intent — use `build-pipeline-from-intent` instead
-- The user just needs to modify an existing node — use `update-workspace-node`
-- The user wants a one-shot pipeline creation — use `plan-pipeline` + `create-pipeline-from-plan`
+- The user has a clear, complete intent — use `build_pipeline_from_intent` instead
+- The user just needs to modify an existing node — use `update_workspace_node`
+- The user wants a one-shot pipeline creation — use `plan_pipeline` + `create_pipeline_from_plan`
 
 ## Tool Lifecycle
 
 ```
-1. pipeline-workshop-open    → Start session, get sessionID
-2. pipeline-workshop-instruct → Send instructions to refine the plan (repeat)
-3. pipeline-workshop-status   → Check current plan state
-4. pipeline-workshop-close    → Clean up when done
+1. pipeline_workshop_open    → Start session, get sessionID
+2. pipeline_workshop_instruct → Send instructions to refine the plan (repeat)
+3. pipeline_workshop_status   → Check current plan state
+4. pipeline_workshop_close    → Clean up when done
 ```
 
-To actually create the nodes, pass the workshop plan to `plan-pipeline` or `build-pipeline-from-intent`.
+To actually create the nodes, pass the workshop plan to `plan_pipeline` or `build_pipeline_from_intent`.
 
 ## Supported Instructions
 
@@ -66,25 +66,25 @@ The workshop pre-loads workspace nodes when opening a session. When an instructi
 
 ```
 User: "I want to build a pipeline combining customers and orders"
-Agent: → pipeline-workshop-open with intent
+Agent: → pipeline_workshop_open with intent
 
 User: "Actually, join on ORDER_ID not CUSTOMER_ID"
-Agent: → pipeline-workshop-instruct "change join key to ORDER_ID"
+Agent: → pipeline_workshop_instruct "change join key to ORDER_ID"
 
 User: "Add a filter for active customers only"
-Agent: → pipeline-workshop-instruct "add filter for IS_ACTIVE = true"
+Agent: → pipeline_workshop_instruct "add filter for IS_ACTIVE = true"
 
 User: "Now aggregate total revenue by region"
-Agent: → pipeline-workshop-instruct "aggregate total REVENUE by REGION"
+Agent: → pipeline_workshop_instruct "aggregate total REVENUE by REGION"
 
 User: "Looks good, create it"
-Agent: → Use plan-pipeline with the workshop nodes, then create-pipeline-from-plan
-Agent: → pipeline-workshop-close
+Agent: → Use plan_pipeline with the workshop nodes, then create_pipeline_from_plan
+Agent: → pipeline_workshop_close
 ```
 
 ## Important Notes
 
 - The workshop does NOT create nodes — it only builds a plan
-- To create nodes from the plan, use `plan-pipeline` or `build-pipeline-from-intent`
+- To create nodes from the plan, use `plan_pipeline` or `build_pipeline_from_intent`
 - Sessions persist across tool calls but are cleaned up on close
 - Each session is scoped to a single workspace

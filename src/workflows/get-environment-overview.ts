@@ -7,6 +7,7 @@ import {
   buildJsonToolResponse,
   validatePathSegment,
   handleToolError,
+  getToolOutputSchema,
 } from "../coalesce/types.js";
 
 export async function getEnvironmentOverview(
@@ -25,15 +26,22 @@ export async function getEnvironmentOverview(
 }
 
 export function registerGetEnvironmentOverview(server: McpServer, client: CoalesceClient): void {
-  server.tool(
-    "get-environment-overview",
-    "Get environment details and all its nodes in a single call",
-    { environmentID: z.string().describe("The environment ID") },
-    READ_ONLY_ANNOTATIONS,
+  server.registerTool(
+    "get_environment_overview",
+    {
+      title: "Get Environment Overview",
+      description:
+        "Get environment details and all its deployed nodes in a single call.\n\nArgs:\n  - environmentID (string, required): The environment ID\n\nReturns:\n  { environment: EnvironmentObject, nodes: NodeObject[] }",
+      inputSchema: z.object({
+        environmentID: z.string().describe("The environment ID"),
+      }),
+      outputSchema: getToolOutputSchema("get_environment_overview"),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
     async (params) => {
       try {
         const result = await getEnvironmentOverview(client, params);
-        return buildJsonToolResponse("get-environment-overview", result);
+        return buildJsonToolResponse("get_environment_overview", result);
       } catch (error) {
         return handleToolError(error);
       }

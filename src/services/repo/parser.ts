@@ -492,7 +492,7 @@ function buildRepoResolutionError(
   detail: string
 ): Error {
   return new Error(
-    `Repo-backed definition could not be resolved for ${requestedNodeType} in ${parsedRepo.summary.resolvedRepoPath}. ${detail} Use the corpus tools (search-node-type-variants, get-node-type-variant, or generate-set-workspace-node-template-from-variant) as the next step.`
+    `Repo-backed definition could not be resolved for ${requestedNodeType} in ${parsedRepo.summary.resolvedRepoPath}. ${detail} Use the corpus tools (search_node_type_variants, get_node_type_variant, or generate_set_workspace_node_template_from_variant) as the next step.`
   );
 }
 

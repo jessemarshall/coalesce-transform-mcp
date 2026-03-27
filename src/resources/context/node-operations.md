@@ -4,20 +4,20 @@ How to edit existing workspace nodes: join conditions, columns, config, renames,
 
 ## Applying Join Conditions
 
-When `create-workspace-node-from-predecessor` returns `joinSuggestions` for a multi-predecessor node, you MUST set the join condition — without it the node fails at compile time.
+When `create_workspace_node_from_predecessor` returns `joinSuggestions` for a multi-predecessor node, you MUST set the join condition — without it the node fails at compile time.
 
 > **Platform note**: Examples use Snowflake double-quote syntax (`"TABLE"."COLUMN"`). For Databricks use backticks, for BigQuery use backticks with project.dataset prefix. Determine platform first via `coalesce://context/sql-platform-selection`.
 
 **Option A — Automatic (recommended for aggregations):**
 
-Call `convert-join-to-aggregation` with `maintainJoins: true`. It reads predecessors, finds common columns, and generates the full JOIN ON clause automatically.
+Call `convert_join_to_aggregation` with `maintainJoins: true`. It reads predecessors, finds common columns, and generates the full JOIN ON clause automatically.
 
 **Option B — Automatic (recommended for row-level joins):**
 
-Call `apply-join-condition` — it reads predecessors, finds common columns, generates FROM/JOIN/ON with `{{ ref() }}` syntax, and writes the joinCondition to the node automatically:
+Call `apply_join_condition` — it reads predecessors, finds common columns, generates FROM/JOIN/ON with `{{ ref() }}` syntax, and writes the joinCondition to the node automatically:
 
 ```javascript
-apply-join-condition({
+apply_join_condition({
   workspaceID, nodeID: "join-node-id",
   joinType: "LEFT JOIN"  // defaults to INNER JOIN
 })
@@ -26,7 +26,7 @@ apply-join-condition({
 For mismatched column names across predecessors:
 
 ```javascript
-apply-join-condition({
+apply_join_condition({
   workspaceID, nodeID: "join-node-id",
   joinType: "LEFT JOIN",
   joinColumnOverrides: [{
@@ -43,7 +43,7 @@ apply-join-condition({
 Read each predecessor to get its `locationName`, then build the join condition manually:
 
 ```javascript
-update-workspace-node({
+update_workspace_node({
   workspaceID, nodeID: "join-node-id",
   changes: {
     metadata: {
@@ -63,7 +63,7 @@ update-workspace-node({
 })
 ```
 
-Always read `locationName` from `get-workspace-node` — never hardcode it.
+Always read `locationName` from `get_workspace_node` — never hardcode it.
 
 **3+ table joins**: Chain JOIN clauses in the same joinCondition string. All dependencies go in one sourceMapping entry. Use `joinSuggestions` which returns common columns for each predecessor PAIR.
 
@@ -73,10 +73,10 @@ Always read `locationName` from `get-workspace-node` — never hardcode it.
 
 ### Replacing All Columns
 
-Use `replace-workspace-node-columns`:
+Use `replace_workspace_node_columns`:
 
 ```javascript
-replace-workspace-node-columns({
+replace_workspace_node_columns({
   workspaceID, nodeID: "node-id",
   columns: [
     { name: "CUSTOMER_ID" },  // passthrough — omit transform
@@ -90,7 +90,7 @@ replace-workspace-node-columns({
 `metadata.columns` is a full-replacement array. Read the current columns, append the new one, send the full array:
 
 ```javascript
-replace-workspace-node-columns({
+replace_workspace_node_columns({
   workspaceID, nodeID: "node-id",
   columns: [...existingColumns, { name: "DISCOUNT_AMOUNT", transform: '"STG_ORDERS"."ORDER_TOTAL" * 0.1' }]
 })
@@ -106,7 +106,7 @@ Build passthrough columns from the predecessor — omit `transform` since these 
 const resetColumns = predecessorColumns.map(col => ({
   name: col.name, dataType: col.dataType
 }));
-replace-workspace-node-columns({ workspaceID, nodeID: "node-id", columns: resetColumns })
+replace_workspace_node_columns({ workspaceID, nodeID: "node-id", columns: resetColumns })
 ```
 
 Do NOT copy raw column objects — their `columnReference`, `sources`, and `columnID` belong to the predecessor.
@@ -136,7 +136,7 @@ Common patterns:
 { name: "CITY", transform: 'UPPER("STG_LOCATION"."CITY")' }
 ```
 
-**Aggregate vs scalar**: If a column uses an aggregate function, the joinCondition MUST include GROUP BY. Use `convert-join-to-aggregation` or add GROUP BY manually. Scalar transforms (CASE, CAST, arithmetic) work without GROUP BY.
+**Aggregate vs scalar**: If a column uses an aggregate function, the joinCondition MUST include GROUP BY. Use `convert_join_to_aggregation` or add GROUP BY manually. Scalar transforms (CASE, CAST, arithmetic) work without GROUP BY.
 
 ### Bulk Column Operations
 
@@ -154,14 +154,14 @@ These go in the joinCondition, not in column transforms. Always use read-modify-
 
 ```javascript
 // 1. Read current sourceMapping
-get-workspace-node({ workspaceID, nodeID: "node-id" })
+get_workspace_node({ workspaceID, nodeID: "node-id" })
 
 // 2. Append clause to existing joinCondition string
 // e.g., add WHERE: existingJoinCondition + '\nWHERE "STG_ORDERS"."ORDER_DATE" >= \'2024-01-01\''
 // e.g., add QUALIFY: existingJoinCondition + '\nQUALIFY ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...) = 1'
 
 // 3. Write back complete sourceMapping
-update-workspace-node({
+update_workspace_node({
   workspaceID, nodeID: "node-id",
   changes: { metadata: { sourceMapping: [modifiedSourceMapping] } }
 })
@@ -173,12 +173,12 @@ Preserve all existing fields (name, dependencies, aliases, customSQL, noLinkRefs
 
 Some node type config items are column-level, not node-level. They have `"type": "columnSelector"` in the node type definition.
 
-**How to discover:** Look up the definition with `get-repo-node-type-definition`. Find items with `"type": "columnSelector"` and note the `attributeName`.
+**How to discover:** Look up the definition with `get_repo_node_type_definition`. Find items with `"type": "columnSelector"` and note the `attributeName`.
 
 **How to set:**
 
 ```javascript
-update-workspace-node({
+update_workspace_node({
   workspaceID, nodeID: "node-id",
   changes: {
     metadata: {
@@ -205,7 +205,7 @@ Always look up actual attribute names from the node type definition — they var
 
 ## Common Config Fields
 
-Set via `update-workspace-node({ changes: { config: { ... } } })`:
+Set via `update_workspace_node({ changes: { config: { ... } } })`:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -217,7 +217,7 @@ Set via `update-workspace-node({ changes: { config: { ... } } })`:
 | `preSQL` | string | "" | SQL before main insert |
 | `postSQL` | string | "" | SQL after main insert |
 
-For node-type-specific fields, use `get-repo-node-type-definition` or inspect the definition in the repo under `nodeTypes/`.
+For node-type-specific fields, use `get_repo_node_type_definition` or inspect the definition in the repo under `nodeTypes/`.
 
 ## Adding a Predecessor to an Existing Node
 
@@ -226,7 +226,7 @@ For node-type-specific fields, use `get-repo-node-type-definition` or inspect th
 3. Update sourceMapping with the new dependency and extend joinCondition:
 
 ```javascript
-update-workspace-node({
+update_workspace_node({
   workspaceID, nodeID: "existing-join-id",
   changes: {
     metadata: {
@@ -242,13 +242,13 @@ update-workspace-node({
 })
 ```
 
-4. Add columns from the new predecessor using `replace-workspace-node-columns`
+4. Add columns from the new predecessor using `replace_workspace_node_columns`
 
 Note: This updates metadata but does NOT create the DAG edge. The DAG link is established at creation time. The node may need to be recreated with the full set of `predecessorNodeIDs` if a true DAG predecessor is needed.
 
 ## Rename Safety
 
-Renaming via `update-workspace-node({ changes: { name: "NEW_NAME" } })` updates the node itself (including its sourceMapping entry name), but does NOT update downstream nodes. After renaming:
+Renaming via `update_workspace_node({ changes: { name: "NEW_NAME" } })` updates the node itself (including its sourceMapping entry name), but does NOT update downstream nodes. After renaming:
 
 1. Find downstream nodes whose `metadata.sourceMapping[].dependencies[].nodeName` references the old name
 2. Update each downstream node's dependencies `nodeName` and `{{ ref() }}` calls in joinCondition
@@ -271,14 +271,14 @@ Create each CTE as a separate node bottom-up. Use `View` or `Work` for intermedi
 ### Raw SQL (no ref syntax)
 
 1. Identify table names in the SQL
-2. Match to workspace nodes via `list-workspace-nodes` (case-insensitive)
-3. Get each node's `locationName` via `get-workspace-node`
-4. Pass the user's exact SQL unchanged to `plan-pipeline` or `create-pipeline-from-sql`
+2. Match to workspace nodes via `list_workspace_nodes` (case-insensitive)
+3. Get each node's `locationName` via `get_workspace_node`
+4. Pass the user's exact SQL unchanged to `plan_pipeline` or `create_pipeline_from_sql`
 5. Do NOT rewrite table names into `{{ ref('LOCATION', 'NODE') }}` syntax for these pipeline tools — the planner resolves references automatically
 
 ### Large Queries (many columns)
 
-Create the node first with `create-workspace-node-from-predecessor`, then set columns with `replace-workspace-node-columns`. Always send the full column array — arrays are replaced, not merged.
+Create the node first with `create_workspace_node_from_predecessor`, then set columns with `replace_workspace_node_columns`. Always send the full column array — arrays are replaced, not merged.
 
 ## Debugging Incorrect Data
 
@@ -294,14 +294,14 @@ When output data looks wrong after a successful run:
 
 ## Exploring a Workspace
 
-- **Summary**: `analyze-workspace-patterns` — package adoption, layers, methodology
-- **All nodes**: `list-workspace-nodes` with `detail: true`
-- **Specific node**: `get-workspace-node` — full body with columns, config, sourceMapping
-- **Node types**: `list-workspace-node-types` — distinct types observed
-- **Workspaces**: `list-workspaces` or `list-workspaces({ projectID })`
-- **Environments**: `list-environments` — deployment targets (DEV, QA, PROD)
+- **Summary**: `analyze_workspace_patterns` — package adoption, layers, methodology
+- **All nodes**: `list_workspace_nodes` with `detail: true`
+- **Specific node**: `get_workspace_node` — full body with columns, config, sourceMapping
+- **Node types**: `list_workspace_node_types` — distinct types observed
+- **Workspaces**: `list_workspaces` or `list_workspaces({ projectID })`
+- **Environments**: `list_environments` — deployment targets (DEV, QA, PROD)
 
-**Large workspaces (100+ nodes)**: Use `list-workspace-nodes` WITHOUT `detail` first, find target by name, then `get-workspace-node` on its ID. Use `cache-workspace-nodes` for repeated searches.
+**Large workspaces (100+ nodes)**: Use `list_workspace_nodes` WITHOUT `detail` first, find target by name, then `get_workspace_node` on its ID. Use `cache_workspace_nodes` for repeated searches.
 
 **Tracing lineage**: Read the node, find predecessors in `metadata.sourceMapping[].dependencies`, recurse until you reach nodes with no dependencies. For column-level lineage, inspect `metadata.columns[].sources[].columnReferences`.
 

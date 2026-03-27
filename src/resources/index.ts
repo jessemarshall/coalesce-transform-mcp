@@ -202,19 +202,19 @@ const RESOURCE_METADATA: Record<
   [RESOURCES.INTENT_PIPELINE_GUIDE]: {
     name: "Intent Pipeline Guide",
     description:
-      "How to use build-pipeline-from-intent to create pipelines from natural language descriptions, including entity resolution, operation detection, and the clarification flow",
+      "How to use build_pipeline_from_intent to create pipelines from natural language descriptions, including entity resolution, operation detection, and the clarification flow",
     mimeType: "text/markdown",
   },
   [RESOURCES.RUN_DIAGNOSTICS_GUIDE]: {
     name: "Run Diagnostics Guide",
     description:
-      "How to use diagnose-run-failure to analyze failed runs, classify node-level errors, and determine actionable fixes",
+      "How to use diagnose_run_failure to analyze failed runs, classify node-level errors, and determine actionable fixes",
     mimeType: "text/markdown",
   },
   [RESOURCES.PIPELINE_REVIEW_GUIDE]: {
     name: "Pipeline Review Guide",
     description:
-      "How to use review-pipeline to analyze existing pipelines for redundant nodes, missing joins, layer violations, naming issues, and optimization opportunities",
+      "How to use review_pipeline to analyze existing pipelines for redundant nodes, missing joins, layer violations, naming issues, and optimization opportunities",
     mimeType: "text/markdown",
   },
   [RESOURCES.PIPELINE_WORKSHOP_GUIDE]: {

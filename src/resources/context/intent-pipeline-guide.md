@@ -2,17 +2,17 @@
 
 ## Overview
 
-The `build-pipeline-from-intent` tool lets users describe pipelines in natural language. The tool parses the description, resolves references to workspace nodes, selects appropriate node types, and assembles a standard pipeline plan.
+The `build_pipeline_from_intent` tool lets users describe pipelines in natural language. The tool parses the description, resolves references to workspace nodes, selects appropriate node types, and assembles a standard pipeline plan.
 
 ## When to Use
 
-Use `build-pipeline-from-intent` when the user:
+Use `build_pipeline_from_intent` when the user:
 - Describes a pipeline in plain English without providing SQL
 - Mentions table or node names and desired transformations conversationally
 - Asks to "combine", "join", "aggregate", "stage", or "filter" data without specifying exact SQL
 
-Use `create-pipeline-from-sql` instead when the user provides actual SQL.
-Use `plan-pipeline` with `sourceNodeIDs` when you already know the exact upstream node IDs and want goal-based planning.
+Use `create_pipeline_from_sql` instead when the user provides actual SQL.
+Use `plan_pipeline` with `sourceNodeIDs` when you already know the exact upstream node IDs and want goal-based planning.
 
 ## How It Works
 
@@ -44,7 +44,7 @@ Each pipeline step gets an appropriate node type via the standard `selectPipelin
 - **Aggregate** steps → Stage or Work types with GROUP BY context
 
 ### 4. Plan Assembly
-The tool produces a standard `PipelinePlan` object (same format as `plan-pipeline`) that can be executed via `create-pipeline-from-plan`.
+The tool produces a standard `PipelinePlan` object (same format as `plan_pipeline`) that can be executed via `create_pipeline_from_plan`.
 
 ## Examples
 

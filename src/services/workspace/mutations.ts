@@ -79,7 +79,7 @@ async function validateNodeTypeChoice(
       validation.warning =
         `Requested nodeType "${params.nodeType}" is not the top-ranked type. ` +
         `Consider using "${topRanked.nodeType}" (score: ${topRanked.score}) instead. ` +
-        `Call plan-pipeline first to discover and rank all available node types.`;
+        `Call plan_pipeline first to discover and rank all available node types.`;
     }
 
     // Hard block specialized materialization patterns (Dynamic Tables, Incremental, etc.)
@@ -105,7 +105,7 @@ async function validateNodeTypeChoice(
         `${patternName} types require an explicit use case (e.g., "${patternName.toLowerCase()}" in the goal). ` +
         `For standard batch ETL, staging, joins, and aggregations, use a general-purpose type ` +
         `(Stage, Work, View, Dimension, Fact). ` +
-        `Call plan-pipeline to discover the correct nodeType for your use case.`
+        `Call plan_pipeline to discover the correct nodeType for your use case.`
       );
     }
 
@@ -138,7 +138,7 @@ function assertNotSourceNodeType(nodeType: string): void {
       `Cannot create a node with nodeType "Source". Source nodes are read-only data ` +
       `definitions — they represent external tables and are created via the Coalesce UI, ` +
       `not via the API. You probably want "Stage" for a staging/transform node. ` +
-      `Call plan-pipeline to discover the correct nodeType.`
+      `Call plan_pipeline to discover the correct nodeType.`
     );
   }
 }
@@ -988,9 +988,9 @@ export async function replaceWorkspaceNodeColumns(
       : null;
     if (additionalMeta && ("sourceMapping" in additionalMeta || "customSQL" in additionalMeta)) {
       throw new Error(
-        "replace-workspace-node-columns additionalChanges cannot set sourceMapping or customSQL. " +
-        "Use the joinCondition parameter to set WHERE filters, apply-join-condition for join setup, " +
-        "or convert-join-to-aggregation for GROUP BY patterns."
+        "replace_workspace_node_columns additionalChanges cannot set sourceMapping or customSQL. " +
+        "Use the joinCondition parameter to set WHERE filters, apply_join_condition for join setup, " +
+        "or convert_join_to_aggregation for GROUP BY patterns."
       );
     }
   }
@@ -1225,7 +1225,7 @@ function buildScratchNodeNextSteps(
   const columns = Array.isArray(metadata.columns) ? metadata.columns : [];
   if (columns.length === 0) {
     steps.push(
-      "This node has no columns. Add columns using replace-workspace-node-columns or update-workspace-node."
+      "This node has no columns. Add columns using replace_workspace_node_columns or update_workspace_node."
     );
   }
 
@@ -1245,7 +1245,7 @@ function buildScratchNodeNextSteps(
 
   // Verification
   steps.push(
-    "Verify the node: call get-workspace-node to confirm columns and config are correct before proceeding."
+    "Verify the node: call get_workspace_node to confirm columns and config are correct before proceeding."
   );
 
   return steps;
@@ -1339,7 +1339,7 @@ export async function createWorkspaceNodeFromScratch(
       throw new Error(
         `Workspace node ${created.id} was created, but configured scratch validation failed. ` +
         `Check name, metadata.columns, and config values on the saved node body. ` +
-        `To clean up, use delete-workspace-node with nodeID "${created.id}".`
+        `To clean up, use delete_workspace_node with nodeID "${created.id}".`
       );
     }
     return {
@@ -1376,7 +1376,7 @@ export async function createWorkspaceNodeFromScratch(
       node: finalNode,
       validation,
       nextSteps,
-      configCompletionSkipped: `Config completion failed (${reason}) — call complete-node-configuration with repoPath after creation to apply node type config and column-level attributes.`,
+      configCompletionSkipped: `Config completion failed (${reason}) — call complete_node_configuration with repoPath after creation to apply node type config and column-level attributes.`,
       ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
     };
   }
@@ -1431,8 +1431,8 @@ function buildPostCreationNextSteps(
     steps.push(
       "REQUIRED: Set up the join condition. This multi-predecessor node needs a FROM/JOIN/ON clause in the joinCondition. " +
       "Review joinSuggestions above to identify join columns, then either:" +
-      "\n  - Call convert-join-to-aggregation (for GROUP BY / aggregation use cases)" +
-      "\n  - Call apply-join-condition (for row-level joins — auto-generates FROM/JOIN/ON with {{ ref() }} syntax)"
+      "\n  - Call convert_join_to_aggregation (for GROUP BY / aggregation use cases)" +
+      "\n  - Call apply_join_condition (for row-level joins — auto-generates FROM/JOIN/ON with {{ ref() }} syntax)"
     );
 
     if (hasCommonColumns) {
@@ -1459,7 +1459,7 @@ function buildPostCreationNextSteps(
     if (family === "fact" && predecessorCount > 1) {
       steps.push(
         "For fact tables: define the grain (the set of columns that uniquely identify each row). " +
-        "These grain columns become your GROUP BY columns in convert-join-to-aggregation. " +
+        "These grain columns become your GROUP BY columns in convert_join_to_aggregation. " +
         "Mark them as isBusinessKey = true."
       );
     }
@@ -1481,7 +1481,7 @@ function buildPostCreationNextSteps(
 
   // Verification
   steps.push(
-    "Verify the node: call get-workspace-node to confirm columns, config, and join condition are correct before proceeding to downstream nodes."
+    "Verify the node: call get_workspace_node to confirm columns, config, and join condition are correct before proceeding to downstream nodes."
   );
 
   return steps;
@@ -1534,7 +1534,7 @@ export async function createWorkspaceNodeFromPredecessor(
   if (params.whereCondition && params.groupByColumns) {
     throw new Error(
       "'whereCondition' cannot be combined with 'groupByColumns'/'aggregates'. " +
-      "For aggregation nodes, WHERE/HAVING filters should be applied via a separate update-workspace-node call."
+      "For aggregation nodes, WHERE/HAVING filters should be applied via a separate update_workspace_node call."
     );
   }
 
@@ -1712,7 +1712,7 @@ export async function createWorkspaceNodeFromPredecessor(
       predecessors: predecessorNodes,
       joinSuggestions,
       validation,
-      configCompletionSkipped: `Config completion failed (${reason}) — call complete-node-configuration with repoPath after creation to apply node type config and column-level attributes.`,
+      configCompletionSkipped: `Config completion failed (${reason}) — call complete_node_configuration with repoPath after creation to apply node type config and column-level attributes.`,
       nextSteps,
       ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
     };
@@ -2032,7 +2032,7 @@ export async function convertJoinToAggregation(
         valid: groupByAnalysis.validation.valid && warnings.length === 0,
         warnings,
       },
-      configCompletionSkipped: `Config completion failed (${reason}) — call complete-node-configuration with repoPath after creation to apply node type config and column-level attributes.`,
+      configCompletionSkipped: `Config completion failed (${reason}) — call complete_node_configuration with repoPath after creation to apply node type config and column-level attributes.`,
     };
   }
 }
@@ -2182,9 +2182,9 @@ export async function applyJoinCondition(
 
   if (predecessorNodeIDs.length < 2) {
     throw new Error(
-      "apply-join-condition requires a node with 2+ predecessors. " +
+      "apply_join_condition requires a node with 2+ predecessors. " +
       "This node has " + predecessorNodeIDs.length + " predecessor(s). " +
-      "For single-predecessor nodes, set the joinCondition directly via update-workspace-node."
+      "For single-predecessor nodes, set the joinCondition directly via update_workspace_node."
     );
   }
 
@@ -2210,7 +2210,7 @@ export async function applyJoinCondition(
       const name = typeof predecessor.name === "string" ? predecessor.name : nodeID;
       warnings.push(
         `Predecessor "${name}" is missing locationName. ` +
-        `Set it in the Coalesce UI or via update-workspace-node before applying joins.`
+        `Set it in the Coalesce UI or via update_workspace_node before applying joins.`
       );
       continue;
     }
