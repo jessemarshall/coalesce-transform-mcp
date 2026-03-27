@@ -36,6 +36,14 @@ const RESOURCES = {
   NODE_OPERATIONS: "coalesce://context/node-operations",
   NODE_TYPE_SELECTION_GUIDE:
     "coalesce://context/node-type-selection-guide",
+  INTENT_PIPELINE_GUIDE:
+    "coalesce://context/intent-pipeline-guide",
+  RUN_DIAGNOSTICS_GUIDE:
+    "coalesce://context/run-diagnostics-guide",
+  PIPELINE_REVIEW_GUIDE:
+    "coalesce://context/pipeline-review-guide",
+  PIPELINE_WORKSHOP_GUIDE:
+    "coalesce://context/pipeline-workshop-guide",
 } as const;
 
 // Map URIs to file paths
@@ -62,6 +70,14 @@ const RESOURCE_FILES: Record<string, string> = {
   [RESOURCES.NODE_OPERATIONS]: "context/node-operations.md",
   [RESOURCES.NODE_TYPE_SELECTION_GUIDE]:
     "context/node-type-selection-guide.md",
+  [RESOURCES.INTENT_PIPELINE_GUIDE]:
+    "context/intent-pipeline-guide.md",
+  [RESOURCES.RUN_DIAGNOSTICS_GUIDE]:
+    "context/run-diagnostics-guide.md",
+  [RESOURCES.PIPELINE_REVIEW_GUIDE]:
+    "context/pipeline-review-guide.md",
+  [RESOURCES.PIPELINE_WORKSHOP_GUIDE]:
+    "context/pipeline-workshop-guide.md",
 };
 
 // Resource metadata
@@ -181,6 +197,30 @@ const RESOURCE_METADATA: Record<
     name: "Node Type Selection Guide",
     description:
       "When to use each Coalesce node type: Stage/Work for general transforms, Dimension/Fact only for dimensional modeling, and when to avoid Dynamic Tables, Incremental Loads, and other specialized patterns",
+    mimeType: "text/markdown",
+  },
+  [RESOURCES.INTENT_PIPELINE_GUIDE]: {
+    name: "Intent Pipeline Guide",
+    description:
+      "How to use build-pipeline-from-intent to create pipelines from natural language descriptions, including entity resolution, operation detection, and the clarification flow",
+    mimeType: "text/markdown",
+  },
+  [RESOURCES.RUN_DIAGNOSTICS_GUIDE]: {
+    name: "Run Diagnostics Guide",
+    description:
+      "How to use diagnose-run-failure to analyze failed runs, classify node-level errors, and determine actionable fixes",
+    mimeType: "text/markdown",
+  },
+  [RESOURCES.PIPELINE_REVIEW_GUIDE]: {
+    name: "Pipeline Review Guide",
+    description:
+      "How to use review-pipeline to analyze existing pipelines for redundant nodes, missing joins, layer violations, naming issues, and optimization opportunities",
+    mimeType: "text/markdown",
+  },
+  [RESOURCES.PIPELINE_WORKSHOP_GUIDE]: {
+    name: "Pipeline Workshop Guide",
+    description:
+      "How to use the pipeline workshop tools for iterative, conversational pipeline building with session state",
     mimeType: "text/markdown",
   },
 };

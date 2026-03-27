@@ -30,7 +30,7 @@ describe("Tool Registration", () => {
       (call: unknown[]) => call[0] as string
     );
 
-    expect(toolSpy).toHaveBeenCalledTimes(77);
+    expect(toolSpy).toHaveBeenCalledTimes(84);
     expect(toolNames).toContain("list-workspaces");
     expect(toolNames).toContain("get-workspace");
     expect(toolNames).toContain("list-environment-jobs");
@@ -47,6 +47,7 @@ describe("Tool Registration", () => {
     expect(toolNames).toContain("apply-join-condition");
     expect(toolNames).toContain("plan-pipeline");
     expect(toolNames).toContain("create-pipeline-from-plan");
+    expect(toolNames).toContain("build-pipeline-from-intent");
     expect(toolNames).toContain("start-run");
     expect(toolNames).toContain("cancel-run");
     expect(toolNames).toContain("run-and-wait");
@@ -66,6 +67,12 @@ describe("Tool Registration", () => {
     expect(toolNames).toContain("cache-org-users");
     expect(toolNames).toContain("clear_coalesce_transform_mcp_data_cache");
     expect(toolNames).toContain("analyze-workspace-patterns");
+    expect(toolNames).toContain("diagnose-run-failure");
+    expect(toolNames).toContain("review-pipeline");
+    expect(toolNames).toContain("pipeline-workshop-open");
+    expect(toolNames).toContain("pipeline-workshop-instruct");
+    expect(toolNames).toContain("pipeline-workshop-status");
+    expect(toolNames).toContain("pipeline-workshop-close");
     expect(toolNames).toContain("list-workspace-node-types");
     expect(toolNames).toContain("complete-node-configuration");
 

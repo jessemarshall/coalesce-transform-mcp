@@ -26,7 +26,7 @@ describe("Resources", () => {
   it("registers fixed context resources plus the cache resource template", () => {
     registerResources(server);
 
-    expect(resourceSpy).toHaveBeenCalledTimes(20);
+    expect(resourceSpy).toHaveBeenCalledTimes(24);
     const fixedResourceCalls = resourceSpy.mock.calls
       .filter((call) => typeof call[1] === "string")
       .map((call) => ({
@@ -109,6 +109,22 @@ describe("Resources", () => {
       {
         name: "Node Type Selection Guide",
         uri: "coalesce://context/node-type-selection-guide",
+      },
+      {
+        name: "Intent Pipeline Guide",
+        uri: "coalesce://context/intent-pipeline-guide",
+      },
+      {
+        name: "Run Diagnostics Guide",
+        uri: "coalesce://context/run-diagnostics-guide",
+      },
+      {
+        name: "Pipeline Review Guide",
+        uri: "coalesce://context/pipeline-review-guide",
+      },
+      {
+        name: "Pipeline Workshop Guide",
+        uri: "coalesce://context/pipeline-workshop-guide",
       },
     ]);
 

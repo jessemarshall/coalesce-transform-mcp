@@ -23,6 +23,12 @@ import {
   validatePathSegment,
 } from "../coalesce/types.js";
 import { isPlainObject } from "../utils.js";
+import {
+  buildPipelinePlanFromIntent,
+} from "../services/pipelines/intent.js";
+import {
+  reviewPipeline,
+} from "../services/pipelines/review.js";
 
 export { buildPlanConfirmationToken };
 
@@ -268,7 +274,7 @@ function buildPlanSummaryForElicitation(plan: unknown): string {
 
 async function requirePipelineCreationApproval(
   server: McpServer,
-  toolName: "create-pipeline-from-plan" | "create-pipeline-from-sql",
+  toolName: "create-pipeline-from-plan" | "create-pipeline-from-sql" | "build-pipeline-from-intent",
   plan: unknown,
   confirmed?: boolean,
   confirmationToken?: string,
@@ -566,6 +572,148 @@ export function registerPipelineTools(
           return { ...response, isError: true };
         }
         return response;
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "build-pipeline-from-intent",
+    "Build a Coalesce pipeline from a natural language description. Describe what you want in plain English and this tool resolves workspace nodes, selects node types, and creates the pipeline nodes.\n\nExamples:\n- \"combine customers and orders by customer_id, aggregate total revenue by region\"\n- \"stage the raw payments table\"\n- \"join products with inventory on product_id\"\n\nThe tool parses the intent, fuzzy-matches entity names to existing workspace nodes, and selects appropriate node types. When confirmed, it creates the pipeline nodes directly. Alternatively, set dryRun=true to get the plan without creating nodes, then pass it to create-pipeline-from-plan.\n\nIf entity names cannot be resolved or the intent is ambiguous, the tool returns clarification questions instead of a plan.",
+    {
+      workspaceID: z.string().describe("The workspace ID"),
+      intent: z
+        .string()
+        .describe(
+          "Natural language description of the pipeline to build. Mention table/node names, join keys, aggregations, and filters."
+        ),
+      targetName: z.string().optional().describe("Optional target node name override"),
+      targetNodeType: z
+        .string()
+        .optional()
+        .describe(
+          "Optional node type override. When omitted, the planner selects the best type automatically."
+        ),
+      repoPath: z
+        .string()
+        .optional()
+        .describe(
+          "Optional local committed Coalesce repo path for repo-first node-type ranking. Falls back to COALESCE_REPO_PATH when omitted."
+        ),
+      locationName: z.string().optional().describe("Optional target locationName"),
+      database: z.string().optional().describe("Optional target database"),
+      schema: z.string().optional().describe("Optional target schema"),
+      confirmed: z
+        .boolean()
+        .optional()
+        .describe(
+          "Set to true only after presenting the plan to the user and receiving explicit approval."
+        ),
+      confirmationToken: z
+        .string()
+        .optional()
+        .describe(
+          "The token returned in the STOP_AND_CONFIRM response. Required when confirmed=true."
+        ),
+      dryRun: z
+        .boolean()
+        .optional()
+        .describe("When true, return the generated plan without creating nodes."),
+    },
+    WRITE_ANNOTATIONS,
+    async (params) => {
+      try {
+        const result = await buildPipelinePlanFromIntent(client, {
+          workspaceID: params.workspaceID,
+          intent: params.intent,
+          targetName: params.targetName,
+          targetNodeType: params.targetNodeType,
+          repoPath: params.repoPath,
+          locationName: params.locationName,
+          database: params.database,
+          schema: params.schema,
+        });
+
+        if (
+          result.status !== "ready" ||
+          !result.plan ||
+          params.dryRun
+        ) {
+          return buildJsonToolResponse("build-pipeline-from-intent", {
+            created: false,
+            ...(params.dryRun ? { dryRun: true } : {}),
+            ...result,
+          });
+        }
+
+        // Plan is ready — require confirmation before creating
+        const approvalResponse = await requirePipelineCreationApproval(
+          server,
+          "build-pipeline-from-intent",
+          result.plan,
+          params.confirmed,
+          params.confirmationToken,
+          { ...result }
+        );
+        if (approvalResponse) {
+          return approvalResponse;
+        }
+
+        // Confirmed — execute the plan
+        const execution = await createPipelineFromPlan(client, {
+          workspaceID: params.workspaceID,
+          plan: result.plan,
+        });
+        const response = {
+          ...result,
+          ...((isPlainObject(execution) ? execution : { execution }) as Record<string, unknown>),
+        };
+        const toolResponse = buildJsonToolResponse("build-pipeline-from-intent", response);
+        if (isPlainObject(execution) && execution.isError) {
+          return { ...toolResponse, isError: true };
+        }
+        return toolResponse;
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "review-pipeline",
+    "Analyze an existing pipeline in a Coalesce workspace and suggest improvements. " +
+      "Walks the node DAG, inspects column transforms, join conditions, node types, naming conventions, " +
+      "and layer architecture to identify issues and optimization opportunities.\n\n" +
+      "Returns findings sorted by severity (critical → warning → suggestion) with actionable fix suggestions.\n\n" +
+      "Checks for:\n" +
+      "- Redundant passthrough nodes (no transforms added)\n" +
+      "- Missing join conditions (multi-predecessor nodes without FROM/JOIN)\n" +
+      "- Layer violations (skipping staging/intermediate layers)\n" +
+      "- Node type mismatches (View used for joins, Dimension in staging layer)\n" +
+      "- Orphan nodes (disconnected from the pipeline)\n" +
+      "- Deep chains (8+ nodes deep)\n" +
+      "- High fan-out risk (10+ downstream dependents)\n" +
+      "- Naming inconsistencies\n" +
+      "- Unused columns (>50% not referenced downstream)\n\n" +
+      "Use nodeIDs to scope the review to a specific pipeline section (e.g., from a subgraph).",
+    {
+      workspaceID: z.string().describe("The workspace ID to review"),
+      nodeIDs: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Optional list of node IDs to scope the review. If omitted, reviews the entire workspace (up to 50 nodes in detail)."
+        ),
+    },
+    READ_ONLY_ANNOTATIONS,
+    async (params) => {
+      try {
+        const result = await reviewPipeline(client, {
+          workspaceID: validatePathSegment(params.workspaceID, "workspaceID"),
+          nodeIDs: params.nodeIDs,
+        });
+        return buildJsonToolResponse("review-pipeline", result);
       } catch (error) {
         return handleToolError(error);
       }
