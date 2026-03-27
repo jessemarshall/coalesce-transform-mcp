@@ -802,6 +802,10 @@ describe("Pipeline Tools", () => {
   });
 
   it("planPipeline surfaces node type validation fetch failures in the plan warnings", async () => {
+    // Ensure no repo path leaks from the host environment — a real repo would
+    // produce additional selection warnings that inflate the warnings array.
+    delete process.env.COALESCE_REPO_PATH;
+
     const client = createMockClient();
     client.get.mockRejectedValue(new Error("workspace list unavailable"));
 
