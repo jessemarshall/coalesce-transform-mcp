@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { isPlainObject } from "../../utils.js";
 
-function sortJsonValue(value: unknown): unknown {
+export function sortJsonValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sortJsonValue);
   }
