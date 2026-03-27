@@ -30,7 +30,7 @@ describe("Tool Registration", () => {
       (call: unknown[]) => call[0] as string
     );
 
-    expect(toolSpy).toHaveBeenCalledTimes(84);
+    expect(toolSpy).toHaveBeenCalledTimes(88);
     expect(toolNames).toContain("list_workspaces");
     expect(toolNames).toContain("get_workspace");
     expect(toolNames).toContain("list_environment_jobs");
@@ -75,6 +75,10 @@ describe("Tool Registration", () => {
     expect(toolNames).toContain("pipeline_workshop_close");
     expect(toolNames).toContain("list_workspace_node_types");
     expect(toolNames).toContain("complete_node_configuration");
+    expect(toolNames).toContain("explore_data_source");
+    expect(toolNames).toContain("query_snowflake");
+    expect(toolNames).toContain("search_snowflake_objects");
+    expect(toolNames).toContain("list_snowflake_connections");
 
     const clearCacheCall = toolSpy.mock.calls.find(
       (call: unknown[]) => call[0] === "clear_data_cache"

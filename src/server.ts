@@ -15,6 +15,7 @@ import { registerSubgraphTools } from "./mcp/subgraphs.js";
 import { registerWorkspaceTools } from "./mcp/workspaces.js";
 import { registerCacheTools } from "./mcp/cache.js";
 import { registerWorkshopTools } from "./mcp/workshop.js";
+import { registerExplorationTools } from "./mcp/exploration.js";
 import { registerRunAndWait } from "./workflows/run-and-wait.js";
 import { registerRetryAndWait } from "./workflows/retry-and-wait.js";
 import { registerGetRunDetails } from "./workflows/get-run-details.js";
@@ -50,6 +51,7 @@ export function registerServerSurface(server: McpServer, client: CoalesceClient)
   registerWorkspaceTools(server, client);
   registerCacheTools(server, client);
   registerWorkshopTools(server, client);
+  registerExplorationTools(server, client);
   registerRunAndWait(server, client);
   registerRetryAndWait(server, client);
   registerGetRunDetails(server, client);

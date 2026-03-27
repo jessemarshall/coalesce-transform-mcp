@@ -263,6 +263,24 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 - `get_run_details` - Get run metadata and results in one call
 - `get_environment_overview` - Get environment details with full node list
 
+#### Snowflake Exploration (via Cortex Code)
+
+These tools query Snowflake directly via the [Cortex Code](https://ai.snowflake.com) CLI. They're available when Cortex Code is installed — without it, the tools return install instructions.
+
+- `explore_data_source` - Search Coalesce first, then query Snowflake via Cortex Code if not found. Answers questions about tables, columns, schemas, and data
+- `query_snowflake` - Ask any question about Snowflake directly (data, schemas, permissions, performance, Cortex AI). Skips Coalesce search
+- `search_snowflake_objects` - Search for tables, views, schemas, and other Snowflake objects using Cortex Code's semantic search
+- `list_snowflake_connections` - List available Snowflake connections configured in Cortex Code
+
+**Setup:** Install Cortex Code and configure a Snowflake connection:
+
+```bash
+curl -LsS https://ai.snowflake.com/static/cc-scripts/install.sh | sh
+cortex connections  # interactive connection setup
+```
+
+No additional environment variables needed — Cortex Code manages its own Snowflake authentication.
+
 ## Notes
 
 - **Caching:** Large responses are auto-cached to disk. Use `cache_workspace_nodes` and similar tools when you want a reusable snapshot. Configure the threshold with `COALESCE_MCP_AUTO_CACHE_MAX_BYTES`.
