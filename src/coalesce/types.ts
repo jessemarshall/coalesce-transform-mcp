@@ -86,6 +86,8 @@ const JsonToolErrorSchema = z.object({
   detail: z.unknown().optional(),
 }).passthrough();
 
+export type JsonToolError = z.infer<typeof JsonToolErrorSchema>;
+
 const ListToolOutputSchema = z.object({
   data: z.array(z.unknown()).optional(),
   next: z.string().optional(),

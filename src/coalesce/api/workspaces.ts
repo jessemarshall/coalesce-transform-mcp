@@ -1,4 +1,5 @@
 import type { CoalesceClient } from "../../client.js";
+import { validatePathSegment } from "../types.js";
 import { isPlainObject } from "../../utils.js";
 
 export async function listWorkspaces(
@@ -7,7 +8,8 @@ export async function listWorkspaces(
 ): Promise<unknown> {
   if (params?.projectID) {
     // Single project — fetch with workspaces included
-    const project = await client.get(`/api/v1/projects/${params.projectID}`, {
+    const validProjectID = validatePathSegment(params.projectID, "projectID");
+    const project = await client.get(`/api/v1/projects/${validProjectID}`, {
       includeWorkspaces: true,
     });
     return extractWorkspacesFromProjects(
@@ -20,7 +22,7 @@ export async function listWorkspaces(
     includeWorkspaces: true,
   });
   return extractWorkspacesFromProjects(
-    Array.isArray(projects) ? projects : []
+    Array.isArray(projects) ? projects : isPlainObject(projects) ? [projects] : []
   );
 }
 
@@ -40,8 +42,10 @@ function extractWorkspacesFromProjects(
       : [];
     for (const ws of nested) {
       if (!isPlainObject(ws)) continue;
+      const id = typeof ws.id === "string" ? ws.id : String(ws.id ?? "");
+      if (!id) continue;
       workspaces.push({
-        id: typeof ws.id === "string" ? ws.id : String(ws.id ?? ""),
+        id,
         name: typeof ws.name === "string" ? ws.name : undefined,
         projectID,
         projectName,

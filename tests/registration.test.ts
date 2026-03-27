@@ -62,6 +62,10 @@ describe("Tool Registration", () => {
     expect(toolNames).toContain("analyze-workspace-patterns");
     expect(toolNames).toContain("list-workspace-node-types");
     expect(toolNames).toContain("complete-node-configuration");
+    expect(toolNames).toContain("list-workspaces");
+    expect(toolNames).toContain("list-workspace-subgraphs");
+    expect(toolNames).toContain("update-environment");
+    expect(toolNames).toContain("get-environment-job");
 
     const clearCacheCall = toolSpy.mock.calls.find(
       (call: unknown[]) => call[0] === "clear_coalesce_transform_mcp_data_cache"

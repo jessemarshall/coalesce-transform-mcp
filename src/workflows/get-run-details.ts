@@ -8,19 +8,18 @@ import {
   sanitizeResponse,
   validatePathSegment,
   handleToolError,
+  type JsonToolError,
 } from "../coalesce/types.js";
-
-type ResultsError = { message: string; status?: number; detail?: unknown };
 
 export async function getRunDetails(
   client: CoalesceClient,
   params: { runID: string }
-): Promise<{ run: unknown; results: unknown; resultsError?: ResultsError }> {
+): Promise<{ run: unknown; results: unknown; resultsError?: JsonToolError }> {
   const validRunID = validatePathSegment(params.runID, "runID");
 
   let run: unknown;
   let results: unknown = null;
-  let resultsError: ResultsError | undefined;
+  let resultsError: JsonToolError | undefined;
 
   const runPromise = client.get(`/api/v1/runs/${validRunID}`);
   const resultsPromise = client.get(`/api/v1/runs/${validRunID}/results`);
@@ -38,7 +37,7 @@ export async function getRunDetails(
     : { run, results };
 }
 
-function serializeResultsError(error: unknown): ResultsError {
+function serializeResultsError(error: unknown): JsonToolError {
   if (error instanceof CoalesceApiError) {
     return {
       message: error.message,

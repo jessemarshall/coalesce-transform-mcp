@@ -4,6 +4,7 @@ import {
   getRunDetails,
   registerGetRunDetails,
 } from "../../src/workflows/get-run-details.js";
+import { CoalesceApiError } from "../../src/client.js";
 import { POSTMAN_RUN_DETAILS_RESPONSE } from "../fixtures/postman-examples.js";
 
 function createMockClient() {
@@ -59,5 +60,42 @@ describe("get-run-details workflow", () => {
     expect(result.run).toEqual(runData);
     expect(result.results).toBeNull();
     expect(result.resultsError).toEqual({ message: "Resource not found" });
+  });
+
+  it("returns structured error with status when results endpoint throws CoalesceApiError", async () => {
+    const client = createMockClient();
+    const runData = POSTMAN_RUN_DETAILS_RESPONSE;
+
+    client.get
+      .mockImplementation((path: string) => {
+        if (path === "/api/v1/runs/0") return Promise.resolve(runData);
+        if (path === "/api/v1/runs/0/results") return Promise.reject(new CoalesceApiError("Not found", 404));
+        return Promise.resolve({});
+      });
+
+    const result = await getRunDetails(client as any, { runID: "0" });
+
+    expect(result.run).toEqual(runData);
+    expect(result.results).toBeNull();
+    expect(result.resultsError).toEqual({ message: "Not found", status: 404 });
+  });
+
+  it("returns structured error with detail for non-Error rejections", async () => {
+    const client = createMockClient();
+    const runData = POSTMAN_RUN_DETAILS_RESPONSE;
+
+    client.get
+      .mockImplementation((path: string) => {
+        if (path === "/api/v1/runs/0") return Promise.resolve(runData);
+        if (path === "/api/v1/runs/0/results") return Promise.reject("raw string error");
+        return Promise.resolve({});
+      });
+
+    const result = await getRunDetails(client as any, { runID: "0" });
+
+    expect(result.resultsError).toEqual({
+      message: "Unable to fetch run results",
+      detail: "raw string error",
+    });
   });
 });
