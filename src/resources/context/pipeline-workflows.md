@@ -340,10 +340,9 @@ IMPORTANT: `View` node types can ONLY materialize as views. If you need a table,
 
 ## After Building the Pipeline
 
-1. **Deploy**: `start_run` with `runType: "deploy"`
-2. **Run**: `start_run` with `runType: "refresh"`
-3. **Monitor**: `run_status` or `run_and_wait`
-4. **Troubleshoot**: `get_run_results` for errors, `retry_run` to re-run
+1. **Deploy / Refresh**: `start_run` with `runDetails.environmentID` (and optionally `runDetails.jobID` to scope). Use `run_and_wait` for a single-call end-to-end outcome.
+2. **Monitor**: `get_run_status` or `run_and_wait`
+3. **Troubleshoot**: `get_run_results` for errors, `diagnose_run_failure` for classification, `retry_run` to re-run failed nodes
 
 Scheduling is configured via Jobs in the Coalesce UI. Trigger existing jobs with `start_run` and `jobID`. See `coalesce://context/run-operations` for full guidance.
 

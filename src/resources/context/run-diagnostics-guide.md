@@ -34,7 +34,6 @@ The tool:
 | `data_type_error` | Type mismatch or cast failure | VARCHAR in numeric column, bad date format |
 | `timeout` | Query ran too long | Large table scan, missing filters, small warehouse |
 | `configuration_error` | Node config issue | Missing materialization, duplicate columns, bad location |
-| `network_error` | Connection or API failure | Transient — usually safe to retry |
 | `unknown` | Unclassified error | Check raw error message for details |
 
 ## Typical Workflow

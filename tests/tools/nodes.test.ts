@@ -429,7 +429,7 @@ describe("Node Tools", () => {
         },
       })
     ).rejects.toThrow(
-      "update-workspace-node changes cannot set SQL override fields. Remove overrideSQL. SQL override is intentionally disallowed in this project."
+      "update_workspace_node changes cannot set SQL override fields. Remove overrideSQL. SQL override is intentionally disallowed in this project."
     );
 
     expect(client.get).not.toHaveBeenCalled();
@@ -551,7 +551,7 @@ describe("Node Tools", () => {
         },
       })
     ).rejects.toThrow(
-      "create-workspace-node-from-scratch changes cannot set SQL override fields. Remove override. SQL override is intentionally disallowed in this project."
+      "create_workspace_node_from_scratch changes cannot set SQL override fields. Remove override. SQL override is intentionally disallowed in this project."
     );
 
     expect(client.post).not.toHaveBeenCalled();
@@ -1130,7 +1130,7 @@ describe("Node Tools", () => {
         },
       })
     ).rejects.toThrow(
-      "create-workspace-node-from-predecessor changes cannot set SQL override fields. Remove overrideSQL. SQL override is intentionally disallowed in this project."
+      "create_workspace_node_from_predecessor changes cannot set SQL override fields. Remove overrideSQL. SQL override is intentionally disallowed in this project."
     );
 
     expect(client.get).not.toHaveBeenCalled();
@@ -1571,7 +1571,7 @@ describe("Node Tools", () => {
         },
       })
     ).rejects.toThrow(
-      "replace-workspace-node-columns additionalChanges cannot set SQL override fields"
+      "replace_workspace_node_columns additionalChanges cannot set SQL override fields"
     );
 
     expect(client.get).not.toHaveBeenCalled();

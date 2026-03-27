@@ -26,8 +26,8 @@ const RETRY_MAX_DELAY_MS = 30_000;
 const RETRYABLE_RATE_LIMIT_METHODS = new Set(["GET"]);
 
 export function validateConfig(): ClientConfig {
-  const accessToken = process.env.COALESCE_ACCESS_TOKEN;
-  const baseUrl = process.env.COALESCE_BASE_URL || DEFAULT_BASE_URL;
+  const accessToken = process.env.COALESCE_ACCESS_TOKEN?.trim();
+  const baseUrl = (process.env.COALESCE_BASE_URL || DEFAULT_BASE_URL).trim();
 
   if (!accessToken) {
     throw new Error(

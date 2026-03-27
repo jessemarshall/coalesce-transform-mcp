@@ -52,7 +52,7 @@ export async function cancelRun(
   client: CoalesceClient,
   params: { runID: string; orgID?: string; environmentID: string }
 ): Promise<unknown> {
-  const orgID = params.orgID ?? process.env.COALESCE_ORG_ID;
+  const orgID = params.orgID?.trim() || process.env.COALESCE_ORG_ID?.trim();
   if (!orgID) {
     throw new Error(
       "orgID is required for cancel-run. Provide it explicitly or set COALESCE_ORG_ID."

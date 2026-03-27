@@ -12,6 +12,7 @@ import {
   type PipelineNodeTypeSelection,
 } from "./node-type-selection.js";
 import { listWorkspaceNodeTypes } from "../workspace/mutations.js";
+import { type WorkspaceNodeIndexEntry } from "../shared/node-helpers.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,12 +64,7 @@ type ResolvedEntity =
       candidates: ResolvedEntityCandidate[];
     };
 
-type WorkspaceNodeEntry = {
-  id: string;
-  name: string;
-  nodeType: string | null;
-  locationName: string | null;
-};
+type WorkspaceNodeEntry = WorkspaceNodeIndexEntry;
 
 export type IntentPipelineResult = {
   status: "ready" | "needs_clarification" | "needs_entity_resolution";
@@ -537,7 +533,7 @@ async function getWorkspaceNodeTypeInventory(
       warnings: [],
     };
   } catch (error) {
-    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
+    if (error instanceof CoalesceApiError && [401, 403, 500, 503].includes(error.status)) {
       throw error;
     }
     const reason = error instanceof Error ? error.message : String(error);
@@ -546,7 +542,7 @@ async function getWorkspaceNodeTypeInventory(
       counts: {},
       total: 0,
       warnings: [
-        `Workspace node types could not be fetched (${reason}). Confirm installation before creating nodes.`,
+        `Workspace node types could not be fetched (${reason}). Node type selection will use defaults — confirm installation before creating nodes.`,
       ],
     };
   }
@@ -642,7 +638,7 @@ export async function buildPipelinePlanFromIntent(
     } else {
       openQuestions.push(
         `Could not find a workspace node matching "${unresolved.rawName}". ` +
-        `Use list-workspace-nodes to check available nodes.`
+        `Use list_workspace_nodes to check available nodes.`
       );
     }
   }
@@ -678,6 +674,9 @@ export async function buildPipelinePlanFromIntent(
   // Get workspace node type inventory for node type selection
   const inventory = await getWorkspaceNodeTypeInventory(client, params.workspaceID);
   warnings.push(...inventory.warnings);
+
+  // If inventory fetch failed (empty + warnings), degrade the plan status
+  const inventoryDegraded = inventory.nodeTypes.length === 0 && inventory.warnings.length > 0;
 
   const location = {
     ...(params.locationName ? { locationName: params.locationName } : {}),
@@ -740,8 +739,15 @@ export async function buildPipelinePlanFromIntent(
           );
         }
 
+        if (!locationName) {
+          openQuestions.push(
+            `Node "${entity.resolvedNodeName}" has no location assigned. ` +
+            `Specify a locationName or assign a storage location to the source node before building the pipeline.`
+          );
+        }
+
         sourceRefs.push({
-          locationName: locationName ?? "UNKNOWN_LOCATION",
+          locationName: locationName ?? "__MISSING_LOCATION__",
           nodeName: entity.resolvedNodeName,
           alias: entity.resolvedNodeName,
           nodeID: entity.resolvedNodeID,
@@ -858,7 +864,7 @@ export async function buildPipelinePlanFromIntent(
   const plan = {
     version: 1 as const,
     intent: "goal" as const,
-    status: (!hasOpenQuestions && allNodesHavePredecessors ? "ready" : "needs_clarification") as "ready" | "needs_clarification",
+    status: (!hasOpenQuestions && allNodesHavePredecessors && !inventoryDegraded ? "ready" : "needs_clarification") as "ready" | "needs_clarification",
     workspaceID: params.workspaceID,
     platform: null,
     goal: params.intent,

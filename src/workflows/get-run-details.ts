@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
-import { CoalesceApiError } from "../client.js";
 import {
   READ_ONLY_ANNOTATIONS,
   buildJsonToolResponse,
@@ -11,6 +10,7 @@ import {
   getToolOutputSchema,
   type JsonToolError,
 } from "../coalesce/types.js";
+import { serializeResultsError } from "./progress.js";
 
 export async function getRunDetails(
   client: CoalesceClient,
@@ -36,20 +36,6 @@ export async function getRunDetails(
   return resultsError !== undefined
     ? { run, results: null, resultsError }
     : { run, results };
-}
-
-function serializeResultsError(error: unknown): JsonToolError {
-  if (error instanceof CoalesceApiError) {
-    return {
-      message: error.message,
-      status: error.status,
-      ...(error.detail !== undefined ? { detail: error.detail } : {}),
-    };
-  }
-  if (error instanceof Error) {
-    return { message: error.message };
-  }
-  return { message: "Unable to fetch run results", detail: error };
 }
 
 export function registerGetRunDetails(server: McpServer, client: CoalesceClient): void {

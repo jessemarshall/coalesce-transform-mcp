@@ -14,17 +14,20 @@ export type PipelineTemplateDefaults = {
   inferredConfig: Record<string, unknown>;
 };
 
-export type PipelineNodeTypeFamily =
-  | "stage"
-  | "persistent-stage"
-  | "view"
-  | "work"
-  | "dimension"
-  | "fact"
-  | "hub"
-  | "satellite"
-  | "link"
-  | "unknown";
+export const PIPELINE_NODE_TYPE_FAMILIES = [
+  "stage",
+  "persistent-stage",
+  "view",
+  "work",
+  "dimension",
+  "fact",
+  "hub",
+  "satellite",
+  "link",
+  "unknown",
+] as const;
+
+export type PipelineNodeTypeFamily = (typeof PIPELINE_NODE_TYPE_FAMILIES)[number];
 
 type InternalPipelineNodeTypeCandidate = {
   nodeType: string;

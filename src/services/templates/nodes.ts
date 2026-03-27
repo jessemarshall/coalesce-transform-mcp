@@ -1,5 +1,6 @@
 import { sanitizeNodeDefinitionSqlOverridePolicy } from "../policies/sql-override.js";
 import { isPlainObject } from "../../utils.js";
+import { cloneValue } from "../shared/node-helpers.js";
 
 export type NodeDefinitionTemplateOptions = {
   nodeName?: string;
@@ -74,10 +75,6 @@ function getFirstOptionValue(value: unknown): unknown {
     return first.value;
   }
   return first;
-}
-
-function cloneValue<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function inferDefaultValue(item: Record<string, unknown>): unknown {

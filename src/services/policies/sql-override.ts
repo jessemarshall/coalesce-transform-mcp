@@ -1,10 +1,7 @@
 import { isPlainObject } from "../../utils.js";
+import { cloneValue } from "../shared/node-helpers.js";
 
 const SQL_OVERRIDE_CONTROL_TYPE = "overrideSQLToggle";
-
-function cloneValue<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
 
 export type SqlOverridePolicySanitizationResult = {
   nodeDefinition: Record<string, unknown>;

@@ -348,7 +348,7 @@ describe("diagnoseRunFailure", () => {
 
     const result = await diagnoseRunFailure(client as any, { runID: "100" });
 
-    expect(result.recommendations.some((r) => r.includes("retry-run"))).toBe(true);
+    expect(result.recommendations.some((r) => r.includes("retry_run"))).toBe(true);
   });
 
   it("flags high failure ratio", async () => {

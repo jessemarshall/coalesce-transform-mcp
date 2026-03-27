@@ -2,6 +2,7 @@ import type { CoalesceClient } from "../../client.js";
 import { isPlainObject } from "../../utils.js";
 import { listWorkspaceNodes, getWorkspaceNode } from "../../coalesce/api/nodes.js";
 import { CoalesceApiError } from "../../client.js";
+import { extractNodeArray, isPassthroughTransform } from "../shared/node-helpers.js";
 import {
   getNodeColumnArray,
   getColumnNamesFromNode,
@@ -142,59 +143,75 @@ export async function reviewPipeline(
   }
 
   const detailMap = new Map<string, NodeDetail>();
-  const fetchPromises = fetchIDs.map(async (nodeID) => {
-    try {
-      const fullNode = await getWorkspaceNode(client, { workspaceID, nodeID });
-      if (!isPlainObject(fullNode)) return;
+  let fetchFailureCount = 0;
 
-      const summary = nodeIndex.get(nodeID)!;
-      const columns = getNodeColumnArray(fullNode);
-      const { passthroughCount, transformCount } = analyzeColumnTransforms(columns);
+  // Fetch in batches of 10 to avoid overwhelming the API with concurrent requests
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < fetchIDs.length; i += BATCH_SIZE) {
+    const batch = fetchIDs.slice(i, i + BATCH_SIZE);
+    const batchPromises = batch.map(async (nodeID) => {
+      try {
+        const fullNode = await getWorkspaceNode(client, { workspaceID, nodeID });
+        if (!isPlainObject(fullNode)) return;
 
-      const sm = isPlainObject(fullNode.metadata) && isPlainObject((fullNode.metadata as Record<string, unknown>).sourceMapping)
-        ? (fullNode.metadata as Record<string, unknown>).sourceMapping as Record<string, unknown>
-        : null;
+        const summary = nodeIndex.get(nodeID)!;
+        const columns = getNodeColumnArray(fullNode);
+        const { passthroughCount, transformCount } = analyzeColumnTransforms(columns);
 
-      const joinObj = sm && isPlainObject(sm.join) ? sm.join : null;
-      const joinCondition = joinObj && typeof (joinObj as Record<string, unknown>).joinCondition === "string"
-        ? (joinObj as Record<string, unknown>).joinCondition as string
-        : null;
+        const sm = isPlainObject(fullNode.metadata) && isPlainObject((fullNode.metadata as Record<string, unknown>).sourceMapping)
+          ? (fullNode.metadata as Record<string, unknown>).sourceMapping as Record<string, unknown>
+          : null;
 
-      detailMap.set(nodeID, {
-        id: nodeID,
-        name: summary.name,
-        nodeType: summary.nodeType,
-        locationName: summary.locationName,
-        layer: inferNodeLayer({ nodeType: summary.nodeType, name: summary.name }),
-        predecessorIDs: summary.predecessorIDs,
-        successorIDs: successorMap.get(nodeID) ?? [],
-        columns,
-        columnCount: columns.length,
-        passthroughCount,
-        transformCount,
-        hasJoinCondition: joinCondition !== null && joinCondition.trim().length > 0,
-        joinCondition,
-        hasConfig: isPlainObject(fullNode.config) && Object.keys(fullNode.config as Record<string, unknown>).length > 0,
-        sourceMapping: sm,
-      });
-    } catch (error) {
-      if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
-        throw error;
+        const joinObj = sm && isPlainObject(sm.join) ? sm.join : null;
+        const joinCondition = joinObj && typeof (joinObj as Record<string, unknown>).joinCondition === "string"
+          ? (joinObj as Record<string, unknown>).joinCondition as string
+          : null;
+
+        detailMap.set(nodeID, {
+          id: nodeID,
+          name: summary.name,
+          nodeType: summary.nodeType,
+          locationName: summary.locationName,
+          layer: inferNodeLayer({ nodeType: summary.nodeType, name: summary.name }),
+          predecessorIDs: summary.predecessorIDs,
+          successorIDs: successorMap.get(nodeID) ?? [],
+          columns,
+          columnCount: columns.length,
+          passthroughCount,
+          transformCount,
+          hasJoinCondition: joinCondition !== null && joinCondition.trim().length > 0,
+          joinCondition,
+          hasConfig: isPlainObject(fullNode.config) && Object.keys(fullNode.config as Record<string, unknown>).length > 0,
+          sourceMapping: sm,
+        });
+      } catch (error) {
+        if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
+          throw error;
+        }
+        fetchFailureCount += 1;
+        warnings.push(
+          `Could not fetch node ${nodeID}: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
-      warnings.push(
-        `Could not fetch node ${nodeID}: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  });
+    });
 
-  const fetchResults = await Promise.allSettled(fetchPromises);
-  for (const result of fetchResults) {
-    if (result.status === "rejected") {
-      if (result.reason instanceof CoalesceApiError && [401, 403, 503].includes(result.reason.status)) {
-        throw result.reason;
+    const batchResults = await Promise.allSettled(batchPromises);
+    for (const result of batchResults) {
+      if (result.status === "rejected") {
+        if (result.reason instanceof CoalesceApiError && [401, 403, 503].includes(result.reason.status)) {
+          throw result.reason;
+        }
       }
-      // Non-auth errors from individual fetches are already captured as warnings above
     }
+  }
+
+  // Flag degraded review if too many nodes could not be fetched
+  const reviewDegraded = fetchIDs.length > 0 && fetchFailureCount / fetchIDs.length > 0.2;
+  if (reviewDegraded) {
+    warnings.unshift(
+      `Review is degraded: ${fetchFailureCount} of ${fetchIDs.length} nodes could not be fetched. ` +
+        `Findings may be incomplete. Check API connectivity and retry.`
+    );
   }
 
   // Detect methodology for context
@@ -287,7 +304,7 @@ function checkMissingJoinCondition(
       nodeName: node.name,
       message: `Node has ${node.predecessorIDs.length} predecessors but no join condition defined.`,
       suggestion:
-        "Use apply-join-condition to set the FROM/JOIN/ON clause, or use convert-join-to-aggregation if this should be an aggregation node.",
+        "Use apply_join_condition to set the FROM/JOIN/ON clause, or use convert_join_to_aggregation if this should be an aggregation node.",
     });
   }
 }
@@ -536,11 +553,6 @@ function checkUnusedColumns(
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function extractNodeArray(raw: unknown): Array<Record<string, unknown>> {
-  if (Array.isArray(raw)) return raw.filter(isPlainObject);
-  if (isPlainObject(raw) && Array.isArray(raw.data)) return raw.data.filter(isPlainObject);
-  return [];
-}
 
 function extractPredecessorIDs(node: Record<string, unknown>): string[] {
   // Try direct predecessorNodeIDs field
@@ -571,7 +583,7 @@ function analyzeColumnTransforms(columns: Array<Record<string, unknown>>): {
     const name = typeof col.name === "string" ? col.name : "";
     const transform = typeof col.transform === "string" ? col.transform : "";
 
-    if (isPassthrough(transform, name)) {
+    if (isPassthroughTransform(transform, name)) {
       passthroughCount++;
     } else {
       transformCount++;
@@ -581,24 +593,6 @@ function analyzeColumnTransforms(columns: Array<Record<string, unknown>>): {
   return { passthroughCount, transformCount };
 }
 
-function isPassthrough(transform: string, columnName: string): boolean {
-  const trimmed = transform.trim();
-  if (trimmed.length === 0) return true;
-
-  const upperName = columnName.trim().toUpperCase();
-  const upperTransform = trimmed.toUpperCase();
-
-  // Bare column name
-  if (upperTransform === upperName) return true;
-  // Quoted bare name
-  if (upperTransform === `"${upperName}"`) return true;
-  // Alias-qualified: "ALIAS"."COLUMN"
-  if (/^"[^"]+"\."[^"]+"$/.test(trimmed) && upperTransform.endsWith(`."${upperName}"`)) return true;
-  // ref()-qualified: {{ ref(...) }}."COLUMN"
-  if (/^\{\{[^}]+\}\}\."[^"]+"$/i.test(trimmed) && upperTransform.endsWith(`."${upperName}"`)) return true;
-
-  return false;
-}
 
 function computeGraphStats(
   detailMap: Map<string, NodeDetail>,

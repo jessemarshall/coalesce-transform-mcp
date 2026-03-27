@@ -94,7 +94,7 @@ const TIMEOUT_PATTERNS: Array<[RegExp, string]> = [
 
 const CONFIG_ERROR_PATTERNS: Array<[RegExp, string]> = [
   [/materialization.*type/i, "Materialization type mismatch. Check the node's materialization configuration."],
-  [/config.*missing/i, "Required configuration is missing. Use complete-node-configuration to fill in defaults."],
+  [/config.*missing/i, "Required configuration is missing. Use complete_node_configuration to fill in defaults."],
   [/location.*not.*found/i, "Storage location not found. Verify the node's location setting matches a defined storage location."],
   [/duplicate.*column/i, "Duplicate column names detected. Remove or rename duplicate columns in the node."],
 ];
@@ -338,7 +338,7 @@ function buildRecommendations(
 
   if (runStatus === "canceled") {
     recommendations.push(
-      "This run was canceled. If unintentional, use retry-run to re-execute."
+      "This run was canceled. If unintentional, use retry_run to re-execute."
     );
     return recommendations;
   }
@@ -387,7 +387,7 @@ function buildRecommendations(
   if (categoryCounts.has("sql_error")) {
     recommendations.push(
       `${categoryCounts.get("sql_error")} node(s) have SQL errors. ` +
-        "Use get-workspace-node to inspect the column transforms and join conditions for each failed node."
+        "Use get_workspace_node to inspect the column transforms and join conditions for each failed node."
     );
   }
 
@@ -408,14 +408,14 @@ function buildRecommendations(
   if (categoryCounts.has("configuration_error")) {
     recommendations.push(
       `${categoryCounts.get("configuration_error")} node(s) have configuration issues. ` +
-        "Use complete-node-configuration to fill in missing config, or review node settings in the Coalesce UI."
+        "Use complete_node_configuration to fill in missing config, or review node settings in the Coalesce UI."
     );
   }
 
   if (categoryCounts.has("unknown")) {
     recommendations.push(
       `${categoryCounts.get("unknown")} node(s) failed with unclassified errors. ` +
-        "Use get-run-results to see the full error details for each node."
+        "Use get_run_results to see the full error details for each node."
     );
   }
 
@@ -426,7 +426,7 @@ function buildRecommendations(
     !categoryCounts.has("configuration_error")
   ) {
     recommendations.push(
-      "If the failures appear transient (permissions fixed, objects now deployed), use retry-run to re-execute only the failed nodes."
+      "If the failures appear transient (permissions fixed, objects now deployed), use retry_run to re-execute only the failed nodes."
     );
   }
 

@@ -35,7 +35,7 @@ const ColumnSourceInputSchema = z
 
 export const WorkspaceNodeColumnInputSchema = z
   .object({
-    name: z.string().describe("Column name."),
+    name: z.string().min(1).describe("Column name."),
     transform: z
       .string()
       .optional()

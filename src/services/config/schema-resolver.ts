@@ -1,3 +1,4 @@
+import { CoalesceApiError } from "../../client.js";
 import { getRepoNodeTypeDefinition } from "../repo/operations.js";
 import { loadNodeTypeCorpusSnapshot } from "../corpus/loader.js";
 import { searchNodeTypeCorpusVariants } from "../corpus/search.js";
@@ -85,6 +86,14 @@ export async function resolveNodeTypeSchema(
         schema: parseNodeTypeSchema(def.nodeDefinition, "Repo"),
       };
     } catch (error) {
+      // Auth and network errors indicate a broken session — let them propagate
+      if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
+        throw error;
+      }
+      const reason = error instanceof Error ? error.message : String(error);
+      process.stderr.write(
+        `[schema-resolver] Repo resolution failed for "${nodeType}": ${reason}. Falling back to corpus.\n`
+      );
       // Fall through to corpus
     }
   }

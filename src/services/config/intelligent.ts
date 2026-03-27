@@ -4,10 +4,20 @@ import { resolveNodeTypeSchema } from "./schema-resolver.js";
 import { analyzeNodeContext, type NodeContext } from "./context-analyzer.js";
 import { classifyConfigFields, type ClassifiedFields } from "./field-classifier.js";
 import { applyIntelligenceRules } from "./rules.js";
-import { updateWorkspaceNode } from "../workspace/mutations.js";
 import { isPlainObject } from "../../utils.js";
 import { NODE_TYPE_INTENT, type NodeTypeIntent } from "../pipelines/node-type-intent.js";
 import { inferFamily, type PipelineNodeTypeFamily } from "../pipelines/node-type-selection.js";
+
+// Lazy import to break circular dependency: mutations.ts <-> intelligent.ts
+// Both modules import from each other — using dynamic import ensures the
+// module is fully initialized before first use.
+async function lazyUpdateWorkspaceNode(
+  client: CoalesceClient,
+  params: { workspaceID: string; nodeID: string; changes: Record<string, unknown> }
+): Promise<unknown> {
+  const { updateWorkspaceNode } = await import("../workspace/mutations.js");
+  return updateWorkspaceNode(client, params);
+}
 
 export interface ConfigReview {
   status: "complete" | "needs_attention" | "incomplete";
@@ -380,7 +390,7 @@ export async function completeNodeConfiguration(
     if (columnsModified) {
       changes.metadata = { columns };
     }
-    updatedNode = await updateWorkspaceNode(client, {
+    updatedNode = await lazyUpdateWorkspaceNode(client, {
       workspaceID: params.workspaceID,
       nodeID: params.nodeID,
       changes,

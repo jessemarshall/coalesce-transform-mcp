@@ -9,8 +9,10 @@ import {
 import { listWorkspaceNodeTypes } from "../workspace/mutations.js";
 import { isPlainObject, uniqueInOrder } from "../../utils.js";
 import { NodeConfigInputSchema } from "../../schemas/node-payloads.js";
+import { type WorkspaceNodeIndexEntry } from "../shared/node-helpers.js";
 import {
   selectPipelineNodeType,
+  PIPELINE_NODE_TYPE_FAMILIES,
   type PipelineNodeTypeFamily,
   type PipelineNodeTypeSelection,
   type PipelineTemplateDefaults,
@@ -123,18 +125,7 @@ const PlannedPipelineNodeSchema = z
     name: z.string(),
     nodeType: z.string(),
     nodeTypeFamily: z
-      .enum([
-        "stage",
-        "persistent-stage",
-        "view",
-        "work",
-        "dimension",
-        "fact",
-        "hub",
-        "satellite",
-        "link",
-        "unknown",
-      ])
+      .enum(PIPELINE_NODE_TYPE_FAMILIES)
       .nullable()
       .optional(),
     predecessorNodeIDs: z.array(z.string()),
@@ -193,13 +184,6 @@ export const PipelinePlanSchema = z
     STOP_AND_CONFIRM: z.string().optional(),
   })
   .strict();
-
-type WorkspaceNodeIndexEntry = {
-  id: string;
-  name: string;
-  nodeType: string | null;
-  locationName: string | null;
-};
 
 type ResolvedSqlRef = {
   locationName: string;
@@ -1604,7 +1588,7 @@ async function getWorkspaceNodeTypeInventory(
     };
   } catch (error) {
     // Auth and network errors indicate a broken session — let them propagate
-    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
+    if (error instanceof CoalesceApiError && [401, 403, 500, 503].includes(error.status)) {
       throw error;
     }
     const reason = error instanceof Error ? error.message : String(error);
@@ -1614,7 +1598,7 @@ async function getWorkspaceNodeTypeInventory(
       total: 0,
       warnings: [
         `Observed workspace node types could not be fetched for workspace ${workspaceID} (${reason}). ` +
-          `Use list_workspace_node_types or cache_workspace_nodes to inspect current workspace usage and confirm installation before execution.`,
+          `Node type selection will use defaults — use list_workspace_node_types or cache_workspace_nodes to confirm installation before execution.`,
       ],
     };
   }

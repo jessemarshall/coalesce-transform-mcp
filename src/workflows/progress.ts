@@ -1,3 +1,23 @@
+import { CoalesceApiError } from "../client.js";
+
+export function remainingTimeMs(startedAt: number, totalTimeoutMs: number): number {
+  return Math.max(0, totalTimeoutMs - (Date.now() - startedAt));
+}
+
+export function serializeResultsError(error: unknown): { message: string; status?: number; detail?: unknown } {
+  if (error instanceof CoalesceApiError) {
+    return {
+      message: error.message,
+      status: error.status,
+      ...(error.detail !== undefined ? { detail: error.detail } : {}),
+    };
+  }
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+  return { message: "Unable to fetch run results", detail: error };
+}
+
 export type WorkflowProgressNotification = {
   method: "notifications/progress";
   params: {
@@ -87,8 +107,10 @@ export function createWorkflowProgressReporter(
           ...(message ? { message } : {}),
         },
       });
-    } catch {
+    } catch (error) {
       // Progress is best-effort and should not fail the workflow.
+      const reason = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`[progress] Notification failed (token=${progressToken}): ${reason}\n`);
     }
   };
 }

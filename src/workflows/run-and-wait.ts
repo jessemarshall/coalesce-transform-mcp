@@ -12,6 +12,8 @@ import {
 } from "../coalesce/types.js";
 import {
   createWorkflowProgressReporter,
+  remainingTimeMs,
+  serializeResultsError,
   sleepWithAbort,
   throwIfAborted,
   type WorkflowProgressExtra,
@@ -22,24 +24,6 @@ import {
   isTerminalRunStatus,
   validateRunStatus,
 } from "./run-status.js";
-
-function remainingTimeMs(startedAt: number, totalTimeoutMs: number): number {
-  return Math.max(0, totalTimeoutMs - (Date.now() - startedAt));
-}
-
-function serializeResultsError(error: unknown): Record<string, unknown> {
-  if (error instanceof CoalesceApiError) {
-    return {
-      message: error.message,
-      status: error.status,
-      ...(error.detail !== undefined ? { detail: error.detail } : {}),
-    };
-  }
-  if (error instanceof Error) {
-    return { message: error.message };
-  }
-  return { message: "Unable to fetch run results", detail: error };
-}
 
 export async function runAndWait(
   client: CoalesceClient,

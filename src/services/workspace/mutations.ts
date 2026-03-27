@@ -9,8 +9,59 @@ import { fetchAllWorkspaceNodes } from "../cache/snapshots.js";
 import { assertNoSqlOverridePayload } from "../policies/sql-override.js";
 import { completeNodeConfiguration, type ConfigCompletionResult } from "../config/intelligent.js";
 import { isPlainObject, uniqueInOrder } from "../../utils.js";
-import { selectPipelineNodeType } from "../pipelines/node-type-selection.js";
+import { selectPipelineNodeType, inferFamily } from "../pipelines/node-type-selection.js";
 import { detectSpecializedPatternPenalty } from "../pipelines/node-type-intent.js";
+import {
+  getNodeColumnCount,
+  getNodeStorageLocationCount,
+  getNodeConfigKeyCount,
+  getRequestedNodeName,
+  getRequestedColumnNames,
+  getRequestedConfig,
+  getRequestedLocationFields,
+  getNodeColumnNames,
+  getNodeDependencyNames,
+  normalizeColumnName,
+  normalizeDataType,
+} from "./node-inspection.js";
+import {
+  buildPredecessorSummary,
+  buildJoinSuggestions,
+  generateJoinSQL,
+  generateRefJoinSQL,
+  inferDatatype,
+  analyzeColumnsForGroupBy,
+  extractPredecessorNodeIDs,
+  extractPredecessorRefInfo,
+  getReferencedPredecessorNodeIDs,
+  appendWhereToJoinCondition,
+  type PredecessorSummary,
+  type JoinSuggestion,
+  type JoinClause,
+  type GroupByAnalysis,
+  type ColumnTransform,
+  type PredecessorRefInfo,
+} from "./join-helpers.js";
+import { isPassthroughTransform } from "../shared/node-helpers.js";
+
+const CONFIG_COMPLETION_SKIP_MSG =
+  "call complete_node_configuration with repoPath after creation to apply node type config and column-level attributes.";
+
+async function tryCompleteNodeConfiguration(
+  client: CoalesceClient,
+  params: { workspaceID: string; nodeID: string; repoPath?: string },
+): Promise<{ configCompletion?: ConfigCompletionResult; configCompletionSkipped?: string }> {
+  try {
+    const configCompletion = await completeNodeConfiguration(client, params);
+    return { configCompletion };
+  } catch (error) {
+    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
+      throw error;
+    }
+    const reason = error instanceof Error ? error.message : String(error);
+    return { configCompletionSkipped: `Config completion failed (${reason}) — ${CONFIG_COMPLETION_SKIP_MSG}` };
+  }
+}
 
 type NodeTypeValidation = {
   requestedNodeType: string;
@@ -122,6 +173,11 @@ async function validateNodeTypeChoice(
     )) {
       throw error;
     }
+    // Log unexpected errors so they are not completely invisible
+    const reason = error instanceof Error ? error.message : String(error);
+    process.stderr.write(
+      `[validateNodeTypeChoice] Unexpected error for nodeType "${params.nodeType}": ${reason}. Validation skipped.\n`
+    );
     return null;
   }
 }
@@ -142,13 +198,6 @@ function assertNotSourceNodeType(nodeType: string): void {
     );
   }
 }
-
-type PredecessorSummary = {
-  nodeID: string;
-  nodeName: string | null;
-  columnCount: number;
-  columnNames: string[];
-};
 
 type ScratchNodeCompletionLevel = "created" | "named" | "configured";
 
@@ -259,90 +308,6 @@ export function buildUpdatedWorkspaceNodeBody(
   ensureRequiredApiFields(current, synchronized);
 
   return synchronized;
-}
-
-function getNodeColumnCount(node: Record<string, unknown>): number {
-  const metadata = isPlainObject(node.metadata) ? node.metadata : undefined;
-  return Array.isArray(metadata?.columns) ? metadata.columns.length : 0;
-}
-
-function getNodeStorageLocationCount(node: Record<string, unknown>): number {
-  return Array.isArray(node.storageLocations) ? node.storageLocations.length : 0;
-}
-
-function getNodeConfigKeyCount(node: Record<string, unknown>): number {
-  return isPlainObject(node.config) ? Object.keys(node.config).length : 0;
-}
-
-function getRequestedNodeName(changes: Record<string, unknown>): string | undefined {
-  return typeof changes.name === "string" && changes.name.trim().length > 0
-    ? changes.name
-    : undefined;
-}
-
-function getRequestedColumnNames(changes: Record<string, unknown>): string[] {
-  const metadata = isPlainObject(changes.metadata) ? changes.metadata : undefined;
-  if (!metadata || !Array.isArray(metadata.columns)) {
-    return [];
-  }
-
-  const names: string[] = [];
-  for (const column of metadata.columns) {
-    if (isPlainObject(column) && typeof column.name === "string" && column.name.trim().length > 0) {
-      names.push(column.name);
-    }
-  }
-  return names;
-}
-
-function getRequestedConfig(changes: Record<string, unknown>): Record<string, unknown> | undefined {
-  return isPlainObject(changes.config) ? changes.config : undefined;
-}
-
-function getRequestedLocationFields(
-  changes: Record<string, unknown>
-): Record<string, unknown> {
-  const requested: Record<string, unknown> = {};
-  for (const key of ["database", "schema", "locationName"]) {
-    if (Object.prototype.hasOwnProperty.call(changes, key)) {
-      requested[key] = changes[key];
-    }
-  }
-  return requested;
-}
-
-function getNodeColumnNames(node: Record<string, unknown>): string[] {
-  const metadata = isPlainObject(node.metadata) ? node.metadata : undefined;
-  if (!Array.isArray(metadata?.columns)) {
-    return [];
-  }
-
-  return metadata.columns.flatMap((column) => {
-    if (!isPlainObject(column) || typeof column.name !== "string") {
-      return [];
-    }
-    return [column.name];
-  });
-}
-
-function getNodeDependencyNames(node: Record<string, unknown>): string[] {
-  const metadata = isPlainObject(node.metadata) ? node.metadata : undefined;
-  if (!Array.isArray(metadata?.sourceMapping)) {
-    return [];
-  }
-
-  return metadata.sourceMapping.flatMap((mapping) => {
-    if (!isPlainObject(mapping) || !Array.isArray(mapping.dependencies)) {
-      return [];
-    }
-
-    return mapping.dependencies.flatMap((dependency) => {
-      if (!isPlainObject(dependency) || typeof dependency.nodeName !== "string") {
-        return [];
-      }
-      return [dependency.nodeName];
-    });
-  });
 }
 
 import type { ExternalColumnInput } from "../../schemas/node-payloads.js";
@@ -467,95 +432,6 @@ function reconcileExternalSchema(
   return { columns: reconciledColumns, reconciliation };
 }
 
-function getReferencedPredecessorNodeIDs(
-  node: Record<string, unknown>,
-  predecessorNodeIDs: string[]
-): string[] {
-  const uniquePredecessorNodeIDs = uniqueInOrder(predecessorNodeIDs);
-  const predecessorSet = new Set(uniquePredecessorNodeIDs);
-  const metadata = isPlainObject(node.metadata) ? node.metadata : undefined;
-  if (!Array.isArray(metadata?.columns)) {
-    return [];
-  }
-
-  const referenced = new Set<string>();
-  for (const column of metadata.columns) {
-    if (!isPlainObject(column) || !Array.isArray(column.sources)) {
-      continue;
-    }
-    for (const source of column.sources) {
-      if (!isPlainObject(source) || !Array.isArray(source.columnReferences)) {
-        continue;
-      }
-      for (const ref of source.columnReferences) {
-        if (isPlainObject(ref) && typeof ref.nodeID === "string" && predecessorSet.has(ref.nodeID)) {
-          referenced.add(ref.nodeID);
-        }
-      }
-    }
-  }
-
-  return uniquePredecessorNodeIDs.filter((nodeID) => referenced.has(nodeID));
-}
-
-function normalizeColumnName(name: string): string {
-  return name.trim().toUpperCase();
-}
-
-function normalizeDataType(dt: string): string {
-  return dt.trim().toUpperCase();
-}
-
-function buildPredecessorSummary(
-  requestedNodeID: string,
-  node: Record<string, unknown>
-): PredecessorSummary {
-  return {
-    nodeID: requestedNodeID,
-    nodeName: typeof node.name === "string" ? node.name : null,
-    columnCount: getNodeColumnCount(node),
-    columnNames: getNodeColumnNames(node),
-  };
-}
-
-type JoinColumnSuggestion = {
-  normalizedName: string;
-  leftColumnName: string;
-  rightColumnName: string;
-};
-
-type JoinSuggestion = {
-  leftPredecessorNodeID: string;
-  leftPredecessorName: string | null;
-  rightPredecessorNodeID: string;
-  rightPredecessorName: string | null;
-  commonColumns: JoinColumnSuggestion[];
-};
-
-type JoinClause = {
-  type: "INNER JOIN" | "LEFT JOIN" | "RIGHT JOIN" | "FULL OUTER JOIN";
-  rightTable: string;
-  rightTableAlias: string;
-  onConditions: string[];
-};
-
-type GroupByAnalysis = {
-  groupByColumns: string[];
-  aggregateColumns: { name: string; transform: string }[];
-  hasAggregates: boolean;
-  groupByClause: string;
-  validation: {
-    valid: boolean;
-    errors: string[];
-  };
-};
-
-type ColumnTransform = {
-  name: string;
-  transform: string;
-  dataType?: string;
-  description?: string;
-};
 
 /**
  * Valid metadata fields for the Coalesce PUT API.
@@ -656,41 +532,6 @@ function preserveColumnLinkage(
       col.placement = existing.placement;
     }
   }
-}
-
-/**
- * Detects whether a column transform is just a passthrough — i.e., it only
- * references the column's own name without any actual transformation.
- *
- * Passthrough patterns:
- *   "ALIAS"."COLUMN_NAME"
- *   {{ ref('NODE', 'SOURCE') }}."COLUMN_NAME"
- *   COLUMN_NAME (bare name)
- */
-function isPassthroughTransform(transform: string, columnName: string): boolean {
-  const trimmed = transform.trim();
-  if (trimmed.length === 0) return true;
-
-  const upperName = columnName.trim().toUpperCase();
-  const upperTransform = trimmed.toUpperCase();
-
-  // Bare column name: COLUMN_NAME
-  if (upperTransform === upperName) return true;
-
-  // Quoted bare name: "COLUMN_NAME"
-  if (upperTransform === `"${upperName}"`) return true;
-
-  // "ALIAS"."COLUMN_NAME" — any single-segment alias
-  const aliasColPattern = /^"[^"]+"\s*\.\s*"([^"]+)"$/i;
-  const aliasMatch = trimmed.match(aliasColPattern);
-  if (aliasMatch && aliasMatch[1].toUpperCase() === upperName) return true;
-
-  // {{ ref(...) }}."COLUMN_NAME"
-  const refPattern = /^\{\{\s*ref\s*\([^)]*\)\s*\}\}\s*\.\s*"([^"]+)"$/i;
-  const refMatch = trimmed.match(refPattern);
-  if (refMatch && refMatch[1].toUpperCase() === upperName) return true;
-
-  return false;
 }
 
 /**
@@ -833,241 +674,6 @@ function validateNodeTypeMaterializationCompatibility(
   // So we only need to check the View + table combination
 }
 
-function buildJoinSuggestions(
-  predecessors: PredecessorSummary[]
-): JoinSuggestion[] {
-  const suggestions: JoinSuggestion[] = [];
-
-  for (let leftIndex = 0; leftIndex < predecessors.length; leftIndex += 1) {
-    for (
-      let rightIndex = leftIndex + 1;
-      rightIndex < predecessors.length;
-      rightIndex += 1
-    ) {
-      const left = predecessors[leftIndex];
-      const right = predecessors[rightIndex];
-
-      const leftColumns = new Map<string, string>();
-      for (const columnName of left.columnNames) {
-        const normalized = normalizeColumnName(columnName);
-        if (!leftColumns.has(normalized)) {
-          leftColumns.set(normalized, columnName);
-        }
-      }
-
-      const rightColumns = new Map<string, string>();
-      for (const columnName of right.columnNames) {
-        const normalized = normalizeColumnName(columnName);
-        if (!rightColumns.has(normalized)) {
-          rightColumns.set(normalized, columnName);
-        }
-      }
-
-      const commonColumns: JoinColumnSuggestion[] = [];
-      for (const [normalizedName, leftColumnName] of leftColumns.entries()) {
-        const rightColumnName = rightColumns.get(normalizedName);
-        if (rightColumnName) {
-          commonColumns.push({
-            normalizedName,
-            leftColumnName,
-            rightColumnName,
-          });
-        }
-      }
-
-      commonColumns.sort((a, b) =>
-        a.normalizedName.localeCompare(b.normalizedName)
-      );
-
-      suggestions.push({
-        leftPredecessorNodeID: left.nodeID,
-        leftPredecessorName: left.nodeName,
-        rightPredecessorNodeID: right.nodeID,
-        rightPredecessorName: right.nodeName,
-        commonColumns,
-      });
-    }
-  }
-
-  return suggestions;
-}
-
-function generateJoinSQL(
-  joinSuggestions: JoinSuggestion[],
-  joinType: "INNER JOIN" | "LEFT JOIN" | "RIGHT JOIN" | "FULL OUTER JOIN" = "INNER JOIN"
-): {
-  fromClause: string;
-  joinClauses: JoinClause[];
-  fullSQL: string;
-} {
-  if (joinSuggestions.length === 0) {
-    return {
-      fromClause: "",
-      joinClauses: [],
-      fullSQL: "",
-    };
-  }
-
-  const firstSuggestion = joinSuggestions[0];
-  const leftTableName = firstSuggestion.leftPredecessorName || "LEFT_TABLE";
-  const leftAlias = `"${leftTableName}"`;
-
-  const fromClause = `FROM ${leftAlias}`;
-  const joinClauses: JoinClause[] = [];
-  const sqlParts: string[] = [fromClause];
-
-  for (const suggestion of joinSuggestions) {
-    const rightTableName = suggestion.rightPredecessorName || "RIGHT_TABLE";
-    const rightAlias = `"${rightTableName}"`;
-
-    const onConditions = suggestion.commonColumns.map(
-      (col) =>
-        `${leftAlias}."${col.leftColumnName}" = ${rightAlias}."${col.rightColumnName}"`
-    );
-
-    const joinClause: JoinClause = {
-      type: joinType,
-      rightTable: rightTableName,
-      rightTableAlias: rightAlias,
-      onConditions,
-    };
-
-    joinClauses.push(joinClause);
-
-    const joinSQL = [
-      `${joinType} ${rightAlias}`,
-      `  ON ${onConditions.join("\n  AND ")}`,
-    ].join("\n");
-
-    sqlParts.push(joinSQL);
-  }
-
-  return {
-    fromClause,
-    joinClauses,
-    fullSQL: sqlParts.join("\n"),
-  };
-}
-
-function inferDatatype(transform: string): string | undefined {
-  const upperTransform = transform.toUpperCase();
-
-  // Date/Time functions - check these FIRST before MIN/MAX
-  if (upperTransform.includes("DATEDIFF(")) return "NUMBER";
-  if (upperTransform.includes("DATEADD(")) return "DATE";
-  if (upperTransform.includes("CURRENT_DATE")) return "DATE";
-  if (upperTransform.includes("CURRENT_TIMESTAMP")) return "TIMESTAMP_NTZ(9)";
-
-  // Aggregate functions
-  if (upperTransform.includes("COUNT(DISTINCT")) return "NUMBER";
-  if (upperTransform.includes("COUNT(")) return "NUMBER";
-  if (upperTransform.includes("SUM(")) return "NUMBER(38,4)";
-  if (upperTransform.includes("AVG(")) return "NUMBER(38,4)";
-  if (upperTransform.includes("STDDEV(")) return "NUMBER(38,4)";
-  if (upperTransform.includes("VARIANCE(")) return "NUMBER(38,4)";
-
-  // MIN/MAX with timestamp/date context
-  if (upperTransform.includes("MIN(") && upperTransform.includes("_TS"))
-    return "TIMESTAMP_NTZ(9)";
-  if (upperTransform.includes("MAX(") && upperTransform.includes("_TS"))
-    return "TIMESTAMP_NTZ(9)";
-  if (upperTransform.includes("MIN(") && upperTransform.includes("_DATE"))
-    return "DATE";
-  if (upperTransform.includes("MAX(") && upperTransform.includes("_DATE"))
-    return "DATE";
-
-  // String functions
-  if (upperTransform.includes("CONCAT(")) return "VARCHAR";
-  if (upperTransform.includes("UPPER(")) return "VARCHAR";
-  if (upperTransform.includes("LOWER(")) return "VARCHAR";
-  if (upperTransform.includes("TRIM(")) return "VARCHAR";
-  if (upperTransform.includes("SUBSTR(")) return "VARCHAR";
-  if (upperTransform.includes("LEFT(")) return "VARCHAR";
-  if (upperTransform.includes("RIGHT(")) return "VARCHAR";
-
-  // Boolean
-  if (upperTransform.includes("CASE")) return "VARCHAR";
-
-  // Window functions
-  if (upperTransform.includes("ROW_NUMBER()")) return "NUMBER";
-  if (upperTransform.includes("RANK()")) return "NUMBER";
-  if (upperTransform.includes("DENSE_RANK()")) return "NUMBER";
-
-  return undefined;
-}
-
-function analyzeColumnsForGroupBy(
-  columns: ColumnTransform[]
-): GroupByAnalysis {
-  const aggregateFunctions = [
-    "COUNT(",
-    "SUM(",
-    "AVG(",
-    "MIN(",
-    "MAX(",
-    "STDDEV(",
-    "VARIANCE(",
-    "LISTAGG(",
-    "ARRAY_AGG(",
-  ];
-
-  const windowFunctions = [
-    "ROW_NUMBER()",
-    "RANK()",
-    "DENSE_RANK()",
-    "LEAD(",
-    "LAG(",
-    "FIRST_VALUE(",
-    "LAST_VALUE(",
-  ];
-
-  const groupByColumns: string[] = [];
-  const aggregateColumns: { name: string; transform: string }[] = [];
-  const errors: string[] = [];
-
-  for (const col of columns) {
-    const upperTransform = col.transform.toUpperCase();
-
-    const isAggregate = aggregateFunctions.some((fn) =>
-      upperTransform.includes(fn)
-    );
-    const isWindow = windowFunctions.some((fn) => upperTransform.includes(fn));
-
-    if (isAggregate || isWindow) {
-      aggregateColumns.push({ name: col.name, transform: col.transform });
-    } else {
-      // This is a non-aggregate column, needs to be in GROUP BY
-      groupByColumns.push(col.transform);
-    }
-  }
-
-  const hasAggregates = aggregateColumns.length > 0;
-
-  // Validation: if we have aggregates, we need GROUP BY for non-aggregate columns
-  let valid = true;
-  if (hasAggregates && groupByColumns.length === 0 && columns.length > 1) {
-    errors.push(
-      "Query has aggregate functions but no GROUP BY columns. All non-aggregate columns must be in GROUP BY."
-    );
-    valid = false;
-  }
-
-  const groupByClause =
-    hasAggregates && groupByColumns.length > 0
-      ? `GROUP BY ${groupByColumns.join(", ")}`
-      : "";
-
-  return {
-    groupByColumns,
-    aggregateColumns,
-    hasAggregates,
-    groupByClause,
-    validation: {
-      valid,
-      errors,
-    },
-  };
-}
 
 export async function updateWorkspaceNode(
   client: CoalesceClient,
@@ -1077,7 +683,7 @@ export async function updateWorkspaceNode(
     changes: Record<string, unknown>;
   }
 ): Promise<unknown> {
-  assertNoSqlOverridePayload(params.changes, "update-workspace-node changes");
+  assertNoSqlOverridePayload(params.changes, "update_workspace_node changes");
 
   const current = await getWorkspaceNode(client, params);
   if (!isPlainObject(current)) {
@@ -1106,9 +712,9 @@ export async function replaceWorkspaceNodeColumns(
   if (params.additionalChanges) {
     assertNoSqlOverridePayload(
       params.additionalChanges,
-      "replace-workspace-node-columns additionalChanges"
+      "replace_workspace_node_columns additionalChanges"
     );
-    // Block sourceMapping in additionalChanges — use apply-join-condition or convert-join-to-aggregation instead
+    // Block sourceMapping in additionalChanges — use apply_join_condition or convert_join_to_aggregation instead
     const additionalMeta = isPlainObject(params.additionalChanges.metadata)
       ? params.additionalChanges.metadata
       : null;
@@ -1150,47 +756,6 @@ export async function replaceWorkspaceNodeColumns(
     nodeID: params.nodeID,
     body: updated,
   });
-}
-
-/**
- * Append a WHERE condition to the existing joinCondition in the first sourceMapping entry.
- * The FROM/JOIN clause from node creation is preserved — only the WHERE is added.
- * If no existing joinCondition exists, creates one with just the WHERE clause.
- */
-function appendWhereToJoinCondition(
-  body: Record<string, unknown>,
-  whereCondition: string
-): void {
-  const metadata = isPlainObject(body.metadata) ? body.metadata : null;
-  if (!metadata) return;
-
-  const sourceMapping = Array.isArray(metadata.sourceMapping) ? metadata.sourceMapping : [];
-  if (sourceMapping.length === 0) return;
-
-  const first = sourceMapping[0];
-  if (!isPlainObject(first)) return;
-
-  const join = isPlainObject(first.join) ? { ...first.join } : {};
-  const existing = typeof join.joinCondition === "string" ? join.joinCondition.trim() : "";
-
-  // Strip backslash-escaped quotes (agents sometimes over-escape: \" → ")
-  const unescaped = whereCondition.replace(/\\"/g, '"');
-  // Normalize: strip leading "WHERE" if the user included it
-  const cleanWhere = unescaped.replace(/^\s*WHERE\s+/i, "").trim();
-  if (!cleanWhere) return;
-
-  if (existing) {
-    // Append WHERE to existing FROM/JOIN clause
-    // Check if existing already has a WHERE — if so, add with AND
-    if (/\bWHERE\b/i.test(existing)) {
-      join.joinCondition = `${existing}\n  AND ${cleanWhere}`;
-    } else {
-      join.joinCondition = `${existing}\nWHERE ${cleanWhere}`;
-    }
-  } else {
-    join.joinCondition = `WHERE ${cleanWhere}`;
-  }
-  first.join = join;
 }
 
 function buildScratchNodeChanges(params: {
@@ -1338,7 +903,7 @@ function buildScratchNodeNextSteps(
   node: Record<string, unknown>
 ): string[] {
   const steps: string[] = [];
-  const family = inferNodeTypeFamily(nodeType);
+  const family = inferFamily([nodeType]);
 
   // Naming convention
   const currentName = typeof node.name === "string" ? node.name : "";
@@ -1399,7 +964,7 @@ export async function createWorkspaceNodeFromScratch(
   const scratchChanges = buildScratchNodeChanges(params);
   assertNoSqlOverridePayload(
     scratchChanges,
-    "create-workspace-node-from-scratch changes"
+    "create_workspace_node_from_scratch changes"
   );
   if (completionLevel === "configured") {
     assertConfiguredScratchInput(scratchChanges);
@@ -1479,47 +1044,21 @@ export async function createWorkspaceNodeFromScratch(
   }
 
   // Automatically complete node configuration using intelligent rules (best-effort)
-  try {
-    const configCompletion = await completeNodeConfiguration(client, {
-      workspaceID: params.workspaceID,
-      nodeID: created.id,
-      repoPath: params.repoPath,
-    });
+  const completion = await tryCompleteNodeConfiguration(client, {
+    workspaceID: params.workspaceID,
+    nodeID: created.id,
+    repoPath: params.repoPath,
+  });
 
-    return {
-      node: configCompletion.node,
-      validation,
-      nextSteps,
-      configCompletion,
-      ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
-    };
-  } catch (error) {
-    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
-      throw error;
-    }
-    const reason = error instanceof Error ? error.message : String(error);
-    return {
-      node: finalNode,
-      validation,
-      nextSteps,
-      configCompletionSkipped: `Config completion failed (${reason}) — call complete_node_configuration with repoPath after creation to apply node type config and column-level attributes.`,
-      ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
-    };
-  }
+  return {
+    node: completion.configCompletion?.node ?? finalNode,
+    validation,
+    nextSteps,
+    ...completion,
+    ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
+  };
 }
 
-function inferNodeTypeFamily(nodeType: string): string {
-  const normalized = nodeType.toLowerCase().replace(/.*:::/, "");
-  if (/dimension|(?:^|[-_])dim(?:$|[-_])/.test(normalized)) return "dimension";
-  if (/fact|(?:^|[-_])fct(?:$|[-_])/.test(normalized)) return "fact";
-  if (/(?:^|[-_])hub(?:$|[-_])/.test(normalized)) return "hub";
-  if (/satellite|(?:^|[-_])sat(?:$|[-_])/.test(normalized)) return "satellite";
-  if (/(?:^|[-_])link(?:$|[-_])/.test(normalized)) return "link";
-  if (/(?:^|[-_])view(?:$|[-_])/.test(normalized)) return "view";
-  if (/(?:^|[-_])work(?:$|[-_])/.test(normalized)) return "work";
-  if (/stage|(?:^|[-_])stg(?:$|[-_])|persistent/.test(normalized)) return "stage";
-  return "stage";
-}
 
 function suggestNamingConvention(family: string): string {
   const conventions: Record<string, string> = {
@@ -1542,7 +1081,7 @@ function buildPostCreationNextSteps(
   node: Record<string, unknown>
 ): string[] {
   const steps: string[] = [];
-  const family = inferNodeTypeFamily(nodeType);
+  const family = inferFamily([nodeType]);
 
   // Naming convention
   const currentName = typeof node.name === "string" ? node.name : "";
@@ -1640,7 +1179,7 @@ export async function createWorkspaceNodeFromPredecessor(
   if (params.changes) {
     assertNoSqlOverridePayload(
       params.changes,
-      "create-workspace-node-from-predecessor changes"
+      "create_workspace_node_from_predecessor changes"
     );
   }
 
@@ -1806,87 +1345,36 @@ export async function createWorkspaceNodeFromPredecessor(
   }
 
   // Automatically complete node configuration using intelligent rules (best-effort)
-  try {
-    const configCompletion = await completeNodeConfiguration(client, {
-      workspaceID: params.workspaceID,
-      nodeID: created.id,
-      repoPath: params.repoPath,
-    });
+  const completion = await tryCompleteNodeConfiguration(client, {
+    workspaceID: params.workspaceID,
+    nodeID: created.id,
+    repoPath: params.repoPath,
+  });
 
-    return {
-      node: configCompletion.node,
-      predecessors: predecessorNodes,
-      joinSuggestions,
-      validation,
-      configCompletion,
-      nextSteps,
-      ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
-    };
-  } catch (error) {
-    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
-      throw error;
-    }
-    // Re-fetch the node after any changes were applied
+  // Re-fetch the node if changes were applied but config completion failed
+  let resultNode: unknown = completion.configCompletion?.node ?? createdNode;
+  if (completion.configCompletionSkipped) {
     const hasChanges = (params.changes && Object.keys(params.changes).length > 0) || params.columns;
-    const latestNode = hasChanges
-      ? await getWorkspaceNode(client, { workspaceID: params.workspaceID, nodeID: created.id })
-      : createdNode;
-
-    const reason = error instanceof Error ? error.message : String(error);
-    return {
-      node: latestNode,
-      predecessors: predecessorNodes,
-      joinSuggestions,
-      validation,
-      configCompletionSkipped: `Config completion failed (${reason}) — call complete_node_configuration with repoPath after creation to apply node type config and column-level attributes.`,
-      nextSteps,
-      ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
-    };
-  }
-}
-
-/**
- * Extract predecessor node IDs from a node's sourceMapping aliases
- * and column-level source references (fallback).
- *
- * In Coalesce, sourceMapping.dependencies[] has nodeName/locationName but NOT nodeID.
- * The nodeID is available in sourceMapping.aliases (name→nodeID map) and in
- * column sources[].columnReferences[].nodeID.
- */
-function extractPredecessorNodeIDs(metadata: Record<string, unknown>): string[] {
-  const sourceMapping = Array.isArray(metadata.sourceMapping)
-    ? metadata.sourceMapping
-    : [];
-
-  const ids = new Set<string>();
-
-  // First: extract from aliases (alias → nodeID map)
-  for (const mapping of sourceMapping) {
-    if (isPlainObject(mapping) && isPlainObject(mapping.aliases)) {
-      for (const nodeID of Object.values(mapping.aliases)) {
-        if (typeof nodeID === "string" && nodeID.length > 0) {
-          ids.add(nodeID);
-        }
+    if (hasChanges) {
+      try {
+        resultNode = await getWorkspaceNode(client, { workspaceID: params.workspaceID, nodeID: created.id });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`[createWorkspaceNodeFromPredecessor] Re-fetch after config completion skip failed: ${reason}\n`);
+        resultNode = createdNode;
       }
     }
   }
 
-  // Second: extract from column-level source references as fallback
-  if (ids.size === 0 && Array.isArray(metadata.columns)) {
-    for (const column of metadata.columns) {
-      if (!isPlainObject(column) || !Array.isArray(column.sources)) continue;
-      for (const source of column.sources) {
-        if (!isPlainObject(source) || !Array.isArray(source.columnReferences)) continue;
-        for (const ref of source.columnReferences) {
-          if (isPlainObject(ref) && typeof ref.nodeID === "string") {
-            ids.add(ref.nodeID);
-          }
-        }
-      }
-    }
-  }
-
-  return Array.from(ids);
+  return {
+    node: resultNode,
+    predecessors: predecessorNodes,
+    joinSuggestions,
+    validation,
+    ...completion,
+    nextSteps,
+    ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
+  };
 }
 
 export async function convertJoinToAggregation(
@@ -2128,146 +1616,22 @@ export async function convertJoinToAggregation(
   }
 
   // Complete configuration with intelligent rules (best-effort)
-  try {
-    const configCompletion = await completeNodeConfiguration(client, {
-      workspaceID: params.workspaceID,
-      nodeID: params.nodeID,
-      repoPath: params.repoPath,
-    });
+  const completion = await tryCompleteNodeConfiguration(client, {
+    workspaceID: params.workspaceID,
+    nodeID: params.nodeID,
+    repoPath: params.repoPath,
+  });
 
-    return {
-      node: configCompletion.node,
-      joinSQL,
-      groupByAnalysis,
-      validation: {
-        valid: groupByAnalysis.validation.valid && warnings.length === 0,
-        warnings,
-      },
-      configCompletion,
-    };
-  } catch (error) {
-    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
-      throw error;
-    }
-    const reason = error instanceof Error ? error.message : String(error);
-    return {
-      node: updated,
-      joinSQL,
-      groupByAnalysis,
-      validation: {
-        valid: groupByAnalysis.validation.valid && warnings.length === 0,
-        warnings,
-      },
-      configCompletionSkipped: `Config completion failed (${reason}) — call complete_node_configuration with repoPath after creation to apply node type config and column-level attributes.`,
-    };
-  }
-}
-
-type PredecessorRefInfo = {
-  nodeID: string;
-  nodeName: string;
-  locationName: string;
-  columnNames: string[];
-};
-
-function extractPredecessorRefInfo(
-  nodeID: string,
-  node: Record<string, unknown>
-): PredecessorRefInfo | null {
-  const nodeName = typeof node.name === "string" ? node.name : null;
-  const locationName = typeof node.locationName === "string" ? node.locationName : null;
-  if (!nodeName || !locationName) return null;
   return {
-    nodeID,
-    nodeName,
-    locationName,
-    columnNames: getNodeColumnNames(node),
+    node: completion.configCompletion?.node ?? updated,
+    joinSQL,
+    groupByAnalysis,
+    validation: {
+      valid: groupByAnalysis.validation.valid && warnings.length === 0,
+      warnings,
+    },
+    ...completion,
   };
-}
-
-function generateRefJoinSQL(
-  predecessors: PredecessorRefInfo[],
-  joinSuggestions: JoinSuggestion[],
-  joinType: "INNER JOIN" | "LEFT JOIN" | "RIGHT JOIN" | "FULL OUTER JOIN",
-  joinColumnOverrides?: Array<{
-    leftPredecessor: string;
-    rightPredecessor: string;
-    leftColumn: string;
-    rightColumn: string;
-  }>
-): {
-  fromClause: string;
-  joinClauses: string[];
-  fullSQL: string;
-  warnings: string[];
-} {
-  if (predecessors.length === 0) {
-    return { fromClause: "", joinClauses: [], fullSQL: "", warnings: [] };
-  }
-
-  const warnings: string[] = [];
-  const primary = predecessors[0];
-  const fromClause = `FROM {{ ref('${primary.locationName}', '${primary.nodeName}') }} "${primary.nodeName}"`;
-  const joinClauses: string[] = [];
-
-  // Build a lookup from nodeID → PredecessorRefInfo
-  const predByID = new Map(predecessors.map((p) => [p.nodeID, p]));
-  const predByName = new Map(predecessors.map((p) => [p.nodeName.toUpperCase(), p]));
-
-  // Track which predecessors got joined
-  const joinedPredecessors = new Set<string>([primary.nodeID]);
-
-  for (const suggestion of joinSuggestions) {
-    const right = predByID.get(suggestion.rightPredecessorNodeID)
-      ?? predByName.get((suggestion.rightPredecessorName ?? "").toUpperCase());
-
-    if (!right) continue;
-    if (joinedPredecessors.has(right.nodeID)) continue; // Already joined — skip duplicate pair
-    joinedPredecessors.add(right.nodeID);
-
-    // Check for explicit overrides for this pair
-    const overridesForPair = joinColumnOverrides?.filter(
-      (o) =>
-        (o.leftPredecessor === suggestion.leftPredecessorName ||
-          o.leftPredecessor === suggestion.leftPredecessorNodeID) &&
-        (o.rightPredecessor === suggestion.rightPredecessorName ||
-          o.rightPredecessor === suggestion.rightPredecessorNodeID)
-    );
-
-    let onConditions: string[];
-    if (overridesForPair && overridesForPair.length > 0) {
-      onConditions = overridesForPair.map(
-        (o) => `"${suggestion.leftPredecessorName}"."${o.leftColumn}" = "${right.nodeName}"."${o.rightColumn}"`
-      );
-    } else if (suggestion.commonColumns.length > 0) {
-      onConditions = suggestion.commonColumns.map(
-        (col) =>
-          `"${suggestion.leftPredecessorName}"."${col.leftColumnName}" = "${right.nodeName}"."${col.rightColumnName}"`
-      );
-    } else {
-      warnings.push(
-        `No common columns between "${suggestion.leftPredecessorName}" and "${right.nodeName}". ` +
-        `Provide joinColumnOverrides to specify the join keys explicitly.`
-      );
-      continue;
-    }
-
-    const clause = `${joinType} {{ ref('${right.locationName}', '${right.nodeName}') }} "${right.nodeName}"\n  ON ${onConditions.join("\n  AND ")}`;
-    joinClauses.push(clause);
-  }
-
-  // Warn about predecessors that weren't joined
-  for (const pred of predecessors) {
-    if (!joinedPredecessors.has(pred.nodeID)) {
-      warnings.push(
-        `Predecessor "${pred.nodeName}" was not included in any join. ` +
-        `It has no common columns with other predecessors. Provide joinColumnOverrides to specify the join keys.`
-      );
-    }
-  }
-
-  const fullSQL = [fromClause, ...joinClauses].join("\n");
-  return { fromClause, joinClauses, fullSQL, warnings };
 }
 
 export async function applyJoinCondition(
@@ -2569,21 +1933,14 @@ export async function createNodeFromExternalSchema(
   // Step 5: Re-run config completion after column reconciliation
   // The inner createWorkspaceNodeFromPredecessor ran config completion before column
   // replacement, so column-level attributes (isBusinessKey, etc.) may be stale.
-  let configCompletion: ConfigCompletionResult | undefined;
-  let configCompletionSkipped: string | undefined;
-  try {
-    configCompletion = await completeNodeConfiguration(client, {
-      workspaceID: params.workspaceID,
-      nodeID,
-      repoPath: params.repoPath,
-    });
+  const completion = await tryCompleteNodeConfiguration(client, {
+    workspaceID: params.workspaceID,
+    nodeID,
+    repoPath: params.repoPath,
+  });
+  const { configCompletion, configCompletionSkipped } = completion;
+  if (configCompletion) {
     updatedNode = configCompletion.node;
-  } catch (error) {
-    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
-      throw error;
-    }
-    const reason = error instanceof Error ? error.message : String(error);
-    configCompletionSkipped = `Config completion failed after column reconciliation (${reason}) — call complete_node_configuration with repoPath to apply node type config and column-level attributes.`;
   }
 
   // Build next steps based on reconciliation

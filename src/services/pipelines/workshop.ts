@@ -1,16 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 import type { CoalesceClient } from "../../client.js";
 import { isPlainObject } from "../../utils.js";
 import { getCacheDir } from "../../cache-dir.js";
 import { listWorkspaceNodes } from "../../coalesce/api/nodes.js";
 import { CoalesceApiError } from "../../client.js";
+import { extractNodeArray } from "../shared/node-helpers.js";
 import { parseIntent, resolveIntentEntities } from "./intent.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export interface WorkshopNode {
+interface WorkshopNodeBase {
   /** Temporary plan ID (before creation) or real node ID (after creation) */
   id: string;
   name: string;
@@ -21,9 +23,11 @@ export interface WorkshopNode {
   filters: string[];
   groupByColumns: string[];
   aggregates: Array<{ column: string; fn: string }>;
-  created: boolean;
-  createdNodeID: string | null;
 }
+
+export type WorkshopNode =
+  | (WorkshopNodeBase & { created: false; createdNodeID: null })
+  | (WorkshopNodeBase & { created: true; createdNodeID: string });
 
 export interface WorkshopSession {
   sessionID: string;
@@ -54,6 +58,30 @@ export interface WorkshopInstructionResult {
   warnings: string[];
 }
 
+const WorkshopNodeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  nodeType: z.string().nullable(),
+  predecessorIDs: z.array(z.string()),
+  columns: z.array(z.string()),
+  joinCondition: z.string().nullable(),
+  filters: z.array(z.string()),
+  groupByColumns: z.array(z.string()),
+  aggregates: z.array(z.object({ column: z.string(), fn: z.string() })),
+  created: z.boolean(),
+  createdNodeID: z.string().nullable(),
+}).passthrough();
+
+const WorkshopSessionSchema = z.object({
+  sessionID: z.string(),
+  workspaceID: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  nodes: z.array(WorkshopNodeSchema),
+  history: z.array(z.object({ instruction: z.string(), timestamp: z.string(), result: z.string() })),
+  resolvedEntities: z.array(z.object({ name: z.string(), nodeID: z.string(), locationName: z.string().nullable() })),
+}).passthrough();
+
 // ── Session persistence ──────────────────────────────────────────────────────
 
 const WORKSHOP_DIR = "workshops";
@@ -65,6 +93,9 @@ function getWorkshopDir(): string {
 function getSessionPath(sessionID: string): string {
   // Sanitize sessionID to prevent path traversal
   const safe = sessionID.replace(/[^a-zA-Z0-9_-]/g, "");
+  if (safe.length === 0) {
+    throw new Error("Invalid sessionID: must contain at least one alphanumeric character.");
+  }
   return join(getWorkshopDir(), `${safe}.json`);
 }
 
@@ -86,11 +117,13 @@ export function loadSession(sessionID: string): WorkshopSession | null {
       `Workshop session file contains invalid JSON — it may be corrupted. Delete it and start a new session.`
     );
   }
-  if (isPlainObject(parsed) && typeof parsed.sessionID === "string") {
-    return parsed as unknown as WorkshopSession;
+  const result = WorkshopSessionSchema.safeParse(parsed);
+  if (result.success) {
+    return result.data as WorkshopSession;
   }
+  const issues = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
   throw new Error(
-    `Workshop session file has invalid structure (missing sessionID). Delete it and start a new session.`
+    `Workshop session file has invalid structure (${issues}). Delete it and start a new session.`
   );
 }
 
@@ -211,7 +244,7 @@ export function workshopClose(sessionID: string): { closed: boolean; message: st
   return {
     closed: true,
     message: uncreated > 0
-      ? `Session closed. ${uncreated} planned node(s) were not created — use pipeline-workshop-apply before closing to create them.`
+      ? `Session closed. ${uncreated} planned node(s) were not created — use build_pipeline_from_intent or plan_pipeline + create_pipeline_from_plan to create them.`
       : "Session closed.",
   };
 }
@@ -417,7 +450,7 @@ async function processInstruction(
     for (const name of unresolvedNames) {
       if (!resolvedEntities.has(name.toUpperCase())) {
         openQuestions.push(
-          `Could not find workspace node matching "${name}". Use list-workspace-nodes to check available nodes.`
+          `Could not find workspace node matching "${name}". Use list_workspace_nodes to check available nodes.`
         );
       }
     }
@@ -489,11 +522,6 @@ async function processInstruction(
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function extractNodeArray(raw: unknown): Array<Record<string, unknown>> {
-  if (Array.isArray(raw)) return raw.filter(isPlainObject);
-  if (isPlainObject(raw) && Array.isArray(raw.data)) return raw.data.filter(isPlainObject);
-  return [];
-}
 
 function resolveEntitiesFromSession(
   session: WorkshopSession,
@@ -570,8 +598,12 @@ function buildInitialJoinCondition(
 
   const e1 = entities[0]!;
   const e2 = entities[1]!;
-  const loc1 = e1.locationName ?? "UNKNOWN_LOCATION";
-  const loc2 = e2.locationName ?? "UNKNOWN_LOCATION";
+  const loc1 = e1.locationName;
+  const loc2 = e2.locationName;
+  if (!loc1 || !loc2) {
+    // Cannot generate a valid {{ ref() }} without location names
+    return null;
+  }
   const joinType = step.joinType ?? "JOIN";
 
   return (
