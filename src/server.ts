@@ -30,6 +30,7 @@ export const SERVER_NAME = "coalesce-transform-mcp";
 export const SERVER_VERSION = version;
 export const SERVER_INSTRUCTIONS = [
   "This server manages Coalesce node definitions, pipelines, and workspace configuration — not live warehouse data. For Snowflake data questions (tables, schemas, row counts, sample data), use a Snowflake-capable tool if available.",
+  "Use create_node_from_external_schema when a node's columns should match an existing warehouse table or external schema. Supply targetColumns from any source — Snowflake metadata, user input, dbt manifests, etc.",
   "Resolve IDs before mutating. Use list_workspaces for workspace IDs, list_environments for environment IDs, list_environment_jobs for job IDs.",
   "Always use plan_pipeline before creating pipeline nodes, and wait for explicit user approval before calling creation tools.",
   "Inspect warning, validation, resultsError, incomplete, timedOut, and cleanupFailures fields before continuing.",

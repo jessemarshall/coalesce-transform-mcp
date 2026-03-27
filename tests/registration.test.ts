@@ -12,7 +12,7 @@ function createMockClient() {
   };
 }
 
-const BASE_TOOL_COUNT = 84;
+const BASE_TOOL_COUNT = 85;
 
 describe("Tool Registration", () => {
   let server: McpServer;

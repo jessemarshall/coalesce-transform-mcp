@@ -141,6 +141,19 @@ export const NodeConfigInputSchema = z
   })
   .passthrough();
 
+export const ExternalColumnSchema = z.object({
+  name: z.string().min(1).describe("Column name as it appears in the external table."),
+  dataType: z.string().min(1).describe("Exact data type from the external system (e.g., NUMBER(38,0), VARCHAR(16777216), TIMESTAMP_NTZ(9))."),
+  nullable: z.boolean().optional().describe("Whether the column is nullable. Defaults to true."),
+  description: z.string().optional().describe("Optional column description."),
+  transform: z
+    .string()
+    .optional()
+    .describe("Optional SQL transform expression. When omitted, the tool auto-maps from a matching predecessor column by name. Columns with no match and no transform are flagged as needing one."),
+});
+
+export type ExternalColumnInput = z.infer<typeof ExternalColumnSchema>;
+
 export const WorkspaceNodeWriteInputSchema = z
   .object({
     id: z.string().optional(),

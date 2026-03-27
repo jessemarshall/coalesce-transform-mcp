@@ -345,6 +345,128 @@ function getNodeDependencyNames(node: Record<string, unknown>): string[] {
   });
 }
 
+import type { ExternalColumnInput } from "../../schemas/node-payloads.js";
+
+type SchemaReconciliationColumn = {
+  name: string;
+  sourceDataType: string | null;
+  targetDataType: string;
+  typeChanged: boolean;
+};
+
+type SchemaReconciliation = {
+  matched: SchemaReconciliationColumn[];
+  added: Array<{ name: string; dataType: string; needsTransform: boolean }>;
+  dropped: Array<{ name: string; reason: string }>;
+  typeChanges: Array<{ name: string; from: string; to: string }>;
+};
+
+/**
+ * Reconcile external target columns against a node's auto-populated columns.
+ *
+ * For each target column:
+ * - If it matches an auto-populated predecessor column by name, the source
+ *   linkage is preserved but the dataType is overridden to match the external schema.
+ * - If it has no match in the predecessor, it is added as a new column
+ *   (flagged as needing a transform unless one was provided).
+ *
+ * Predecessor columns not present in the target list are dropped.
+ */
+function reconcileExternalSchema(
+  autoPopulatedColumns: Record<string, unknown>[],
+  targetColumns: ExternalColumnInput[]
+): { columns: Record<string, unknown>[]; reconciliation: SchemaReconciliation } {
+  // Index auto-populated columns by normalized name
+  const existingByName = new Map<string, Record<string, unknown>>();
+  for (const col of autoPopulatedColumns) {
+    if (isPlainObject(col) && typeof col.name === "string") {
+      existingByName.set(normalizeColumnName(col.name), col);
+    }
+  }
+
+  const targetNameSet = new Set(
+    targetColumns.map((tc) => normalizeColumnName(tc.name))
+  );
+
+  const reconciliation: SchemaReconciliation = {
+    matched: [],
+    added: [],
+    dropped: [],
+    typeChanges: [],
+  };
+
+  // Find dropped columns (in predecessor, not in target)
+  for (const col of autoPopulatedColumns) {
+    if (!isPlainObject(col) || typeof col.name !== "string") continue;
+    if (!targetNameSet.has(normalizeColumnName(col.name))) {
+      reconciliation.dropped.push({
+        name: col.name,
+        reason: "not in target schema",
+      });
+    }
+  }
+
+  // Build reconciled column list in target column order
+  const reconciledColumns: Record<string, unknown>[] = [];
+
+  for (const target of targetColumns) {
+    const normalizedName = normalizeColumnName(target.name);
+    const existing = existingByName.get(normalizedName);
+
+    if (existing) {
+      // Matched — preserve source linkage, override dataType
+      const sourceDataType = typeof existing.dataType === "string" ? existing.dataType : null;
+      const typeChanged = sourceDataType !== null && normalizeDataType(sourceDataType) !== normalizeDataType(target.dataType);
+
+      const reconciledCol: Record<string, unknown> = {
+        ...structuredClone(existing),
+        name: target.name,
+        dataType: target.dataType,
+        nullable: target.nullable ?? true,
+        description: target.description ?? (typeof existing.description === "string" ? existing.description : ""),
+      };
+
+      if (target.transform) {
+        reconciledCol.transform = target.transform;
+      }
+
+      reconciledColumns.push(reconciledCol);
+
+      reconciliation.matched.push({
+        name: target.name,
+        sourceDataType,
+        targetDataType: target.dataType,
+        typeChanged,
+      });
+
+    } else {
+      // New column — no predecessor match
+      const needsTransform = !target.transform;
+
+      reconciledColumns.push({
+        name: target.name,
+        dataType: target.dataType,
+        nullable: target.nullable ?? true,
+        description: target.description ?? "",
+        ...(target.transform ? { transform: target.transform } : {}),
+      });
+
+      reconciliation.added.push({
+        name: target.name,
+        dataType: target.dataType,
+        needsTransform,
+      });
+    }
+  }
+
+  // Derive typeChanges from matched entries to avoid dual-update maintenance
+  reconciliation.typeChanges = reconciliation.matched
+    .filter((m) => m.typeChanged && m.sourceDataType !== null)
+    .map((m) => ({ name: m.name, from: m.sourceDataType!, to: m.targetDataType }));
+
+  return { columns: reconciledColumns, reconciliation };
+}
+
 function getReferencedPredecessorNodeIDs(
   node: Record<string, unknown>,
   predecessorNodeIDs: string[]
@@ -378,6 +500,10 @@ function getReferencedPredecessorNodeIDs(
 
 function normalizeColumnName(name: string): string {
   return name.trim().toUpperCase();
+}
+
+function normalizeDataType(dt: string): string {
+  return dt.trim().toUpperCase();
 }
 
 function buildPredecessorSummary(
@@ -2343,5 +2469,155 @@ export async function listWorkspaceNodeTypes(
     nodeTypes,
     counts,
     total
+  };
+}
+
+/**
+ * Create a workspace node whose output columns match an external table schema
+ * (e.g., from Snowflake, dbt, or any metadata source).
+ *
+ * Workflow:
+ * 1. Create node from predecessor (auto-populates columns from source)
+ * 2. Reconcile auto-populated columns against the target external schema:
+ *    - Matched columns: preserve source linkage, override dataType to match external
+ *    - New columns: add without source linkage, flag as needing a transform
+ *    - Missing columns: drop (not in external schema)
+ * 3. Replace columns on the created node with the reconciled set
+ * 4. Return node + reconciliation report
+ */
+export async function createNodeFromExternalSchema(
+  client: CoalesceClient,
+  params: {
+    workspaceID: string;
+    nodeType: string;
+    predecessorNodeIDs: string[];
+    targetColumns: ExternalColumnInput[];
+    targetName?: string;
+    repoPath?: string;
+    goal?: string;
+    locationName?: string;
+  }
+): Promise<unknown> {
+  if (!params.targetColumns.length) {
+    throw new Error("targetColumns must contain at least one column.");
+  }
+
+  // Build changes for name and location if provided
+  const changes: Record<string, unknown> = {};
+  if (params.targetName) {
+    changes.name = params.targetName;
+  }
+  if (params.locationName) {
+    changes.locationName = params.locationName;
+  }
+
+  // Step 1: Create node from predecessor — this auto-populates columns
+  const creationResult = await createWorkspaceNodeFromPredecessor(client, {
+    workspaceID: params.workspaceID,
+    nodeType: params.nodeType,
+    predecessorNodeIDs: params.predecessorNodeIDs,
+    repoPath: params.repoPath,
+    goal: params.goal,
+    ...(Object.keys(changes).length > 0 ? { changes } : {}),
+  }) as Record<string, unknown>;
+
+  // Extract the created node
+  const createdNode = isPlainObject(creationResult.node) ? creationResult.node : null;
+  if (!createdNode || typeof createdNode.id !== "string") {
+    throw new Error("Node creation did not return a valid node.");
+  }
+
+  // Step 2: Get the auto-populated columns from the created node
+  const nodeID = createdNode.id as string;
+  const metadata = isPlainObject(createdNode.metadata) ? createdNode.metadata : null;
+  const autoPopulatedColumns = Array.isArray(metadata?.columns)
+    ? (metadata.columns as Record<string, unknown>[])
+    : [];
+
+  if (autoPopulatedColumns.length === 0) {
+    throw new Error(
+      `Node was created (nodeID: ${nodeID}) but has no auto-populated columns. ` +
+      `Reconciliation cannot preserve source linkage. ` +
+      `Verify the predecessor node(s) have columns and try again, or use create_workspace_node_from_predecessor directly.`
+    );
+  }
+
+  // Step 3: Reconcile external schema against auto-populated columns
+  const { columns: reconciledColumns, reconciliation } = reconcileExternalSchema(
+    autoPopulatedColumns,
+    params.targetColumns
+  );
+
+  // Step 4: Replace columns on the node with the reconciled set
+  let updatedNode: unknown;
+  try {
+    updatedNode = await replaceWorkspaceNodeColumns(client, {
+      workspaceID: params.workspaceID,
+      nodeID,
+      columns: reconciledColumns,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Column reconciliation failed after node was created (nodeID: ${nodeID}). ` +
+      `The node exists in the workspace with un-reconciled columns. ` +
+      `Either delete it with delete_workspace_node or retry column replacement with replace_workspace_node_columns. ` +
+      `Original error: ${message}`
+    );
+  }
+
+  // Step 5: Re-run config completion after column reconciliation
+  // The inner createWorkspaceNodeFromPredecessor ran config completion before column
+  // replacement, so column-level attributes (isBusinessKey, etc.) may be stale.
+  let configCompletion: ConfigCompletionResult | undefined;
+  let configCompletionSkipped: string | undefined;
+  try {
+    configCompletion = await completeNodeConfiguration(client, {
+      workspaceID: params.workspaceID,
+      nodeID,
+      repoPath: params.repoPath,
+    });
+    updatedNode = configCompletion.node;
+  } catch (error) {
+    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
+      throw error;
+    }
+    const reason = error instanceof Error ? error.message : String(error);
+    configCompletionSkipped = `Config completion failed after column reconciliation (${reason}) — call complete_node_configuration with repoPath to apply node type config and column-level attributes.`;
+  }
+
+  // Build next steps based on reconciliation
+  const nextSteps: string[] = [];
+  const unmappedNames = reconciliation.added
+    .filter((a) => a.needsTransform)
+    .map((a) => a.name);
+  if (unmappedNames.length > 0) {
+    nextSteps.push(
+      `Add transforms for unmapped columns: ${unmappedNames.join(", ")}. ` +
+      `These columns exist in the target schema but have no matching predecessor column.`
+    );
+  }
+  if (reconciliation.typeChanges.length > 0) {
+    nextSteps.push(
+      `Review type changes: ${reconciliation.typeChanges.map((tc) => `${tc.name} (${tc.from} → ${tc.to})`).join(", ")}. ` +
+      `The target schema uses different types than the predecessor — verify transforms handle the conversion.`
+    );
+  }
+  if (reconciliation.dropped.length > 0) {
+    nextSteps.push(
+      `Dropped ${reconciliation.dropped.length} predecessor column(s) not in target schema: ${reconciliation.dropped.map((d) => d.name).join(", ")}.`
+    );
+  }
+  nextSteps.push("Verify the node: call get_workspace_node to confirm columns, config, and join condition are correct.");
+
+  return {
+    node: updatedNode,
+    reconciliation,
+    predecessors: creationResult.predecessors,
+    validation: creationResult.validation,
+    ...(configCompletion ? { configCompletion } : {}),
+    ...(configCompletionSkipped ? { configCompletionSkipped } : {}),
+    ...(creationResult.nodeTypeValidation ? { nodeTypeValidation: creationResult.nodeTypeValidation } : {}),
+    nextSteps,
   };
 }

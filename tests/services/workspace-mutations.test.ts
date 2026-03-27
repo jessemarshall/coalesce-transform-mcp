@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   createWorkspaceNodeFromScratch,
   createWorkspaceNodeFromPredecessor,
+  createNodeFromExternalSchema,
   buildUpdatedWorkspaceNodeBody,
   applyJoinCondition,
   convertJoinToAggregation,
@@ -962,5 +963,281 @@ describe("createWorkspaceNodeFromPredecessor single-call workflow", () => {
         whereCondition: "COL1 IS NOT NULL",
       })
     ).rejects.toThrow("'whereCondition' cannot be combined with");
+  });
+});
+
+describe("createNodeFromExternalSchema", () => {
+  function buildPredecessorNode(nodeID: string, name: string, columns: Array<{ name: string; dataType: string }>) {
+    return {
+      id: nodeID,
+      name,
+      nodeType: "Source",
+      locationName: "SRC",
+      config: {},
+      metadata: {
+        columns: columns.map((col) => ({
+          name: col.name,
+          dataType: col.dataType,
+          columnID: `col-${col.name.toLowerCase()}`,
+          nullable: true,
+          description: "",
+          sources: [{ columnReferences: [{ nodeID }], transform: "" }],
+          columnReference: { stepCounter: nodeID, columnCounter: `col-${col.name.toLowerCase()}` },
+        })),
+        sourceMapping: [
+          {
+            name,
+            dependencies: [{ locationName: "SRC", nodeName: name }],
+            aliases: { [name]: nodeID },
+            join: { joinCondition: `FROM {{ ref('SRC', '${name}') }}` },
+          },
+        ],
+      },
+    };
+  }
+
+  function buildCreatedNode(predNode: ReturnType<typeof buildPredecessorNode>, newID: string) {
+    return {
+      id: newID,
+      name: predNode.name,
+      nodeType: "Stage",
+      table: predNode.name,
+      overrideSQL: false,
+      config: {},
+      materializationType: "table",
+      metadata: {
+        columns: predNode.metadata.columns.map((col: any) => ({
+          ...col,
+          columnID: `new-${col.name.toLowerCase()}`,
+          sources: [{ columnReferences: [{ nodeID: predNode.id }], transform: "" }],
+        })),
+        sourceMapping: [
+          {
+            name: predNode.name,
+            dependencies: [{ locationName: "SRC", nodeName: predNode.name }],
+            aliases: { [predNode.name]: predNode.id },
+            join: { joinCondition: `FROM {{ ref('SRC', '${predNode.name}') }} "${predNode.name}"` },
+          },
+        ],
+      },
+    };
+  }
+
+  function setupMockClient(predNode: ReturnType<typeof buildPredecessorNode>, createdNode: ReturnType<typeof buildCreatedNode>) {
+    const client = createMockClient();
+    client.post.mockResolvedValue({ id: createdNode.id });
+    client.get.mockImplementation((path: string) => {
+      if (path.includes(`/nodes/${predNode.id}`)) return Promise.resolve(predNode);
+      if (path.includes(`/nodes/${createdNode.id}`)) return Promise.resolve(createdNode);
+      if (path.endsWith("/nodes")) return Promise.resolve({ data: [{ nodeType: "Stage" }, { nodeType: "Source" }] });
+      return Promise.resolve({ data: [] });
+    });
+    client.put.mockImplementation(() => Promise.resolve(createdNode));
+    return client;
+  }
+
+  it("reconciles matched columns, preserving source linkage and overriding dataType", async () => {
+    const pred = buildPredecessorNode("pred-1", "ORDER_HEADER", [
+      { name: "ORDER_ID", dataType: "NUMBER(38,0)" },
+      { name: "TRUCK_ID", dataType: "NUMBER(38,0)" },
+      { name: "ORDER_TS", dataType: "TIMESTAMP_NTZ(9)" },
+      { name: "LOADTIME", dataType: "TIMESTAMP_LTZ(9)" },
+    ]);
+    const created = buildCreatedNode(pred, "new-node");
+    const client = setupMockClient(pred, created);
+
+    const result = await createNodeFromExternalSchema(client as any, {
+      workspaceID: "ws-1",
+      nodeType: "Stage",
+      predecessorNodeIDs: ["pred-1"],
+      targetColumns: [
+        { name: "ORDER_ID", dataType: "NUMBER(38,0)" },
+        { name: "TRUCK_ID", dataType: "NUMBER(38,0)" },
+        { name: "ORDER_TS", dataType: "TIMESTAMP_NTZ(9)" },
+      ],
+      targetName: "STG_ORDER_HEADER",
+    }) as any;
+
+    expect(result).toHaveProperty("node");
+    expect(result).toHaveProperty("reconciliation");
+
+    const recon = result.reconciliation;
+    // 3 columns matched (ORDER_ID, TRUCK_ID, ORDER_TS)
+    expect(recon.matched).toHaveLength(3);
+    // LOADTIME dropped (not in target)
+    expect(recon.dropped).toHaveLength(1);
+    expect(recon.dropped[0].name).toBe("LOADTIME");
+    // No added columns
+    expect(recon.added).toHaveLength(0);
+
+    // Verify PUT was called to replace columns (once for changes from createWorkspaceNodeFromPredecessor + once for column replacement)
+    expect(client.put).toHaveBeenCalled();
+  });
+
+  it("adds new columns that have no predecessor match and flags them as needing transform", async () => {
+    const pred = buildPredecessorNode("pred-1", "ORDER_HEADER", [
+      { name: "ORDER_ID", dataType: "NUMBER(38,0)" },
+    ]);
+    const created = buildCreatedNode(pred, "new-node");
+    const client = setupMockClient(pred, created);
+
+    const result = await createNodeFromExternalSchema(client as any, {
+      workspaceID: "ws-1",
+      nodeType: "Stage",
+      predecessorNodeIDs: ["pred-1"],
+      targetColumns: [
+        { name: "ORDER_ID", dataType: "NUMBER(38,0)" },
+        { name: "PRIMARY_KEY", dataType: "VARCHAR(16777216)" },
+        { name: "ORDER_DATE", dataType: "VARCHAR(16777216)" },
+      ],
+    }) as any;
+
+    const recon = result.reconciliation;
+    expect(recon.matched).toHaveLength(1);
+    expect(recon.added).toHaveLength(2);
+    expect(recon.added[0].name).toBe("PRIMARY_KEY");
+    expect(recon.added[0].needsTransform).toBe(true);
+    expect(recon.added[1].name).toBe("ORDER_DATE");
+    expect(recon.added[1].needsTransform).toBe(true);
+  });
+
+  it("does not flag added columns as needing transform when transform is provided", async () => {
+    const pred = buildPredecessorNode("pred-1", "ORDER_HEADER", [
+      { name: "ORDER_ID", dataType: "NUMBER(38,0)" },
+    ]);
+    const created = buildCreatedNode(pred, "new-node");
+    const client = setupMockClient(pred, created);
+
+    const result = await createNodeFromExternalSchema(client as any, {
+      workspaceID: "ws-1",
+      nodeType: "Stage",
+      predecessorNodeIDs: ["pred-1"],
+      targetColumns: [
+        { name: "ORDER_ID", dataType: "NUMBER(38,0)" },
+        { name: "ORDER_DATE", dataType: "DATE", transform: "TO_DATE(\"ORDER_HEADER\".\"ORDER_TS\")" },
+      ],
+    }) as any;
+
+    const recon = result.reconciliation;
+    expect(recon.added).toHaveLength(1);
+    expect(recon.added[0].name).toBe("ORDER_DATE");
+    expect(recon.added[0].needsTransform).toBe(false);
+  });
+
+  it("detects type changes between predecessor and target schema", async () => {
+    const pred = buildPredecessorNode("pred-1", "ORDER_HEADER", [
+      { name: "ORDER_TAX_AMOUNT", dataType: "VARCHAR(16777216)" },
+      { name: "ORDER_DATE", dataType: "TIMESTAMP_NTZ(9)" },
+    ]);
+    const created = buildCreatedNode(pred, "new-node");
+    const client = setupMockClient(pred, created);
+
+    const result = await createNodeFromExternalSchema(client as any, {
+      workspaceID: "ws-1",
+      nodeType: "Stage",
+      predecessorNodeIDs: ["pred-1"],
+      targetColumns: [
+        { name: "ORDER_TAX_AMOUNT", dataType: "NUMBER(38,4)" },
+        { name: "ORDER_DATE", dataType: "VARCHAR(16777216)" },
+      ],
+    }) as any;
+
+    const recon = result.reconciliation;
+    expect(recon.typeChanges).toHaveLength(2);
+    expect(recon.typeChanges[0]).toEqual({
+      name: "ORDER_TAX_AMOUNT",
+      from: "VARCHAR(16777216)",
+      to: "NUMBER(38,4)",
+    });
+    expect(recon.typeChanges[1]).toEqual({
+      name: "ORDER_DATE",
+      from: "TIMESTAMP_NTZ(9)",
+      to: "VARCHAR(16777216)",
+    });
+  });
+
+  it("rejects empty targetColumns", async () => {
+    const client = createMockClient();
+
+    await expect(
+      createNodeFromExternalSchema(client as any, {
+        workspaceID: "ws-1",
+        nodeType: "Stage",
+        predecessorNodeIDs: ["pred-1"],
+        targetColumns: [],
+      })
+    ).rejects.toThrow("targetColumns must contain at least one column");
+  });
+
+  it("matches columns case-insensitively", async () => {
+    const pred = buildPredecessorNode("pred-1", "ORDER_HEADER", [
+      { name: "ORDER_ID", dataType: "NUMBER(38,0)" },
+      { name: "TRUCK_ID", dataType: "NUMBER(38,0)" },
+    ]);
+    const created = buildCreatedNode(pred, "new-node");
+    const client = setupMockClient(pred, created);
+
+    const result = await createNodeFromExternalSchema(client as any, {
+      workspaceID: "ws-1",
+      nodeType: "Stage",
+      predecessorNodeIDs: ["pred-1"],
+      targetColumns: [
+        { name: "order_id", dataType: "NUMBER(38,0)" },
+        { name: "Truck_Id", dataType: "NUMBER(38,0)" },
+      ],
+    }) as any;
+
+    const recon = result.reconciliation;
+    expect(recon.matched).toHaveLength(2);
+    expect(recon.added).toHaveLength(0);
+    expect(recon.matched[0].name).toBe("order_id");
+    expect(recon.matched[1].name).toBe("Truck_Id");
+  });
+
+  it("throws when auto-populated columns are empty", async () => {
+    const pred = buildPredecessorNode("pred-1", "ORDER_HEADER", [
+      { name: "ORDER_ID", dataType: "NUMBER(38,0)" },
+    ]);
+    // Created node has no columns — simulates auto-population failure
+    const created = {
+      ...buildCreatedNode(pred, "new-node"),
+      metadata: { columns: [], sourceMapping: [] },
+    };
+    const client = setupMockClient(pred, created);
+
+    await expect(
+      createNodeFromExternalSchema(client as any, {
+        workspaceID: "ws-1",
+        nodeType: "Stage",
+        predecessorNodeIDs: ["pred-1"],
+        targetColumns: [
+          { name: "ORDER_ID", dataType: "NUMBER(38,0)" },
+        ],
+      })
+    ).rejects.toThrow("no auto-populated columns");
+  });
+
+  it("includes nextSteps for unmapped columns", async () => {
+    const pred = buildPredecessorNode("pred-1", "ORDER_HEADER", [
+      { name: "ORDER_ID", dataType: "NUMBER(38,0)" },
+    ]);
+    const created = buildCreatedNode(pred, "new-node");
+    const client = setupMockClient(pred, created);
+
+    const result = await createNodeFromExternalSchema(client as any, {
+      workspaceID: "ws-1",
+      nodeType: "Stage",
+      predecessorNodeIDs: ["pred-1"],
+      targetColumns: [
+        { name: "ORDER_ID", dataType: "NUMBER(38,0)" },
+        { name: "PRIMARY_KEY", dataType: "VARCHAR(16777216)" },
+      ],
+    }) as any;
+
+    expect(result.nextSteps).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("PRIMARY_KEY"),
+      ])
+    );
   });
 });

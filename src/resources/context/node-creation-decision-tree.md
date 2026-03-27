@@ -71,6 +71,48 @@ When creating from predecessor, columns are **auto-populated** with proper sourc
 
 If the user's SQL has 10 columns but only 3 have transforms, create the node first (columns auto-populate), then use `replace_workspace_node_columns` to add the 3 transformed columns plus any new derived columns. This preserves source linkage for all passthrough columns.
 
+### If the node should match an existing external table (Snowflake, dbt, etc.)
+
+Use `create_node_from_external_schema` when the user wants a node whose columns match an existing table in the warehouse (or any external metadata source).
+
+**Cross-MCP workflow:** This tool requires external column metadata as input. If a Snowflake-capable tool is available (e.g., Cortex MCP, Snowflake MCP), query it first to get the table's column definitions, then pass them as `targetColumns`:
+
+```javascript
+// Step 1: Query Snowflake for column metadata
+//   → cortex_query("DESCRIBE TABLE db.schema.table") or equivalent
+
+// Step 2: Plan the node type
+plan_pipeline({ workspaceID, goal, sourceNodeIDs })
+
+// Step 3: Create with external schema
+create_node_from_external_schema({
+  workspaceID,
+  nodeType: "base-nodes:::Stage",  // from plan_pipeline
+  predecessorNodeIDs: ["source-node-id"],
+  targetName: "STG_ORDER_HEADER",
+  targetColumns: [
+    { name: "ORDER_ID", dataType: "NUMBER(38,0)" },
+    { name: "PRIMARY_KEY", dataType: "VARCHAR(16777216)" },
+    // ... from Snowflake DESCRIBE result
+  ]
+})
+```
+
+The tool automatically:
+
+- Creates the node from predecessor (auto-populates columns)
+- Reconciles auto-populated columns against the external schema
+- Matches columns by name, preserving source linkage
+- Adds new columns not found in the predecessor (flagged as needing transforms)
+- Drops predecessor columns not in the target schema
+- Returns a `reconciliation` report showing exactly what was matched, added, dropped, and which types changed
+
+Good fit:
+
+- Reverse-engineering existing Snowflake tables into Coalesce nodes
+- Ensuring a new node matches a dbt model's output schema
+- Rebuilding a pipeline layer to match a changed external table structure
+
 ### If the user provides SQL to convert
 
 - prefer `plan_pipeline` with the user's SQL to preview the plan first

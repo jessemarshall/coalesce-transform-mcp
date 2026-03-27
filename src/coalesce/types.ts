@@ -356,6 +356,7 @@ const WORKSPACE_NODE_MUTATION_TOOL_NAMES = new Set([
   "convert_join_to_aggregation",
   "apply_join_condition",
   "create_workspace_node_from_predecessor",
+  "create_node_from_external_schema",
   "delete_workspace_node",
   "complete_node_configuration",
 ]);

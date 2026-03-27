@@ -15,6 +15,7 @@ import {
   replaceWorkspaceNodeColumns,
   createWorkspaceNodeFromScratch,
   createWorkspaceNodeFromPredecessor,
+  createNodeFromExternalSchema,
   convertJoinToAggregation,
   applyJoinCondition,
   listWorkspaceNodeTypes,
@@ -26,6 +27,7 @@ import { fetchAllWorkspaceNodes, toNodeSummaries } from "../services/cache/snaps
 import {
   NodeConfigInputSchema,
   StorageLocationInputSchema,
+  ExternalColumnSchema,
   WorkspaceNodeColumnInputSchema,
   WorkspaceNodeMetadataInputSchema,
   WorkspaceNodeWriteInputSchema,
@@ -458,6 +460,53 @@ export function registerNodeTools(
       try {
         const result = await createWorkspaceNodeFromPredecessor(client, params);
         return buildJsonToolResponse("create_workspace_node_from_predecessor", result);
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.registerTool(
+    "create_node_from_external_schema",
+    {
+      title: "Create Node from External Schema",
+      description:
+        "Create a workspace node whose output columns match an external table schema (e.g., from Snowflake DESCRIBE TABLE, dbt manifest, or any metadata source).\n\nThis tool automates the workflow of:\n1. Creating a node from predecessor(s) (auto-populates columns from source)\n2. Reconciling auto-populated columns against the external target schema\n3. Replacing columns to match the external schema exactly\n\nReconciliation logic:\n- Matched columns (by name): Preserves source linkage from predecessor, overrides dataType to match external schema\n- New columns (in target but not predecessor): Added without source mapping, flagged as needing a transform\n- Dropped columns (in predecessor but not target): Removed from the node\n\nThe response includes a `reconciliation` object showing exactly what was matched, added, dropped, and which types changed.\n\nREQUIRED: Call `plan_pipeline` first to discover the correct nodeType.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - nodeType (string, required): Node type from plan_pipeline\n  - predecessorNodeIDs (string[], required): One or more predecessor node IDs\n  - targetColumns (array, required): External column definitions to match\n  - targetName (string, optional): Name for the new node (e.g., 'STG_ORDER_HEADER')\n  - locationName (string, optional): Storage location name\n  - repoPath (string, optional): Local repo path for config completion\n  - goal (string, optional): Intent for node type validation\n\nReturns:\n  { node, reconciliation: { matched, added, dropped, typeChanges }, predecessors, validation, configCompletion?, configCompletionSkipped?, nodeTypeValidation?, nextSteps }",
+      inputSchema: z.object({
+        workspaceID: z.string().describe("The workspace ID"),
+        nodeType: z.string().describe("The type of node to create. Call plan_pipeline first to discover and rank available node types."),
+        predecessorNodeIDs: z
+          .array(z.string())
+          .min(1)
+          .describe("One or more predecessor node IDs to link to the new node"),
+        targetColumns: z
+          .array(ExternalColumnSchema)
+          .min(1)
+          .describe("External column definitions describing the target table schema. Each column specifies name, dataType, and optionally nullable, description, and transform."),
+        targetName: z
+          .string()
+          .optional()
+          .describe("Name for the new node (e.g., 'STG_ORDER_HEADER'). If omitted, uses the auto-generated name from Coalesce."),
+        locationName: z
+          .string()
+          .optional()
+          .describe("Storage location name for the new node."),
+        repoPath: z
+          .string()
+          .optional()
+          .describe("Path to local Coalesce repository for automatic config completion."),
+        goal: z
+          .string()
+          .optional()
+          .describe("The goal or intent for this node. Used to validate the chosen nodeType."),
+      }),
+      outputSchema: getToolOutputSchema("create_node_from_external_schema"),
+      annotations: WRITE_ANNOTATIONS,
+    },
+    async (params) => {
+      try {
+        const result = await createNodeFromExternalSchema(client, params);
+        return buildJsonToolResponse("create_node_from_external_schema", result);
       } catch (error) {
         return handleToolError(error);
       }
