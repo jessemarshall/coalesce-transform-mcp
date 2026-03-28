@@ -27,7 +27,7 @@ export function registerProjectTools(
     {
       title: "List Projects",
       description:
-        "List all Coalesce projects. For workspace IDs, prefer list_workspaces instead of includeWorkspaces.\n\nArgs:\n  - includeWorkspaces (boolean, optional): Include nested workspace data\n  - includeJobs (boolean, optional): Include nested job data for all workspaces\n\nReturns:\n  { data: Project[], next?: string, total?: number }",
+        "List all Coalesce projects.\n\nArgs:\n  - includeWorkspaces (boolean, optional): Include nested workspace data\n  - includeJobs (boolean, optional): Include nested job data for all workspaces\n\nReturns:\n  { data: Project[], next?: string, total?: number }",
       inputSchema: z.object({
         includeWorkspaces: z.boolean().optional().describe("Include nested workspace data with workspace IDs"),
         includeJobs: z.boolean().optional().describe("Include nested job data for all workspaces"),
@@ -50,7 +50,7 @@ export function registerProjectTools(
     {
       title: "Get Project",
       description:
-        "Get details of a specific Coalesce project. For workspace IDs, prefer list_workspaces instead of includeWorkspaces.\n\nArgs:\n  - projectID (string, required): The project ID\n  - includeWorkspaces (boolean, optional): Include nested workspace data\n  - includeJobs (boolean, optional): Include nested job data\n\nReturns:\n  Full project object with ID, name, description, git configuration.",
+        "Get details of a specific Coalesce project.\n\nArgs:\n  - projectID (string, required): The project ID\n  - includeWorkspaces (boolean, optional): Include nested workspace data\n  - includeJobs (boolean, optional): Include nested job data\n\nReturns:\n  Full project object with ID, name, description, git configuration.",
       inputSchema: z.object({
         projectID: z.string().describe("The project ID"),
         includeWorkspaces: z.boolean().optional().describe("Include nested workspace data with workspace IDs"),

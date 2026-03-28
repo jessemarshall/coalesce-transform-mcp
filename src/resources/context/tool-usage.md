@@ -16,7 +16,7 @@
 ### Find Projects and Workspaces
 
 - `list_projects` or `get_project` to discover project structure
-- For workspace IDs: `list_workspaces()` for all workspaces, or `get_project({ projectID, includeWorkspaces: true })` for project-scoped
+- For workspace IDs: `list_workspaces()` for all workspaces (returns workspaces with their `projectID`), or `get_project({ projectID, includeWorkspaces: true })` for project-scoped
 - For broader ID resolution guidance, see `coalesce://context/id-discovery`
 
 ### List vs Get

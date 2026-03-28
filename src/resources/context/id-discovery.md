@@ -15,8 +15,8 @@ Prefer list/get discovery tools over guessing IDs from URLs or names.
 
 ### Workspace IDs
 
-- Use `list_workspaces()` to get all workspaces across projects.
-- Use `list_workspaces({ projectID })` to get workspaces for a specific project.
+- Use `list_workspaces()` to get all workspaces across projects (each workspace includes its `projectID`).
+- Use `get_project({ projectID, includeWorkspaces: true })` to get workspaces for a specific project.
 
 ### Job IDs
 

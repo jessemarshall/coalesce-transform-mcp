@@ -3,7 +3,6 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
 import { listWorkspaces, getWorkspace } from "../coalesce/api/workspaces.js";
 import {
-  PaginationParams,
   buildJsonToolResponse,
   handleToolError,
   getToolOutputSchema,
@@ -19,14 +18,14 @@ export function registerWorkspaceTools(
     {
       title: "List Workspaces",
       description:
-        "List all Coalesce workspaces with optional pagination.\n\nReturns workspace IDs needed by node, job, and subgraph tools. Prefer this over list_projects with includeWorkspaces when you only need workspace-level data.\n\nArgs:\n  - limit (number, optional): Max results per page\n  - startingFrom (string, optional): Pagination cursor\n  - orderBy (string, optional): Sort field\n  - orderByDirection ('asc'|'desc', optional): Sort direction\n\nReturns:\n  { data: Workspace[], next?: string, total?: number }",
-      inputSchema: PaginationParams,
+        "List all Coalesce workspaces.\n\nReturns workspace IDs needed by node, job, and subgraph tools. Each workspace includes its projectID.\n\nReturns:\n  { data: Workspace[] }",
+      inputSchema: z.object({}),
       outputSchema: getToolOutputSchema("list_workspaces"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
-    async (params) => {
+    async () => {
       try {
-        const result = await listWorkspaces(client, params);
+        const result = await listWorkspaces(client);
         return buildJsonToolResponse("list_workspaces", result);
       } catch (error) {
         return handleToolError(error);
