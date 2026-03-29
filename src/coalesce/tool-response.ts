@@ -169,6 +169,12 @@ function buildInlineJsonResponse(
 
 function normalizeStructuredContent(result: unknown): Record<string, unknown> {
   if (isPlainObject(result)) {
+    // The Coalesce API may return `next` as a number (page index), but the
+    // MCP output schema declares it as a string.  Coerce here so the SDK's
+    // server-side structuredContent validation doesn't reject the response.
+    if ("next" in result && typeof result.next === "number") {
+      return { ...result, next: String(result.next) };
+    }
     return result;
   }
   return { value: result ?? null };
@@ -226,10 +232,10 @@ export function buildJsonToolResponse(
       "Full response was automatically cached to disk because it exceeded the inline response threshold.",
   };
 
-  // Omit structuredContent for auto-cached responses: the cache metadata shape
-  // does not match the tool's declared output schema, so including it would
-  // violate the MCP output contract.  Clients still receive the cache metadata
-  // as text content and can follow the resourceUri to fetch the full payload.
+  // Include structuredContent from the metadata so tools with an outputSchema
+  // pass the MCP SDK's server-side validation (which requires structuredContent
+  // when outputSchema is defined).  All output schemas use .passthrough() so
+  // the cache-metadata keys are accepted alongside any expected fields.
   return {
     content: [
       {
@@ -238,6 +244,7 @@ export function buildJsonToolResponse(
       },
       ...(cacheLink ? [cacheLink] : []),
     ],
+    structuredContent: metadata,
   };
 }
 

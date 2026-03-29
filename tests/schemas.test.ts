@@ -261,6 +261,20 @@ describe("buildJsonToolResponse", () => {
     });
   });
 
+  it("coerces numeric next to string in structuredContent", () => {
+    const result = buildJsonToolResponse(
+      "list_environments",
+      { data: [{ id: "env-1" }], next: 2, total: 5 },
+      { maxInlineBytes: 4096 }
+    );
+
+    expect(result.structuredContent).toEqual({
+      data: [{ id: "env-1" }],
+      next: "2",
+      total: 5,
+    });
+  });
+
   it("replaces cache file paths with MCP resource URIs in inline payloads", () => {
     const baseDir = mkdtempSync(join(tmpdir(), "coalesce-inline-cache-schema-"));
     tempDirs.push(baseDir);
@@ -350,9 +364,9 @@ describe("buildJsonToolResponse", () => {
       type: "resource_link",
       uri: metadata.resourceUri,
     });
-    // structuredContent is intentionally omitted for auto-cached responses
-    // because cache metadata does not match the tool's declared output schema
-    expect(result.structuredContent).toBeUndefined();
+    // structuredContent contains the cache metadata so tools with an
+    // outputSchema pass the MCP SDK's server-side validation
+    expect(result.structuredContent).toEqual(metadata);
   });
 });
 
