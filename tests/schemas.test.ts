@@ -261,6 +261,20 @@ describe("buildJsonToolResponse", () => {
     });
   });
 
+  it("coerces numeric next to string in structuredContent", () => {
+    const result = buildJsonToolResponse(
+      "list_environments",
+      { data: [{ id: "env-1" }], next: 2, total: 5 },
+      { maxInlineBytes: 4096 }
+    );
+
+    expect(result.structuredContent).toEqual({
+      data: [{ id: "env-1" }],
+      next: "2",
+      total: 5,
+    });
+  });
+
   it("replaces cache file paths with MCP resource URIs in inline payloads", () => {
     const baseDir = mkdtempSync(join(tmpdir(), "coalesce-inline-cache-schema-"));
     tempDirs.push(baseDir);

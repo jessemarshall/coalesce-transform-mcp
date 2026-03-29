@@ -169,6 +169,12 @@ function buildInlineJsonResponse(
 
 function normalizeStructuredContent(result: unknown): Record<string, unknown> {
   if (isPlainObject(result)) {
+    // The Coalesce API may return `next` as a number (page index), but the
+    // MCP output schema declares it as a string.  Coerce here so the SDK's
+    // server-side structuredContent validation doesn't reject the response.
+    if ("next" in result && typeof result.next === "number") {
+      return { ...result, next: String(result.next) };
+    }
     return result;
   }
   return { value: result ?? null };
