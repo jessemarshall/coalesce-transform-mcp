@@ -156,6 +156,28 @@ function externalizeCachePaths(
   return output;
 }
 
+/**
+ * Coerce pagination fields so text content and structuredContent stay
+ * consistent and match the MCP output schema.  The Coalesce API may return
+ * `next` as a number (page index) and `next`/`total` as null — normalise
+ * both before any serialisation path consumes the result.
+ */
+function coerceListPaginationFields(result: unknown): unknown {
+  if (!isPlainObject(result)) return result;
+  const patched: Record<string, unknown> = { ...result };
+  if ("next" in result) {
+    if (typeof result.next === "number") {
+      patched.next = String(result.next);
+    } else if (result.next === null || result.next === undefined) {
+      delete patched.next;
+    }
+  }
+  if ("total" in result && (result.total === null || result.total === undefined)) {
+    delete patched.total;
+  }
+  return patched;
+}
+
 function buildInlineJsonResponse(
   result: unknown,
   resourceLinks: CacheResourceLink[]
@@ -169,12 +191,6 @@ function buildInlineJsonResponse(
 
 function normalizeStructuredContent(result: unknown): Record<string, unknown> {
   if (isPlainObject(result)) {
-    // The Coalesce API may return `next` as a number (page index), but the
-    // MCP output schema declares it as a string.  Coerce here so the SDK's
-    // server-side structuredContent validation doesn't reject the response.
-    if ("next" in result && typeof result.next === "number") {
-      return { ...result, next: String(result.next) };
-    }
     return result;
   }
   return { value: result ?? null };
@@ -186,8 +202,9 @@ export function buildJsonToolResponse(
   options: JsonToolResponseOptions = {}
 ): JsonToolResponse {
   const baseDir = options.baseDir ?? process.cwd();
+  const coerced = coerceListPaginationFields(result);
   const resourceLinks = new Map<string, CacheResourceLink>();
-  const externalizedResult = externalizeCachePaths(result, baseDir, resourceLinks);
+  const externalizedResult = externalizeCachePaths(coerced, baseDir, resourceLinks);
   const text = JSON.stringify(externalizedResult, null, 2);
   const maxInlineBytes = options.maxInlineBytes ?? getAutoCacheMaxBytes();
   const sizeBytes = Buffer.byteLength(text, "utf8");
@@ -234,8 +251,8 @@ export function buildJsonToolResponse(
 
   // Include structuredContent from the metadata so tools with an outputSchema
   // pass the MCP SDK's server-side validation (which requires structuredContent
-  // when outputSchema is defined).  All output schemas use .passthrough() so
-  // the cache-metadata keys are accepted alongside any expected fields.
+  // when outputSchema is defined).  All output schemas MUST use .passthrough()
+  // and all fields MUST be .optional() so cache metadata passes validation.
   return {
     content: [
       {

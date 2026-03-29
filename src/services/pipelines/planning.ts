@@ -1141,7 +1141,9 @@ async function listAllWorkspaceNodes(
     const responseNext =
       typeof response.next === "string" && response.next.trim().length > 0
         ? response.next
-        : undefined;
+        : typeof response.next === "number"
+          ? String(response.next)
+          : undefined;
     if (responseNext) {
       if (seenCursors.has(responseNext)) {
         throw new Error(`Workspace node pagination repeated cursor ${responseNext}`);

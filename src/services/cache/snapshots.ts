@@ -47,7 +47,9 @@ function parseCollectionPage(response: unknown): CollectionPage {
     next:
       typeof response.next === "string" && response.next.trim().length > 0
         ? response.next
-        : undefined,
+        : typeof response.next === "number"
+          ? String(response.next)
+          : undefined,
   };
 }
 

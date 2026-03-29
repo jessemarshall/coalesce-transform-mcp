@@ -261,18 +261,47 @@ describe("buildJsonToolResponse", () => {
     });
   });
 
-  it("coerces numeric next to string in structuredContent", () => {
+  it("coerces numeric next to string in both text and structuredContent", () => {
     const result = buildJsonToolResponse(
       "list_environments",
       { data: [{ id: "env-1" }], next: 2, total: 5 },
       { maxInlineBytes: 4096 }
     );
 
-    expect(result.structuredContent).toEqual({
-      data: [{ id: "env-1" }],
-      next: "2",
-      total: 5,
-    });
+    const expected = { data: [{ id: "env-1" }], next: "2", total: 5 };
+    expect(result.structuredContent).toEqual(expected);
+    expect(JSON.parse(result.content[0]!.text)).toEqual(expected);
+  });
+
+  it("preserves string next unchanged", () => {
+    const result = buildJsonToolResponse(
+      "list_environments",
+      { data: [], next: "abc-cursor", total: 3 },
+      { maxInlineBytes: 4096 }
+    );
+
+    expect(result.structuredContent).toEqual({ data: [], next: "abc-cursor", total: 3 });
+  });
+
+  it("strips null next and null total from response", () => {
+    const result = buildJsonToolResponse(
+      "list_runs",
+      { data: [], next: null, total: null },
+      { maxInlineBytes: 4096 }
+    );
+
+    expect(result.structuredContent).toEqual({ data: [] });
+    expect(JSON.parse(result.content[0]!.text)).toEqual({ data: [] });
+  });
+
+  it("coerces next: 0 to string '0'", () => {
+    const result = buildJsonToolResponse(
+      "list_environments",
+      { data: [], next: 0, total: 10 },
+      { maxInlineBytes: 4096 }
+    );
+
+    expect(result.structuredContent).toEqual({ data: [], next: "0", total: 10 });
   });
 
   it("replaces cache file paths with MCP resource URIs in inline payloads", () => {

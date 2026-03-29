@@ -12,8 +12,8 @@ export type JsonToolError = z.infer<typeof JsonToolErrorSchema>;
 
 const ListToolOutputSchema = z.object({
   data: z.array(z.unknown()).optional(),
-  next: z.string().nullable().optional(),
-  total: z.number().nullable().optional(),
+  next: z.string().optional(),
+  total: z.number().optional(),
 }).passthrough();
 
 const EntityToolOutputSchema = z.object({
@@ -35,21 +35,21 @@ const WorkspaceNodeMutationOutputSchema = z.object({
 }).passthrough();
 
 const WorkspaceAnalysisOutputSchema = z.object({
-  workspaceID: z.string(),
-  analyzedAt: z.string(),
-  nodeCount: z.number(),
-  packageAdoption: JsonObjectSchema,
-  layerPatterns: JsonObjectSchema,
-  methodology: z.string(),
-  recommendations: JsonObjectSchema,
+  workspaceID: z.string().optional(),
+  analyzedAt: z.string().optional(),
+  nodeCount: z.number().optional(),
+  packageAdoption: JsonObjectSchema.optional(),
+  layerPatterns: JsonObjectSchema.optional(),
+  methodology: z.string().optional(),
+  recommendations: JsonObjectSchema.optional(),
 }).passthrough();
 
 const WorkspaceNodeTypesOutputSchema = z.object({
-  workspaceID: z.string(),
-  basis: z.literal("observed_nodes"),
-  nodeTypes: z.array(z.string()),
-  counts: z.record(z.number()),
-  total: z.number(),
+  workspaceID: z.string().optional(),
+  basis: z.literal("observed_nodes").optional(),
+  nodeTypes: z.array(z.string()).optional(),
+  counts: z.record(z.number()).optional(),
+  total: z.number().optional(),
 }).passthrough();
 
 const RunSchedulerOutputSchema = z.object({
@@ -59,8 +59,8 @@ const RunSchedulerOutputSchema = z.object({
 }).passthrough();
 
 const RunDetailsOutputSchema = z.object({
-  run: z.unknown(),
-  results: z.unknown(),
+  run: z.unknown().optional(),
+  results: z.unknown().optional(),
   resultsError: JsonToolErrorSchema.optional(),
 }).passthrough();
 
@@ -73,8 +73,8 @@ const RunWaitOutputSchema = z.object({
 }).passthrough();
 
 const EnvironmentOverviewOutputSchema = z.object({
-  environment: z.unknown(),
-  nodes: z.array(z.unknown()),
+  environment: z.unknown().optional(),
+  nodes: z.array(z.unknown()).optional(),
 }).passthrough();
 
 const CacheArtifactOutputSchema = z.object({
@@ -104,37 +104,37 @@ const CacheArtifactOutputSchema = z.object({
 }).passthrough();
 
 const ClearCacheOutputSchema = z.object({
-  deleted: z.boolean(),
+  deleted: z.boolean().optional(),
   fileCount: z.number().optional(),
   totalBytes: z.number().optional(),
   sizeMB: z.string().optional(),
-  message: z.string(),
+  message: z.string().optional(),
 }).passthrough();
 
 const RepoPackagesOutputSchema = z.object({
-  summary: JsonObjectSchema,
-  packages: z.array(JsonObjectSchema),
+  summary: JsonObjectSchema.optional(),
+  packages: z.array(JsonObjectSchema).optional(),
 }).passthrough();
 
 const RepoNodeTypesOutputSchema = z.object({
-  summary: JsonObjectSchema,
-  nodeTypes: z.array(JsonObjectSchema),
+  summary: JsonObjectSchema.optional(),
+  nodeTypes: z.array(JsonObjectSchema).optional(),
 }).passthrough();
 
 const RepoNodeTypeDefinitionOutputSchema = z.object({
-  repoPath: z.string(),
-  resolvedRepoPath: z.string(),
-  repoWarnings: z.array(z.string()),
-  requestedNodeType: z.string(),
-  resolvedNodeType: z.string(),
-  resolution: JsonObjectSchema,
-  outerDefinition: JsonObjectSchema,
+  repoPath: z.string().optional(),
+  resolvedRepoPath: z.string().optional(),
+  repoWarnings: z.array(z.string()).optional(),
+  requestedNodeType: z.string().optional(),
+  resolvedNodeType: z.string().optional(),
+  resolution: JsonObjectSchema.optional(),
+  outerDefinition: JsonObjectSchema.optional(),
   nodeMetadataSpecYaml: z.string().nullable().optional(),
-  nodeDefinition: z.unknown(),
+  nodeDefinition: z.unknown().optional(),
   parseError: z.string().nullable().optional(),
-  filePaths: JsonObjectSchema,
-  usageSummary: JsonObjectSchema,
-  warnings: z.array(z.string()),
+  filePaths: JsonObjectSchema.optional(),
+  usageSummary: JsonObjectSchema.optional(),
+  warnings: z.array(z.string()).optional(),
 }).passthrough();
 
 const WorkspaceNodeTemplateOutputSchema = z.object({
