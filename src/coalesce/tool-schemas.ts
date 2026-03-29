@@ -12,7 +12,7 @@ export type JsonToolError = z.infer<typeof JsonToolErrorSchema>;
 
 const ListToolOutputSchema = z.object({
   data: z.array(z.unknown()).optional(),
-  next: z.string().optional(),
+  next: z.union([z.string(), z.number()]).optional(),
   total: z.number().optional(),
 }).passthrough();
 
