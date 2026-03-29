@@ -350,9 +350,9 @@ describe("buildJsonToolResponse", () => {
       type: "resource_link",
       uri: metadata.resourceUri,
     });
-    // structuredContent is intentionally omitted for auto-cached responses
-    // because cache metadata does not match the tool's declared output schema
-    expect(result.structuredContent).toBeUndefined();
+    // structuredContent contains the cache metadata so tools with an
+    // outputSchema pass the MCP SDK's server-side validation
+    expect(result.structuredContent).toEqual(metadata);
   });
 });
 
