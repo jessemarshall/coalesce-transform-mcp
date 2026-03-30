@@ -12,8 +12,8 @@ export type JsonToolError = z.infer<typeof JsonToolErrorSchema>;
 
 const ListToolOutputSchema = z.object({
   data: z.array(z.unknown()).optional(),
-  next: z.union([z.string(), z.number()]).optional(),
-  total: z.number().optional(),
+  next: z.union([z.string(), z.number(), z.null()]).optional(),
+  total: z.union([z.number(), z.null()]).optional(),
 }).passthrough();
 
 const EntityToolOutputSchema = z.object({

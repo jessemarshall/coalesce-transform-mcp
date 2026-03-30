@@ -110,7 +110,7 @@ describe("MCP Protocol Surface", () => {
           data: expect.objectContaining({
             type: "array",
           }),
-          next: expect.objectContaining({ type: ["string", "number"] }),
+          next: expect.objectContaining({ type: ["string", "number", "null"] }),
         }),
       });
 
