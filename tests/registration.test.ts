@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { InMemoryTaskStore, InMemoryTaskMessageQueue } from "../src/tasks/store.js";
 import { registerServerSurface } from "../src/server.js";
 
 function createMockClient() {
@@ -12,14 +13,23 @@ function createMockClient() {
   };
 }
 
-const BASE_TOOL_COUNT = 85;
+// 82 via registerTool + 3 via registerToolTask (start_run, run_and_wait, retry_and_wait)
+const REGISTER_TOOL_COUNT = 82;
+const TASK_TOOL_NAMES = ["start_run", "run_and_wait", "retry_and_wait"];
 
 describe("Tool Registration", () => {
   let server: McpServer;
   let toolSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    server = new McpServer({ name: "test", version: "0.0.1" });
+    server = new McpServer(
+      { name: "test", version: "0.0.1" },
+      {
+        capabilities: { tasks: { requests: { tools: { call: {} } } } },
+        taskStore: new InMemoryTaskStore(),
+        taskMessageQueue: new InMemoryTaskMessageQueue(),
+      }
+    );
     toolSpy = vi.spyOn(server, "registerTool");
   });
 
@@ -31,7 +41,14 @@ describe("Tool Registration", () => {
       (call: unknown[]) => call[0] as string
     );
 
-    expect(toolSpy).toHaveBeenCalledTimes(BASE_TOOL_COUNT);
+    expect(toolSpy).toHaveBeenCalledTimes(REGISTER_TOOL_COUNT);
+
+    // Task-based tools registered via registerToolTask (not counted by registerTool spy)
+    const registeredTools = (server as any)._registeredTools;
+    const allToolNames = Object.keys(registeredTools);
+    for (const name of TASK_TOOL_NAMES) {
+      expect(allToolNames).toContain(name);
+    }
 
     // Core tools present
     expect(toolNames).toContain("list_workspaces");
@@ -51,9 +68,7 @@ describe("Tool Registration", () => {
     expect(toolNames).toContain("plan_pipeline");
     expect(toolNames).toContain("create_pipeline_from_plan");
     expect(toolNames).toContain("build_pipeline_from_intent");
-    expect(toolNames).toContain("start_run");
     expect(toolNames).toContain("cancel_run");
-    expect(toolNames).toContain("run_and_wait");
     expect(toolNames).toContain("get_run_details");
     expect(toolNames).toContain("delete_project");
     expect(toolNames).toContain("set_org_role");
