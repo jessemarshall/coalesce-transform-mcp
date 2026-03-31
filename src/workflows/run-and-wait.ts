@@ -12,6 +12,7 @@ import {
 } from "../coalesce/types.js";
 import {
   createWorkflowProgressReporter,
+  isAbortError,
   remainingTimeMs,
   serializeResultsError,
   sleepWithAbort,
@@ -47,6 +48,7 @@ export async function runAndWait(
   const body = buildStartRunBody(params);
   const startResult = (await client.post("/scheduler/startRun", body, undefined, {
     timeoutMs: remainingTimeMs(startedAt, timeout),
+    signal,
   })) as Record<string, unknown>;
   if (typeof startResult.runCounter !== "number") {
     throw new Error(
@@ -77,7 +79,7 @@ export async function runAndWait(
         {
           runCounter,
         },
-        { timeoutMs: statusTimeoutMs }
+        { timeoutMs: statusTimeoutMs, signal }
       )) as Record<string, unknown>;
     } catch (error) {
       if (error instanceof CoalesceApiError && error.status === 408) {
@@ -122,11 +124,14 @@ export async function runAndWait(
         const results = await client.get(
           `/api/v1/runs/${runCounter}/results`,
           undefined,
-          { timeoutMs: resultsTimeoutMs }
+          { timeoutMs: resultsTimeoutMs, signal }
         );
         await reportProgress?.(`Fetched results for run ${runCounter}.`);
         return { status, results };
       } catch (error) {
+        if (isAbortError(error)) {
+          throw error;
+        }
         const serializedError = serializeResultsError(error);
         await reportProgress?.(
           `Run ${runCounter} finished, but fetching results failed: ${serializedError.message}.`
@@ -151,7 +156,7 @@ export async function runAndWait(
         {
           runCounter,
         },
-        { timeoutMs: finalStatusTimeoutMs }
+        { timeoutMs: finalStatusTimeoutMs, signal }
       );
     } catch (error) {
       if (!(error instanceof CoalesceApiError && error.status === 408)) {

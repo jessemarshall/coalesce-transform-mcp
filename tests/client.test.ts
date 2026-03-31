@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { validateConfig, createClient } from "../src/client.js";
+import { validatePathSegment } from "../src/coalesce/types.js";
 
 describe("CoalesceClient", () => {
   const originalEnv = process.env;
@@ -37,6 +38,17 @@ describe("CoalesceClient", () => {
       process.env.COALESCE_BASE_URL = "https://app.coalescesoftware.io/";
       const config = validateConfig();
       expect(config.baseUrl).toBe("https://app.coalescesoftware.io");
+    });
+  });
+
+  describe("validatePathSegment", () => {
+    it("rejects query and fragment delimiters", () => {
+      expect(() => validatePathSegment("abc?x=1", "runID")).toThrow("URI delimiters");
+      expect(() => validatePathSegment("abc#frag", "runID")).toThrow("URI delimiters");
+    });
+
+    it("rejects percent signs used for encoded path tricks", () => {
+      expect(() => validatePathSegment("abc%2Fdef", "runID")).toThrow("URI delimiters");
     });
   });
 
@@ -594,6 +606,74 @@ describe("CoalesceClient", () => {
       });
       await vi.advanceTimersByTimeAsync(50);
 
+      await request;
+    });
+
+    it("allows per-request timeouts to exceed the client default", async () => {
+      vi.useFakeTimers();
+      let abortCount = 0;
+      const mockFetch = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+        return new Promise((_, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            abortCount += 1;
+            const error = new Error("aborted");
+            error.name = "AbortError";
+            reject(error);
+          });
+        });
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+        requestTimeoutMs: 50,
+      });
+
+      const request = expect(
+        client.get("/api/v1/environments", undefined, { timeoutMs: 200 })
+      ).rejects.toMatchObject({
+        message: "Coalesce API request timed out after 200ms",
+        status: 408,
+      });
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(abortCount).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(150);
+      expect(abortCount).toBe(1);
+
+      await request;
+    });
+
+    it("propagates cancellation when the external signal aborts", async () => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const mockFetch = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+        return new Promise((_, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            const error = new Error("aborted");
+            error.name = "AbortError";
+            reject(error);
+          });
+        });
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const client = createClient({
+        accessToken: "test-token",
+        baseUrl: "https://app.coalescesoftware.io",
+      });
+
+      const request = expect(
+        client.get("/api/v1/environments", undefined, { signal: controller.signal })
+      ).rejects.toMatchObject({
+        message: "Request was cancelled",
+        name: "AbortError",
+      });
+
+      controller.abort();
+      await vi.runAllTimersAsync();
       await request;
     });
   });
