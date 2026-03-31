@@ -16,12 +16,15 @@ import { registerWorkspaceTools } from "./mcp/workspaces.js";
 import { registerCacheTools } from "./mcp/cache.js";
 import { registerWorkshopTools } from "./mcp/workshop.js";
 
-import { registerRunAndWait } from "./workflows/run-and-wait.js";
-import { registerRetryAndWait } from "./workflows/retry-and-wait.js";
 import { registerGetRunDetails } from "./workflows/get-run-details.js";
 import { registerGetEnvironmentOverview } from "./workflows/get-environment-overview.js";
 import { registerResources } from "./resources/index.js";
 import { registerPrompts } from "./prompts/index.js";
+import {
+  registerTaskTools,
+  InMemoryTaskStore,
+  InMemoryTaskMessageQueue,
+} from "./tasks/index.js";
 
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json") as { version: string };
@@ -42,7 +45,7 @@ export function registerServerSurface(server: McpServer, client: CoalesceClient)
   registerEnvironmentTools(server, client);
   registerNodeTools(server, client);
   registerPipelineTools(server, client);
-  registerRunTools(server, client);
+  registerRunTools(server, client, { skipStartRun: true });
   registerProjectTools(server, client);
   registerGitAccountTools(server, client);
   registerUserTools(server, client);
@@ -54,15 +57,17 @@ export function registerServerSurface(server: McpServer, client: CoalesceClient)
   registerCacheTools(server, client);
   registerWorkshopTools(server, client);
 
-  registerRunAndWait(server, client);
-  registerRetryAndWait(server, client);
   registerGetRunDetails(server, client);
   registerGetEnvironmentOverview(server, client);
+  registerTaskTools(server, client);
   registerResources(server);
   registerPrompts(server);
 }
 
 export function createCoalesceMcpServer(client: CoalesceClient): McpServer {
+  const taskStore = new InMemoryTaskStore();
+  const taskMessageQueue = new InMemoryTaskMessageQueue();
+
   const server = new McpServer(
     {
       name: SERVER_NAME,
@@ -70,6 +75,17 @@ export function createCoalesceMcpServer(client: CoalesceClient): McpServer {
     },
     {
       instructions: SERVER_INSTRUCTIONS,
+      capabilities: {
+        tasks: {
+          requests: {
+            tools: {
+              call: {},
+            },
+          },
+        },
+      },
+      taskStore,
+      taskMessageQueue,
     }
   );
 

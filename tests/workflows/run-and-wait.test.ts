@@ -191,6 +191,42 @@ describe("run-and-wait workflow", () => {
     expect(result).toBeDefined();
   });
 
+  it("aborts an in-flight status request when the workflow signal is cancelled", async () => {
+    const client = createMockClient();
+    const controller = new AbortController();
+
+    client.get.mockImplementation((path: string, _params: unknown, options?: { signal?: AbortSignal }) => {
+      if (path === "/scheduler/runStatus") {
+        return new Promise((_, reject) => {
+          options?.signal?.addEventListener("abort", () => {
+            const error = new Error("Request was cancelled");
+            error.name = "AbortError";
+            reject(error);
+          });
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    const promise = runAndWait(client as any, {
+      runDetails: { environmentID: "env-1", jobID: "job-1" },
+      pollInterval: 5,
+    }, {
+      signal: controller.signal,
+    });
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(client.get).toHaveBeenCalledWith(
+      "/scheduler/runStatus",
+      { runCounter: 0 },
+      expect.objectContaining({ signal: controller.signal })
+    );
+
+    controller.abort();
+
+    await expect(promise).rejects.toThrow("Request was cancelled");
+  });
+
   it("returns { status, results } when run completes with status 'completed'", async () => {
     const client = createMockClient();
     const statusData = {

@@ -127,9 +127,14 @@ export function validatePathSegment(value: string, name: string): string {
   if (value.length === 0) {
     throw new Error(`Invalid ${name}: must not be empty`);
   }
-  if (/[\/\\]|\.\./.test(value)) {
+  if (/[\u0000-\u001F\u007F]/.test(value)) {
     throw new Error(
-      `Invalid ${name}: must not contain path separators or '..'`
+      `Invalid ${name}: must not contain control characters`
+    );
+  }
+  if (/[\/\\?#%]|\.\./.test(value)) {
+    throw new Error(
+      `Invalid ${name}: must not contain path separators, '..', or URI delimiters like '?', '#', or '%'`
     );
   }
   return value;
