@@ -12,7 +12,6 @@ import {
 } from "../coalesce/types.js";
 import {
   createWorkflowProgressReporter,
-  isAbortError,
   remainingTimeMs,
   throwIfAborted,
   type WorkflowProgressExtra,
