@@ -6,6 +6,7 @@ export interface ClientConfig {
 
 export interface RequestOptions {
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
@@ -73,6 +74,12 @@ function retryDelayMs(attempt: number, retryAfterMs?: number): number {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createAbortError(): Error {
+  const error = new Error("Request was cancelled");
+  error.name = "AbortError";
+  return error;
 }
 
 function shouldRetryRateLimit(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"): boolean {
@@ -180,10 +187,10 @@ export function createClient(config: ClientConfig) {
     if (options?.timeoutMs === undefined) {
       return defaultRequestTimeoutMs;
     }
-    return Math.max(
-      1,
-      Math.min(defaultRequestTimeoutMs, Math.floor(options.timeoutMs))
-    );
+    if (!Number.isFinite(options.timeoutMs)) {
+      return defaultRequestTimeoutMs;
+    }
+    return Math.max(1, Math.floor(options.timeoutMs));
   }
 
   async function requestOnce(
@@ -212,9 +219,19 @@ export function createClient(config: ClientConfig) {
       }
     }
 
+    if (options?.signal?.aborted) {
+      throw createAbortError();
+    }
+
     const controller = new AbortController();
+    const requestSignal = options?.signal;
     const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
     timeoutHandle.unref?.();
+    const forwardAbort = () => controller.abort();
+
+    if (requestSignal) {
+      requestSignal.addEventListener("abort", forwardAbort, { once: true });
+    }
 
     try {
       const response = await fetch(buildUrl(path, params), {
@@ -227,6 +244,9 @@ export function createClient(config: ClientConfig) {
     } catch (error) {
       if (error instanceof CoalesceApiError) {
         throw error;
+      }
+      if (requestSignal?.aborted) {
+        throw createAbortError();
       }
       if (error instanceof Error && error.name === "AbortError") {
         throw new CoalesceApiError(
@@ -241,6 +261,7 @@ export function createClient(config: ClientConfig) {
         error instanceof Error ? { message: error.message } : error
       );
     } finally {
+      requestSignal?.removeEventListener("abort", forwardAbort);
       clearTimeout(timeoutHandle);
     }
   }

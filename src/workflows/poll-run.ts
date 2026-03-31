@@ -42,7 +42,7 @@ export async function pollRunToCompletion(opts: PollRunOptions): Promise<unknown
       status = (await client.get(
         "/scheduler/runStatus",
         { runCounter },
-        { timeoutMs: statusTimeoutMs }
+        { timeoutMs: statusTimeoutMs, signal }
       )) as Record<string, unknown>;
     } catch (error) {
       if (error instanceof CoalesceApiError && error.status === 408) {
@@ -86,7 +86,7 @@ export async function pollRunToCompletion(opts: PollRunOptions): Promise<unknown
         const results = await client.get(
           `/api/v1/runs/${runCounter}/results`,
           undefined,
-          { timeoutMs: resultsTimeoutMs }
+          { timeoutMs: resultsTimeoutMs, signal }
         );
         await reportProgress?.(`Fetched results for ${label} ${runCounter}.`);
         return { status, results };
@@ -113,7 +113,7 @@ export async function pollRunToCompletion(opts: PollRunOptions): Promise<unknown
       finalStatus = await client.get(
         "/scheduler/runStatus",
         { runCounter },
-        { timeoutMs: finalStatusTimeoutMs }
+        { timeoutMs: finalStatusTimeoutMs, signal }
       );
     } catch (error) {
       if (!(error instanceof CoalesceApiError && error.status === 408)) {

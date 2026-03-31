@@ -26,7 +26,8 @@ import {
 
 export function registerRunTools(
   server: McpServer,
-  client: CoalesceClient
+  client: CoalesceClient,
+  options?: { skipStartRun?: boolean }
 ): void {
   server.registerTool(
     "list_runs",
@@ -97,25 +98,27 @@ export function registerRunTools(
     }
   );
 
-  server.registerTool(
-    "start_run",
-    {
-      title: "Start Run",
-      description:
-        "Start a new Coalesce refresh run. Requires Snowflake Key Pair auth — credentials are read from SNOWFLAKE_USERNAME, SNOWFLAKE_KEY_PAIR_KEY, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_ROLE environment variables.\n\nRequires a numeric environmentID and optionally a jobID. If the user provides a job name, look up the ID with list_environment_jobs first.\n\nArgs:\n  - runDetails.environmentID (string, required): Target environment\n  - runDetails.jobID (string, optional): Specific job to run\n  - runDetails.includeNodesSelector (string, optional): Node filter for ad-hoc runs\n  - runDetails.excludeNodesSelector (string, optional): Node exclusion filter\n  - runDetails.parallelism (number, optional): Max parallel nodes (default: 16)\n  - runDetails.forceIgnoreWorkspaceStatus (boolean, optional): Allow run even if last deploy failed\n  - confirmRunAllNodes (boolean): Required when no job/node scope is provided\n  - parameters (object, optional): Key-value runtime parameters\n\nReturns:\n  { runCounter: number, runStatus: string, message: string }\n\nPrefer run_and_wait when you need the final outcome in a single call.",
-      inputSchema: StartRunParams,
-      outputSchema: getToolOutputSchema("start_run"),
-      annotations: WRITE_ANNOTATIONS,
-    },
-    async (params) => {
-      try {
-        const result = await startRun(client, params);
-        return buildJsonToolResponse("start_run", sanitizeResponse(result));
-      } catch (error) {
-        return handleToolError(error);
+  if (!options?.skipStartRun) {
+    server.registerTool(
+      "start_run",
+      {
+        title: "Start Run",
+        description:
+          "Start a new Coalesce refresh run. Requires Snowflake Key Pair auth — credentials are read from SNOWFLAKE_USERNAME, SNOWFLAKE_KEY_PAIR_KEY, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_ROLE environment variables.\n\nRequires a numeric environmentID and optionally a jobID. If the user provides a job name, look up the ID with list_environment_jobs first.\n\nArgs:\n  - runDetails.environmentID (string, required): Target environment\n  - runDetails.jobID (string, optional): Specific job to run\n  - runDetails.includeNodesSelector (string, optional): Node filter for ad-hoc runs\n  - runDetails.excludeNodesSelector (string, optional): Node exclusion filter\n  - runDetails.parallelism (number, optional): Max parallel nodes (default: 16)\n  - runDetails.forceIgnoreWorkspaceStatus (boolean, optional): Allow run even if last deploy failed\n  - confirmRunAllNodes (boolean): Required when no job/node scope is provided\n  - parameters (object, optional): Key-value runtime parameters\n\nReturns:\n  { runCounter: number, runStatus: string, message: string }\n\nPrefer run_and_wait when you need the final outcome in a single call.",
+        inputSchema: StartRunParams,
+        outputSchema: getToolOutputSchema("start_run"),
+        annotations: WRITE_ANNOTATIONS,
+      },
+      async (params) => {
+        try {
+          const result = await startRun(client, params);
+          return buildJsonToolResponse("start_run", sanitizeResponse(result));
+        } catch (error) {
+          return handleToolError(error);
+        }
       }
-    }
-  );
+    );
+  }
 
   server.registerTool(
     "run_status",

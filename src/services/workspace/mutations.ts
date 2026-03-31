@@ -659,7 +659,7 @@ function validateNodeTypeMaterializationCompatibility(
     return; // Skip validation if either field is missing or invalid type
   }
 
-  const normalizedNodeType = nodeType.toLowerCase();
+  const normalizedNodeType = nodeType.trim().toLowerCase().replace(/.*:::/, "");
   const normalizedMaterialization = materializationType.toLowerCase();
 
   // View nodes can ONLY be materialized as views

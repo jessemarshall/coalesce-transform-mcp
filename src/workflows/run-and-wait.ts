@@ -12,6 +12,7 @@ import {
 } from "../coalesce/types.js";
 import {
   createWorkflowProgressReporter,
+  isAbortError,
   remainingTimeMs,
   throwIfAborted,
   type WorkflowProgressExtra,
@@ -41,6 +42,7 @@ export async function runAndWait(
   const body = buildStartRunBody(params);
   const startResult = (await client.post("/scheduler/startRun", body, undefined, {
     timeoutMs: remainingTimeMs(startedAt, timeoutMs),
+    signal,
   })) as Record<string, unknown>;
   if (typeof startResult.runCounter !== "number") {
     throw new Error(

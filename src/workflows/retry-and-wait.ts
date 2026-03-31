@@ -12,6 +12,7 @@ import {
 } from "../coalesce/types.js";
 import {
   createWorkflowProgressReporter,
+  isAbortError,
   remainingTimeMs,
   throwIfAborted,
   type WorkflowProgressExtra,
@@ -41,6 +42,7 @@ export async function retryAndWait(
   const body = buildRerunBody(params);
   const rerunResult = (await client.post("/scheduler/rerun", body, undefined, {
     timeoutMs: remainingTimeMs(startedAt, timeoutMs),
+    signal,
   })) as Record<string, unknown>;
   if (typeof rerunResult.runCounter !== "number") {
     throw new Error(
