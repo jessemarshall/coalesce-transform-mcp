@@ -39,6 +39,34 @@ describe("NodeType and Materialization Validation", () => {
     );
   });
 
+  it("rejects package-qualified View nodeType with table materializationType", async () => {
+    const client = createMockClient();
+
+    client.get.mockResolvedValue({
+      id: "node-1",
+      name: "TEST_NODE",
+      nodeType: "base-nodes:::View",
+      materializationType: "view",
+      metadata: {
+        columns: [],
+        sourceMapping: [],
+      },
+      config: {},
+    });
+
+    await expect(
+      updateWorkspaceNode(client as any, {
+        workspaceID: "ws-1",
+        nodeID: "node-1",
+        changes: {
+          materializationType: "table",
+        },
+      })
+    ).rejects.toThrow(
+      /Invalid configuration: nodeType "View" cannot use materializationType "table"/
+    );
+  });
+
   it("allows View nodeType with view materializationType", async () => {
     const client = createMockClient();
 
