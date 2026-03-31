@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { CoalesceApiError, type CoalesceClient } from "../client.js";
+import type { CoalesceClient } from "../client.js";
 import {
   RerunParams,
   buildJsonToolResponse,
@@ -14,17 +14,11 @@ import {
   createWorkflowProgressReporter,
   isAbortError,
   remainingTimeMs,
-  serializeResultsError,
-  sleepWithAbort,
   throwIfAborted,
   type WorkflowProgressExtra,
   type WorkflowProgressReporter,
 } from "./progress.js";
-import {
-  formatRunStatusForMessage,
-  isTerminalRunStatus,
-  validateRunStatus,
-} from "./run-status.js";
+import { pollRunToCompletion } from "./poll-run.js";
 
 export async function retryAndWait(
   client: CoalesceClient,
@@ -37,8 +31,8 @@ export async function retryAndWait(
     reportProgress?: WorkflowProgressReporter;
   } = {}
 ): Promise<unknown> {
-  const pollInterval = Math.max(5, Math.min(params.pollInterval ?? 10, 300)) * 1000;
-  const timeout = Math.max(30, Math.min(params.timeout ?? 1800, 3600)) * 1000;
+  const pollIntervalMs = Math.max(5, Math.min(params.pollInterval ?? 10, 300)) * 1000;
+  const timeoutMs = Math.max(30, Math.min(params.timeout ?? 1800, 3600)) * 1000;
   const startedAt = Date.now();
   const { signal, reportProgress } = options;
 
@@ -47,7 +41,7 @@ export async function retryAndWait(
   // Retry the run — response is { runCounter: number }
   const body = buildRerunBody(params);
   const rerunResult = (await client.post("/scheduler/rerun", body, undefined, {
-    timeoutMs: remainingTimeMs(startedAt, timeout),
+    timeoutMs: remainingTimeMs(startedAt, timeoutMs),
     signal,
   })) as Record<string, unknown>;
   if (typeof rerunResult.runCounter !== "number") {
@@ -57,120 +51,19 @@ export async function retryAndWait(
   }
   const runCounter: number = rerunResult.runCounter;
   await reportProgress?.(
-    `Started retry run ${runCounter}. Polling every ${pollInterval / 1000}s for up to ${timeout / 1000}s.`
+    `Started retry run ${runCounter}. Polling every ${pollIntervalMs / 1000}s for up to ${timeoutMs / 1000}s.`
   );
 
-  // Poll for status
-  let lastStatus: unknown = null;
-  let pollCount = 0;
-  while (remainingTimeMs(startedAt, timeout) > 0) {
-    const nextPollDelay = Math.min(pollInterval, remainingTimeMs(startedAt, timeout));
-    await sleepWithAbort(nextPollDelay, signal);
-
-    const statusTimeoutMs = remainingTimeMs(startedAt, timeout);
-    if (statusTimeoutMs <= 0) {
-      break;
-    }
-
-    let status: Record<string, unknown>;
-    try {
-      status = (await client.get(
-        "/scheduler/runStatus",
-        {
-          runCounter,
-        },
-        { timeoutMs: statusTimeoutMs, signal }
-      )) as Record<string, unknown>;
-    } catch (error) {
-      if (error instanceof CoalesceApiError && error.status === 408) {
-        pollCount += 1;
-        await reportProgress?.(
-          `Status check ${pollCount} for retry run ${runCounter} timed out. Retrying while time remains.`
-        );
-        continue;
-      }
-      throw error;
-    }
-    lastStatus = status;
-    pollCount += 1;
-
-    const runStatus = status.runStatus;
-    await reportProgress?.(
-      `Status check ${pollCount} for retry run ${runCounter}: ${formatRunStatusForMessage(runStatus)}.`
-    );
-    const validatedRunStatus = validateRunStatus(runCounter, runStatus);
-    if (isTerminalRunStatus(validatedRunStatus)) {
-      // Fetch run results — runCounter is the numeric run ID
-      await reportProgress?.(
-        `Retry run ${runCounter} reached terminal status ${validatedRunStatus}. Fetching results.`
-      );
-      const resultsTimeoutMs = remainingTimeMs(startedAt, timeout);
-      if (resultsTimeoutMs <= 0) {
-        await reportProgress?.(
-          `Workflow deadline reached before results could be fetched for retry run ${runCounter}.`
-        );
-        return {
-          status,
-          results: null,
-          resultsError: {
-            message: "Workflow timeout reached before run results could be fetched",
-            status: 408,
-          },
-          incomplete: true,
-        };
-      }
-
-      try {
-        const results = await client.get(
-          `/api/v1/runs/${runCounter}/results`,
-          undefined,
-          { timeoutMs: resultsTimeoutMs, signal }
-        );
-        await reportProgress?.(`Fetched results for retry run ${runCounter}.`);
-        return { status, results };
-      } catch (error) {
-        if (isAbortError(error)) {
-          throw error;
-        }
-        const serializedError = serializeResultsError(error);
-        await reportProgress?.(
-          `Retry run ${runCounter} finished, but fetching results failed: ${serializedError.message}.`
-        );
-        return {
-          status,
-          results: null,
-          resultsError: serializedError,
-          incomplete: true,
-        };
-      }
-    }
-  }
-
-  // Timeout — return last known status
-  let finalStatus = lastStatus;
-  const finalStatusTimeoutMs = remainingTimeMs(startedAt, timeout);
-  if (finalStatusTimeoutMs > 0) {
-    try {
-      finalStatus = await client.get(
-        "/scheduler/runStatus",
-        {
-          runCounter: runCounter as number,
-        },
-        { timeoutMs: finalStatusTimeoutMs, signal }
-      );
-    } catch (error) {
-      if (!(error instanceof CoalesceApiError && error.status === 408)) {
-        throw error;
-      }
-    }
-  }
-  if (finalStatus && typeof finalStatus === "object") {
-    validateRunStatus(runCounter, (finalStatus as Record<string, unknown>).runStatus);
-  }
-  await reportProgress?.(
-    `Timed out waiting for retry run ${runCounter}. Returning the last known status.`
-  );
-  return { status: finalStatus, results: null, timedOut: true };
+  return pollRunToCompletion({
+    client,
+    runCounter,
+    label: "retry run",
+    pollIntervalMs,
+    timeoutMs,
+    startedAt,
+    signal,
+    reportProgress,
+  });
 }
 
 export function registerRetryAndWait(server: McpServer, client: CoalesceClient): void {

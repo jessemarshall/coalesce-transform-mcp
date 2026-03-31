@@ -179,6 +179,7 @@ Coalesce Platform Tools: manage workspaces, environments, projects, runs, and ot
 
 #### Runs
 
+- `diagnose_run_failure` - Diagnose a failed run with error classification, root-cause analysis, and actionable fix suggestions
 - `list_runs` - List runs with optional filters
 - `get_run` - Get details of a specific run
 - `get_run_results` - Get results of a completed run
@@ -225,6 +226,7 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 - `replace_workspace_node_columns` - Replace `metadata.columns` wholesale and optionally apply additional changes for complex column rewrites
 - `convert_join_to_aggregation` - Convert a join-style node into an aggregated fact-style node with generated JOIN/GROUP BY analysis
 - `apply_join_condition` - Auto-generate and write a FROM/JOIN/ON clause for a multi-predecessor node
+- `create_node_from_external_schema` - Create a workspace node whose columns match an existing warehouse table or external schema
 - `complete_node_configuration` - Intelligently complete a node's configuration by analyzing context and applying best-practice rules
 - `list_workspace_node_types` - List distinct node types observed in current workspace nodes
 - `analyze_workspace_patterns` - Analyze workspace nodes to detect package adoption, pipeline layers, methodology, and generate recommendations
@@ -234,6 +236,15 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 - `plan_pipeline` - Plan a pipeline from SQL or a natural-language goal without mutating the workspace; ranks best-fit node types from the local repo
 - `create_pipeline_from_plan` - Execute an approved pipeline plan using predecessor-based creation
 - `create_pipeline_from_sql` - Plan and create a pipeline directly from SQL
+- `build_pipeline_from_intent` - Build a pipeline from a natural language goal with automatic entity resolution and node type selection
+- `review_pipeline` - Analyze an existing pipeline for redundant nodes, missing joins, layer violations, naming issues, and optimization opportunities
+
+#### Pipeline Workshop
+
+- `pipeline_workshop_open` - Open an iterative pipeline builder session with workspace context pre-loaded
+- `pipeline_workshop_instruct` - Send a natural language instruction to modify the current workshop plan
+- `pipeline_workshop_status` - Get the current state of a workshop session
+- `pipeline_workshop_close` - Close a workshop session and release resources
 
 #### Repo-Backed Node Types and Templates
 
