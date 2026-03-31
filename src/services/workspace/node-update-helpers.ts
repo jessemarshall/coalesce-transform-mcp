@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { CoalesceApiError, type CoalesceClient } from "../../client.js";
 import { completeNodeConfiguration, type ConfigCompletionResult } from "../config/intelligent.js";
 import { isPlainObject } from "../../utils.js";
-import { selectPipelineNodeType, inferFamily } from "../pipelines/node-type-selection.js";
+import { selectPipelineNodeType } from "../pipelines/node-type-selection.js";
 import { detectSpecializedPatternPenalty } from "../pipelines/node-type-intent.js";
 import {
   normalizeColumnName,
