@@ -54,6 +54,15 @@ export const ENV_METADATA = [
     isSecret: false,
   },
   {
+    name: "COALESCE_MCP_READ_ONLY",
+    group: "core",
+    description: "When `true`, hides all write/mutation tools during registration. Only read, list, search, cache, analyze, review, diagnose, and plan tools are exposed.",
+    defaultValue: "false",
+    requiredForServer: false,
+    requiredForRunTools: false,
+    isSecret: false,
+  },
+  {
     name: "SNOWFLAKE_USERNAME",
     group: "snowflake",
     description: "Snowflake account username",

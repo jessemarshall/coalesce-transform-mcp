@@ -75,6 +75,7 @@ Only `COALESCE_ACCESS_TOKEN` is required. Everything else is optional.
 | `COALESCE_REPO_PATH` | Local repo root for repo-backed tools and pipeline planning. | — |
 | `COALESCE_MCP_AUTO_CACHE_MAX_BYTES` | JSON size threshold before auto-caching to disk. | `32768` |
 | `COALESCE_MCP_MAX_REQUEST_BODY_BYTES` | Max outbound API request body size. | `524288` |
+| `COALESCE_MCP_READ_ONLY` | When `true`, hides all write/mutation tools during registration. Only read, list, search, cache, analyze, review, diagnose, and plan tools are exposed. | `false` |
 <!-- ENV_METADATA_CORE_TABLE_END -->
 
 ### Snowflake (for run tools only)
