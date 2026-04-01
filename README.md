@@ -76,6 +76,7 @@ Only `COALESCE_ACCESS_TOKEN` is required. Everything else is optional.
 | `COALESCE_MCP_AUTO_CACHE_MAX_BYTES` | JSON size threshold before auto-caching to disk. | `32768` |
 | `COALESCE_MCP_LINEAGE_TTL_MS` | In-memory lineage cache TTL in milliseconds. | `1800000` |
 | `COALESCE_MCP_MAX_REQUEST_BODY_BYTES` | Max outbound API request body size. | `524288` |
+| `COALESCE_MCP_READ_ONLY` | When `true`, hides all write/mutation tools during registration. Only read, list, search, cache, analyze, review, diagnose, and plan tools are exposed. | `false` |
 <!-- ENV_METADATA_CORE_TABLE_END -->
 
 ### Snowflake (for run tools only)
@@ -274,6 +275,7 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 - `retry_and_wait` - Retry a failed run and poll until completion; requires Snowflake Key Pair auth
 - `get_run_details` - Get run metadata and results in one call
 - `get_environment_overview` - Get environment details with full node list
+- `get_environment_health` - Get a comprehensive health dashboard: node counts by type, run statuses, failed runs in last 24h, stale nodes, dependency health, and overall health score
 
 #### Lineage & Impact
 

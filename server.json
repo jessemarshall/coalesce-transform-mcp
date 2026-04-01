@@ -66,6 +66,13 @@
           "name": "COALESCE_MCP_MAX_REQUEST_BODY_BYTES"
         },
         {
+          "description": "When `true`, hides all write/mutation tools during registration. Only read, list, search, cache, analyze, review, diagnose, and plan tools are exposed. Defaults to false.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_MCP_READ_ONLY"
+        },
+        {
           "description": "Snowflake account username (required for run tools)",
           "isRequired": false,
           "format": "string",
