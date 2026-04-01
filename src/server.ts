@@ -18,6 +18,7 @@ import { registerWorkshopTools } from "./mcp/workshop.js";
 
 import { registerGetRunDetails } from "./workflows/get-run-details.js";
 import { registerGetEnvironmentOverview } from "./workflows/get-environment-overview.js";
+import { registerGetEnvironmentHealth } from "./workflows/get-environment-health.js";
 import { registerResources } from "./resources/index.js";
 import { registerPrompts } from "./prompts/index.js";
 import {
@@ -59,6 +60,7 @@ export function registerServerSurface(server: McpServer, client: CoalesceClient)
 
   registerGetRunDetails(server, client);
   registerGetEnvironmentOverview(server, client);
+  registerGetEnvironmentHealth(server, client);
   registerTaskTools(server, client);
   registerResources(server);
   registerPrompts(server);

@@ -273,6 +273,7 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 - `retry_and_wait` - Retry a failed run and poll until completion; requires Snowflake Key Pair auth
 - `get_run_details` - Get run metadata and results in one call
 - `get_environment_overview` - Get environment details with full node list
+- `get_environment_health` - Get a comprehensive health dashboard: node counts by type, run statuses, failed runs in last 24h, stale nodes, dependency health, and overall health score
 
 ## Snowflake Exploration via Cortex Code
 
