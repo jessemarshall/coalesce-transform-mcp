@@ -77,6 +77,42 @@ const EnvironmentOverviewOutputSchema = z.object({
   nodes: z.array(z.unknown()).optional(),
 }).passthrough();
 
+const EnvironmentHealthOutputSchema = z.object({
+  environmentID: z.string().optional(),
+  assessedAt: z.string().optional(),
+  totalNodes: z.number().optional(),
+  nodesByType: z.record(z.number()).optional(),
+  nodeRunStatus: z.array(z.object({
+    nodeID: z.string().optional(),
+    nodeName: z.string().optional(),
+    lastRunStatus: z.enum(["passed", "failed", "never_run"]).optional(),
+    lastRunTime: z.string().optional(),
+  }).passthrough()).optional(),
+  failedRunsLast24h: z.array(z.object({
+    runID: z.string().optional(),
+    runStatus: z.string().optional(),
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+  }).passthrough()).optional(),
+  staleNodes: z.array(z.object({
+    nodeID: z.string().optional(),
+    nodeName: z.string().optional(),
+    nodeType: z.string().optional(),
+    lastRunTime: z.string().optional(),
+    daysSinceLastRun: z.number().optional(),
+  }).passthrough()).optional(),
+  dependencyHealth: z.object({
+    orphanNodes: z.array(z.object({
+      nodeID: z.string().optional(),
+      nodeName: z.string().optional(),
+      nodeType: z.string().optional(),
+    }).passthrough()).optional(),
+    totalDependencyEdges: z.number().optional(),
+  }).passthrough().optional(),
+  healthScore: z.enum(["healthy", "warning", "critical"]).optional(),
+  healthReasons: z.array(z.string()).optional(),
+}).passthrough();
+
 const CacheArtifactOutputSchema = z.object({
   workspaceID: z.string().optional(),
   environmentID: z.string().optional(),
@@ -318,6 +354,8 @@ export function getToolOutputSchema(toolName: string) {
       return RunWaitOutputSchema;
     case "get_environment_overview":
       return EnvironmentOverviewOutputSchema;
+    case "get_environment_health":
+      return EnvironmentHealthOutputSchema;
     case "list_repo_packages":
       return RepoPackagesOutputSchema;
     case "list_repo_node_types":
