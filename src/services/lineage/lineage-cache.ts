@@ -10,6 +10,7 @@ import type { WorkflowProgressReporter } from "../../workflows/progress.js";
 const DEFAULT_PAGE_SIZE = 250;
 const DEFAULT_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const PROGRESS_INTERVAL = 500;
+const DETAIL_FETCH_TIMEOUT_MS = 120_000; // 2 minutes per page for detail=true fetches
 
 export type LineageNode = {
   id: string;
@@ -270,7 +271,7 @@ async function fetchAllNodes(
       limit: DEFAULT_PAGE_SIZE,
       orderBy: "id",
       ...(next ? { startingFrom: next } : {}),
-    } as QueryParams & { workspaceID: string });
+    } as QueryParams & { workspaceID: string }, { timeoutMs: DETAIL_FETCH_TIMEOUT_MS });
 
     const page = parsePage(response);
     for (const item of page.data) {
