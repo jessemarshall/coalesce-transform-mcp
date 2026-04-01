@@ -500,6 +500,12 @@ describe("lineage-cache", () => {
       );
     });
 
+    it("throws for unknown columnID", () => {
+      expect(() => analyzeNodeImpact(cache, "n1", "nonexistent")).toThrow(
+        "Column nonexistent not found on node n1"
+      );
+    });
+
     it("leaf node has zero impact", () => {
       const result = analyzeNodeImpact(cache, "n5");
       expect(result.totalImpactedNodes).toBe(0);

@@ -208,6 +208,12 @@ function tryLoadFromSnapshot(workspaceID: string, baseDir: string): Record<strin
       const parsed = JSON.parse(line);
       if (isPlainObject(parsed)) items.push(parsed);
     }
+
+    // Verify the snapshot was fetched with detail=true by checking the first
+    // node has metadata — summary snapshots lack the metadata.columns field
+    // needed for column lineage indexes.
+    if (items.length > 0 && !isPlainObject(items[0].metadata)) return null;
+
     return items;
   } catch {
     return null;
@@ -558,7 +564,13 @@ export function analyzeNodeImpact(
   let sourceColumnName: string | undefined;
   if (columnID) {
     const col = node.columns.find((c) => c.id === columnID);
-    sourceColumnName = col?.name;
+    if (!col) {
+      const available = node.columns.map((c) => `${c.id} (${c.name})`).join(", ");
+      throw new Error(
+        `Column ${columnID} not found on node ${nodeID} (${node.name}). Available columns: ${available || "none"}`
+      );
+    }
+    sourceColumnName = col.name;
   }
 
   // Node-level impact: all downstream nodes
@@ -618,6 +630,7 @@ function findCriticalPath(cache: LineageCacheEntry, startNodeID: string): string
   if (!node) return [];
 
   let longestPath: string[] = [node.name];
+  const visited = new Set<string>([startNodeID]);
 
   function dfs(currentID: string, path: string[]): void {
     const downstream = cache.downstreamNodes.get(currentID);
@@ -629,15 +642,12 @@ function findCriticalPath(cache: LineageCacheEntry, startNodeID: string): string
     }
 
     for (const nextID of downstream) {
-      if (path.some((name) => {
-        const n = [...cache.nodes.values()].find((nd) => nd.name === name);
-        return n?.id === nextID;
-      })) {
-        continue; // cycle guard
-      }
+      if (visited.has(nextID)) continue;
       const nextNode = cache.nodes.get(nextID);
       if (nextNode) {
+        visited.add(nextID);
         dfs(nextID, [...path, nextNode.name]);
+        visited.delete(nextID);
       }
     }
   }
