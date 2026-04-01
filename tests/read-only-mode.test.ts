@@ -69,6 +69,11 @@ const READ_ONLY_TOOLS = [
   "cache_org_users",
   "get_run_details",
   "get_environment_overview",
+  "get_environment_health",
+  "get_upstream_nodes",
+  "get_downstream_nodes",
+  "get_column_lineage",
+  "analyze_impact",
 ];
 
 // Tools that should be hidden in read-only mode
@@ -112,6 +117,7 @@ const WRITE_TOOLS = [
   "pipeline_workshop_instruct",
   "pipeline_workshop_close",
   "clear_data_cache",
+  "propagate_column_change",
 ];
 
 // Task-based tools — all write operations
