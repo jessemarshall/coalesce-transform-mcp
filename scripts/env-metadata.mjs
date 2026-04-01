@@ -45,6 +45,15 @@ export const ENV_METADATA = [
     isSecret: false,
   },
   {
+    name: "COALESCE_MCP_LINEAGE_TTL_MS",
+    group: "core",
+    description: "In-memory lineage cache TTL in milliseconds.",
+    defaultValue: "1800000",
+    requiredForServer: false,
+    requiredForRunTools: false,
+    isSecret: false,
+  },
+  {
     name: "COALESCE_MCP_MAX_REQUEST_BODY_BYTES",
     group: "core",
     description: "Max outbound API request body size.",

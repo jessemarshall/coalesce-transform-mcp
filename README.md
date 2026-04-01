@@ -74,6 +74,7 @@ Only `COALESCE_ACCESS_TOKEN` is required. Everything else is optional.
 | `COALESCE_ORG_ID` | Fallback org ID for cancel-run. | — |
 | `COALESCE_REPO_PATH` | Local repo root for repo-backed tools and pipeline planning. | — |
 | `COALESCE_MCP_AUTO_CACHE_MAX_BYTES` | JSON size threshold before auto-caching to disk. | `32768` |
+| `COALESCE_MCP_LINEAGE_TTL_MS` | In-memory lineage cache TTL in milliseconds. | `1800000` |
 | `COALESCE_MCP_MAX_REQUEST_BODY_BYTES` | Max outbound API request body size. | `524288` |
 | `COALESCE_MCP_READ_ONLY` | When `true`, hides all write/mutation tools during registration. Only read, list, search, cache, analyze, review, diagnose, and plan tools are exposed. | `false` |
 <!-- ENV_METADATA_CORE_TABLE_END -->
@@ -275,6 +276,14 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 - `get_run_details` - Get run metadata and results in one call
 - `get_environment_overview` - Get environment details with full node list
 - `get_environment_health` - Get a comprehensive health dashboard: node counts by type, run statuses, failed runs in last 24h, stale nodes, dependency health, and overall health score
+
+#### Lineage & Impact
+
+- `get_upstream_nodes` - Walk the full upstream dependency graph for a node and return every ancestor with depth level (no depth limit)
+- `get_downstream_nodes` - Walk the full downstream dependency graph for a node and return every dependent with depth level (no depth limit)
+- `get_column_lineage` - Trace a column through the entire pipeline upstream and downstream via column-level references
+- `analyze_impact` - Analyze downstream impact of changing a node or specific column — returns impacted counts, grouped by depth, and critical path
+- `propagate_column_change` - Update all downstream columns after a column rename or data type change ⚠️
 
 ## Snowflake Exploration via Cortex Code
 

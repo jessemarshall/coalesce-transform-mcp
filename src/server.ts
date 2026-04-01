@@ -15,6 +15,7 @@ import { registerSubgraphTools } from "./mcp/subgraphs.js";
 import { registerWorkspaceTools } from "./mcp/workspaces.js";
 import { registerCacheTools } from "./mcp/cache.js";
 import { registerWorkshopTools } from "./mcp/workshop.js";
+import { registerLineageTools } from "./mcp/lineage.js";
 
 import { registerGetRunDetails } from "./workflows/get-run-details.js";
 import { registerGetEnvironmentOverview } from "./workflows/get-environment-overview.js";
@@ -101,6 +102,7 @@ export function registerServerSurface(server: McpServer, client: CoalesceClient)
   registerWorkspaceTools(server, client);
   registerCacheTools(server, client);
   registerWorkshopTools(server, client);
+  registerLineageTools(server, client);
 
   registerGetRunDetails(server, client);
   registerGetEnvironmentOverview(server, client);
