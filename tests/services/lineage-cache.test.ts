@@ -643,6 +643,85 @@ describe("lineage-cache", () => {
     });
   });
 
+  describe("real API format (columnID, aliases, nodeID/columnID refs)", () => {
+    it("builds lineage from Coalesce API response format", async () => {
+      const client = createMockClient();
+
+      // Mirrors actual Coalesce API shape: columnID (not id), aliases map,
+      // dependencies with locationName/nodeName, columnReferences with nodeID/columnID
+      const srcNode = {
+        id: "src-1",
+        name: "ORDERS_SF1",
+        nodeType: "Source",
+        metadata: {
+          columns: [
+            { columnID: "col-src-1", name: "O_ORDERKEY", dataType: "NUMBER(38,0)", sources: [] },
+            { columnID: "col-src-2", name: "O_CUSTKEY", dataType: "NUMBER(38,0)", sources: [] },
+          ],
+          sourceMapping: [],
+        },
+      };
+
+      const stgNode = {
+        id: "stg-1",
+        name: "ORDERS_SF1",
+        nodeType: "Stage",
+        metadata: {
+          columns: [
+            {
+              columnID: "col-stg-1",
+              name: "O_ORDERKEY",
+              dataType: "NUMBER(38,0)",
+              sources: [{ columnReferences: [{ nodeID: "src-1", columnID: "col-src-1" }] }],
+            },
+            {
+              columnID: "col-stg-2",
+              name: "O_CUSTKEY",
+              dataType: "NUMBER(38,0)",
+              sources: [{ columnReferences: [{ nodeID: "src-1", columnID: "col-src-2" }] }],
+            },
+          ],
+          sourceMapping: [
+            {
+              aliases: { ORDERS_SF1: "src-1" },
+              dependencies: [{ locationName: "SRC_INGEST", nodeName: "ORDERS_SF1" }],
+              join: { joinCondition: "FROM {{ ref('SRC_INGEST', 'ORDERS_SF1') }} \"ORDERS_SF1\"" },
+              name: "ORDERS_SF1",
+            },
+          ],
+        },
+      };
+
+      mockPaginatedNodes(client, [srcNode, stgNode]);
+      const cache = await buildLineageCache(client, "ws-api-format", {
+        baseDir: createTempDir(),
+        forceRefresh: true,
+      });
+
+      expect(cache.nodes.size).toBe(2);
+
+      // Node-level lineage via aliases
+      expect(cache.upstreamNodes.get("stg-1")?.has("src-1")).toBe(true);
+      expect(cache.downstreamNodes.get("src-1")?.has("stg-1")).toBe(true);
+
+      // Column-level lineage via nodeID/columnID refs
+      expect(cache.columnUpstream.get("stg-1:col-stg-1")?.has("src-1:col-src-1")).toBe(true);
+      expect(cache.columnUpstream.get("stg-1:col-stg-2")?.has("src-1:col-src-2")).toBe(true);
+      expect(cache.columnDownstream.get("src-1:col-src-1")?.has("stg-1:col-stg-1")).toBe(true);
+
+      // Walk upstream from stg node
+      const upstream = walkUpstream(cache, "stg-1");
+      expect(upstream).toHaveLength(1);
+      expect(upstream[0].nodeID).toBe("src-1");
+      expect(upstream[0].nodeName).toBe("ORDERS_SF1");
+
+      // Walk downstream from src node
+      const downstream = walkDownstream(cache, "src-1");
+      expect(downstream).toHaveLength(1);
+      expect(downstream[0].nodeID).toBe("stg-1");
+    });
+  });
+
   describe("diamond dependency pattern", () => {
     it("handles nodes with multiple upstream parents", async () => {
       const client = createMockClient();

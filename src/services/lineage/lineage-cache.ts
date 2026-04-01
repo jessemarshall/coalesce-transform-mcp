@@ -71,7 +71,7 @@ function extractColumns(metadata: Record<string, unknown>): LineageColumn[] {
   const columns: LineageColumn[] = [];
   for (const col of rawColumns) {
     if (!isPlainObject(col)) continue;
-    const id = typeof col.id === "string" ? col.id : undefined;
+    const id = typeof col.columnID === "string" ? col.columnID : typeof col.id === "string" ? col.id : undefined;
     const name = typeof col.name === "string" ? col.name : undefined;
     if (!id || !name) continue;
 
@@ -82,8 +82,8 @@ function extractColumns(metadata: Record<string, unknown>): LineageColumn[] {
       const colRefs = Array.isArray(source.columnReferences) ? source.columnReferences : [];
       for (const ref of colRefs) {
         if (!isPlainObject(ref)) continue;
-        const srcNodeID = typeof ref.sourceNodeID === "string" ? ref.sourceNodeID : undefined;
-        const srcColumnID = typeof ref.sourceColumnID === "string" ? ref.sourceColumnID : undefined;
+        const srcNodeID = typeof ref.nodeID === "string" ? ref.nodeID : typeof ref.sourceNodeID === "string" ? ref.sourceNodeID : undefined;
+        const srcColumnID = typeof ref.columnID === "string" ? ref.columnID : typeof ref.sourceColumnID === "string" ? ref.sourceColumnID : undefined;
         if (srcNodeID && srcColumnID) {
           refs.push({ sourceNodeID: srcNodeID, sourceColumnID: srcColumnID });
         }
@@ -107,6 +107,16 @@ function extractUpstreamNodeIDs(metadata: Record<string, unknown>): string[] {
   const ids: string[] = [];
   for (const mapping of sourceMapping) {
     if (!isPlainObject(mapping)) continue;
+
+    // Primary: extract node IDs from aliases map (most reliable — contains resolved UUIDs)
+    const aliases = isPlainObject(mapping.aliases) ? mapping.aliases : {};
+    for (const value of Object.values(aliases)) {
+      if (typeof value === "string") {
+        ids.push(value);
+      }
+    }
+
+    // Fallback: extract from dependencies if they contain nodeID directly
     const deps = Array.isArray(mapping.dependencies) ? mapping.dependencies : [];
     for (const dep of deps) {
       if (typeof dep === "string") {
@@ -116,7 +126,9 @@ function extractUpstreamNodeIDs(metadata: Record<string, unknown>): string[] {
       }
     }
   }
-  return ids;
+
+  // Deduplicate — aliases and dependencies may reference the same nodes
+  return [...new Set(ids)];
 }
 
 function buildLineageNode(raw: Record<string, unknown>): LineageNode | null {
