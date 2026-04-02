@@ -52,11 +52,25 @@
           "name": "COALESCE_MCP_AUTO_CACHE_MAX_BYTES"
         },
         {
+          "description": "In-memory lineage cache TTL in milliseconds. Defaults to 1800000.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_MCP_LINEAGE_TTL_MS"
+        },
+        {
           "description": "Max outbound API request body size. Defaults to 524288.",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
           "name": "COALESCE_MCP_MAX_REQUEST_BODY_BYTES"
+        },
+        {
+          "description": "When `true`, hides all write/mutation tools during registration. Only read, list, search, cache, analyze, review, diagnose, and plan tools are exposed. Defaults to false.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_MCP_READ_ONLY"
         },
         {
           "description": "Snowflake account username (required for run tools)",
