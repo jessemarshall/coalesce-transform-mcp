@@ -64,12 +64,14 @@ describe("cache snapshot tools", () => {
     expect(client.get).toHaveBeenNthCalledWith(
       1,
       "/api/v1/workspaces/ws-1/nodes",
-      { detail: true, limit: 250, orderBy: "id" }
+      { detail: true, limit: 250, orderBy: "id" },
+      { timeoutMs: 120_000 }
     );
     expect(client.get).toHaveBeenNthCalledWith(
       2,
       "/api/v1/workspaces/ws-1/nodes",
-      { detail: true, limit: 250, orderBy: "id", startingFrom: "cursor-2" }
+      { detail: true, limit: 250, orderBy: "id", startingFrom: "cursor-2" },
+      { timeoutMs: 120_000 }
     );
 
     const lines = readFileSync(result.filePath, "utf8").trimEnd().split("\n");

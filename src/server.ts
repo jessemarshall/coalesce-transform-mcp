@@ -15,9 +15,11 @@ import { registerSubgraphTools } from "./mcp/subgraphs.js";
 import { registerWorkspaceTools } from "./mcp/workspaces.js";
 import { registerCacheTools } from "./mcp/cache.js";
 import { registerWorkshopTools } from "./mcp/workshop.js";
+import { registerLineageTools } from "./mcp/lineage.js";
 
 import { registerGetRunDetails } from "./workflows/get-run-details.js";
 import { registerGetEnvironmentOverview } from "./workflows/get-environment-overview.js";
+import { registerGetEnvironmentHealth } from "./workflows/get-environment-health.js";
 import { registerResources } from "./resources/index.js";
 import { registerPrompts } from "./prompts/index.js";
 import {
@@ -28,6 +30,48 @@ import {
 
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json") as { version: string };
+
+// Cache snapshot tools fetch data and write to local disk only — safe in read-only mode.
+const CACHE_SNAPSHOT_TOOLS = new Set([
+  "cache_workspace_nodes",
+  "cache_environment_nodes",
+  "cache_runs",
+  "cache_org_users",
+]);
+
+export function isReadOnlyMode(): boolean {
+  return process.env.COALESCE_MCP_READ_ONLY === "true";
+}
+
+function isWriteTool(
+  name: string,
+  metadata: { annotations?: { readOnlyHint?: boolean } }
+): boolean {
+  if (metadata.annotations?.readOnlyHint === true) return false;
+  if (CACHE_SNAPSHOT_TOOLS.has(name)) return false;
+  return true;
+}
+
+function applyReadOnlyFilter(server: McpServer): void {
+  const originalRegisterTool = server.registerTool.bind(server);
+  server.registerTool = ((name: string, metadata: any, handler: any) => {
+    if (isWriteTool(name, metadata)) return;
+    originalRegisterTool(name, metadata, handler);
+  }) as typeof server.registerTool;
+
+  const originalRegisterToolTask =
+    server.experimental.tasks.registerToolTask.bind(
+      server.experimental.tasks
+    );
+  server.experimental.tasks.registerToolTask = ((
+    name: string,
+    metadata: any,
+    impl: any
+  ) => {
+    if (isWriteTool(name, metadata)) return;
+    originalRegisterToolTask(name, metadata, impl);
+  }) as typeof server.experimental.tasks.registerToolTask;
+}
 
 export const SERVER_NAME = "coalesce-transform-mcp";
 export const SERVER_VERSION = version;
@@ -42,6 +86,8 @@ export const SERVER_INSTRUCTIONS = [
 ].join("\n");
 
 export function registerServerSurface(server: McpServer, client: CoalesceClient): void {
+  if (isReadOnlyMode()) applyReadOnlyFilter(server);
+
   registerEnvironmentTools(server, client);
   registerNodeTools(server, client);
   registerPipelineTools(server, client);
@@ -56,9 +102,11 @@ export function registerServerSurface(server: McpServer, client: CoalesceClient)
   registerWorkspaceTools(server, client);
   registerCacheTools(server, client);
   registerWorkshopTools(server, client);
+  registerLineageTools(server, client);
 
   registerGetRunDetails(server, client);
   registerGetEnvironmentOverview(server, client);
+  registerGetEnvironmentHealth(server, client);
   registerTaskTools(server, client);
   registerResources(server);
   registerPrompts(server);

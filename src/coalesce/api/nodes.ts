@@ -1,26 +1,24 @@
-import type { CoalesceClient, QueryParams } from "../../client.js";
+import type { CoalesceClient, QueryParams, RequestOptions } from "../../client.js";
 import { validatePathSegment } from "../types.js";
 
 export async function listEnvironmentNodes(
   client: CoalesceClient,
-  params: QueryParams & { environmentID: string }
+  params: QueryParams & { environmentID: string },
+  options?: RequestOptions
 ): Promise<unknown> {
   const { environmentID, ...queryParams } = params;
-  return client.get(
-    `/api/v1/environments/${validatePathSegment(environmentID, "environmentID")}/nodes`,
-    queryParams
-  );
+  const url = `/api/v1/environments/${validatePathSegment(environmentID, "environmentID")}/nodes`;
+  return options ? client.get(url, queryParams, options) : client.get(url, queryParams);
 }
 
 export async function listWorkspaceNodes(
   client: CoalesceClient,
-  params: QueryParams & { workspaceID: string }
+  params: QueryParams & { workspaceID: string },
+  options?: RequestOptions
 ): Promise<unknown> {
   const { workspaceID, ...queryParams } = params;
-  return client.get(
-    `/api/v1/workspaces/${validatePathSegment(workspaceID, "workspaceID")}/nodes`,
-    queryParams
-  );
+  const url = `/api/v1/workspaces/${validatePathSegment(workspaceID, "workspaceID")}/nodes`;
+  return options ? client.get(url, queryParams, options) : client.get(url, queryParams);
 }
 
 export async function getEnvironmentNode(
