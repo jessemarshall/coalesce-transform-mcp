@@ -77,6 +77,42 @@ const EnvironmentOverviewOutputSchema = z.object({
   nodes: z.array(z.unknown()).optional(),
 }).passthrough();
 
+const EnvironmentHealthOutputSchema = z.object({
+  environmentID: z.string().optional(),
+  assessedAt: z.string().optional(),
+  totalNodes: z.number().optional(),
+  nodesByType: z.record(z.number()).optional(),
+  nodeRunStatus: z.array(z.object({
+    nodeID: z.string().optional(),
+    nodeName: z.string().optional(),
+    lastRunStatus: z.enum(["passed", "failed", "never_run"]).optional(),
+    lastRunTime: z.string().optional(),
+  }).passthrough()).optional(),
+  failedRunsLast24h: z.array(z.object({
+    runID: z.string().optional(),
+    runStatus: z.string().optional(),
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+  }).passthrough()).optional(),
+  staleNodes: z.array(z.object({
+    nodeID: z.string().optional(),
+    nodeName: z.string().optional(),
+    nodeType: z.string().optional(),
+    lastRunTime: z.string().optional(),
+    daysSinceLastRun: z.number().optional(),
+  }).passthrough()).optional(),
+  dependencyHealth: z.object({
+    orphanNodes: z.array(z.object({
+      nodeID: z.string().optional(),
+      nodeName: z.string().optional(),
+      nodeType: z.string().optional(),
+    }).passthrough()).optional(),
+    totalDependencyEdges: z.number().optional(),
+  }).passthrough().optional(),
+  healthScore: z.enum(["healthy", "warning", "critical"]).optional(),
+  healthReasons: z.array(z.string()).optional(),
+}).passthrough();
+
 const CacheArtifactOutputSchema = z.object({
   workspaceID: z.string().optional(),
   environmentID: z.string().optional(),
@@ -162,72 +198,6 @@ const CorpusVariantOutputSchema = z.object({
   warnings: z.array(z.string()).optional(),
 }).passthrough();
 
-const PipelineReviewOutputSchema = z.object({
-  workspaceID: z.string().optional(),
-  analyzedAt: z.string().optional(),
-  scope: z.enum(["full", "subgraph"]).optional(),
-  nodeCount: z.number().optional(),
-  methodology: z.string().optional(),
-  findings: z.array(z.object({
-    severity: z.string().optional(),
-    category: z.string().optional(),
-    nodeID: z.string().optional(),
-    nodeName: z.string().optional(),
-    message: z.string().optional(),
-    suggestion: z.string().optional(),
-  }).passthrough()).optional(),
-  summary: JsonObjectSchema.optional(),
-  graphStats: JsonObjectSchema.optional(),
-}).passthrough();
-
-const RunDiagnosisOutputSchema = z.object({
-  runID: z.string().optional(),
-  analyzedAt: z.string().optional(),
-  runStatus: z.string().optional(),
-  runType: z.string().nullable().optional(),
-  environmentID: z.string().nullable().optional(),
-  startTime: z.string().nullable().optional(),
-  endTime: z.string().nullable().optional(),
-  summary: JsonObjectSchema.optional(),
-  failures: z.array(z.object({
-    nodeID: z.string().optional(),
-    nodeName: z.string().nullable().optional(),
-    nodeType: z.string().nullable().optional(),
-    status: z.string().optional(),
-    category: z.string().optional(),
-    errorMessage: z.string().nullable().optional(),
-    suggestedFixes: z.array(z.string()).optional(),
-  }).passthrough()).optional(),
-  warnings: z.array(z.string()).optional(),
-  recommendations: z.array(z.string()).optional(),
-}).passthrough();
-
-const WorkshopOpenOutputSchema = z.object({
-  sessionID: z.string().optional(),
-  workspaceID: z.string().optional(),
-  createdAt: z.string().optional(),
-  updatedAt: z.string().optional(),
-  nodes: z.array(z.unknown()).optional(),
-  history: z.array(z.unknown()).optional(),
-  resolvedEntities: z.array(z.unknown()).optional(),
-  openQuestions: z.array(z.string()).optional(),
-  warnings: z.array(z.string()).optional(),
-}).passthrough();
-
-const WorkshopInstructOutputSchema = z.object({
-  sessionID: z.string().optional(),
-  action: z.string().optional(),
-  changes: z.array(z.string()).optional(),
-  currentPlan: z.array(z.unknown()).optional(),
-  openQuestions: z.array(z.string()).optional(),
-  warnings: z.array(z.string()).optional(),
-}).passthrough();
-
-const WorkshopCloseOutputSchema = z.object({
-  closed: z.boolean().optional(),
-  message: z.string().optional(),
-}).passthrough();
-
 const PipelinePlanOutputSchema = z.object({
   version: z.number().optional(),
   intent: z.string().optional(),
@@ -253,6 +223,103 @@ const PipelinePlanOutputSchema = z.object({
   instruction: z.string().optional(),
 }).passthrough();
 
+const LineageTraversalOutputSchema = z.object({
+  nodeID: z.string().optional(),
+  nodeName: z.string().optional(),
+  nodeType: z.string().optional(),
+  totalAncestors: z.number().optional(),
+  totalDependents: z.number().optional(),
+  ancestors: z.array(z.object({
+    nodeID: z.string().optional(),
+    nodeName: z.string().optional(),
+    nodeType: z.string().optional(),
+    depth: z.number().optional(),
+  }).passthrough()).optional(),
+  dependents: z.array(z.object({
+    nodeID: z.string().optional(),
+    nodeName: z.string().optional(),
+    nodeType: z.string().optional(),
+    depth: z.number().optional(),
+  }).passthrough()).optional(),
+}).passthrough();
+
+const ColumnLineageOutputSchema = z.object({
+  nodeID: z.string().optional(),
+  nodeName: z.string().optional(),
+  columnID: z.string().optional(),
+  columnName: z.string().optional(),
+  totalUpstream: z.number().optional(),
+  totalDownstream: z.number().optional(),
+  upstream: z.array(z.object({
+    nodeID: z.string().optional(),
+    nodeName: z.string().optional(),
+    nodeType: z.string().optional(),
+    columnID: z.string().optional(),
+    columnName: z.string().optional(),
+    direction: z.string().optional(),
+    depth: z.number().optional(),
+  }).passthrough()).optional(),
+  downstream: z.array(z.object({
+    nodeID: z.string().optional(),
+    nodeName: z.string().optional(),
+    nodeType: z.string().optional(),
+    columnID: z.string().optional(),
+    columnName: z.string().optional(),
+    direction: z.string().optional(),
+    depth: z.number().optional(),
+  }).passthrough()).optional(),
+}).passthrough();
+
+const ImpactAnalysisOutputSchema = z.object({
+  sourceNodeID: z.string().optional(),
+  sourceNodeName: z.string().optional(),
+  sourceNodeType: z.string().optional(),
+  sourceColumnID: z.string().optional(),
+  sourceColumnName: z.string().optional(),
+  impactedNodes: z.array(z.object({
+    nodeID: z.string().optional(),
+    nodeName: z.string().optional(),
+    nodeType: z.string().optional(),
+    depth: z.number().optional(),
+  }).passthrough()).optional(),
+  impactedColumns: z.array(z.object({
+    nodeID: z.string().optional(),
+    nodeName: z.string().optional(),
+    nodeType: z.string().optional(),
+    columnID: z.string().optional(),
+    columnName: z.string().optional(),
+    direction: z.string().optional(),
+    depth: z.number().optional(),
+  }).passthrough()).optional(),
+  totalImpactedNodes: z.number().optional(),
+  totalImpactedColumns: z.number().optional(),
+  byDepth: z.record(z.array(z.string())).optional(),
+  criticalPath: z.array(z.string()).optional(),
+}).passthrough();
+
+const PropagateColumnChangeOutputSchema = z.object({
+  sourceNodeID: z.string().optional(),
+  sourceColumnID: z.string().optional(),
+  changes: z.object({
+    columnName: z.string().optional(),
+    dataType: z.string().optional(),
+  }).passthrough().optional(),
+  updatedNodes: z.array(z.object({
+    nodeID: z.string().optional(),
+    nodeName: z.string().optional(),
+    columnID: z.string().optional(),
+    columnName: z.string().optional(),
+    previousName: z.string().optional(),
+    previousDataType: z.string().optional(),
+  }).passthrough()).optional(),
+  totalUpdated: z.number().optional(),
+  errors: z.array(z.object({
+    nodeID: z.string().optional(),
+    columnID: z.string().optional(),
+    message: z.string().optional(),
+  }).passthrough()).optional(),
+}).passthrough();
+
 const PipelineCreateOutputSchema = z.object({
   created: z.boolean().optional(),
   cancelled: z.boolean().optional(),
@@ -276,6 +343,136 @@ const PipelineCreateOutputSchema = z.object({
     }).passthrough()
   ).optional(),
   error: JsonToolErrorSchema.optional(),
+}).passthrough();
+
+const DiagnoseRunOutputSchema = z.object({
+  runID: z.string().optional(),
+  analyzedAt: z.string().optional(),
+  runStatus: z.string().optional(),
+  runType: z.string().nullable().optional(),
+  environmentID: z.string().nullable().optional(),
+  startTime: z.string().nullable().optional(),
+  endTime: z.string().nullable().optional(),
+  summary: z.object({
+    totalNodes: z.number().optional(),
+    succeeded: z.number().optional(),
+    failed: z.number().optional(),
+    skipped: z.number().optional(),
+    canceled: z.number().optional(),
+    other: z.number().optional(),
+  }).passthrough().optional(),
+  failures: z.array(z.object({
+    nodeID: z.string().optional(),
+    nodeName: z.string().nullable().optional(),
+    nodeType: z.string().nullable().optional(),
+    status: z.string().optional(),
+    category: z.string().optional(),
+    errorMessage: z.string().nullable().optional(),
+    suggestedFixes: z.array(z.string()).optional(),
+  }).passthrough()).optional(),
+  warnings: z.array(z.string()).optional(),
+  recommendations: z.array(z.string()).optional(),
+}).passthrough();
+
+const ReviewPipelineOutputSchema = z.object({
+  workspaceID: z.string().optional(),
+  analyzedAt: z.string().optional(),
+  scope: z.enum(["full", "subgraph"]).optional(),
+  nodeCount: z.number().optional(),
+  methodology: z.string().optional(),
+  findings: z.array(z.object({
+    severity: z.enum(["critical", "warning", "suggestion"]).optional(),
+    category: z.string().optional(),
+    nodeID: z.string().optional(),
+    nodeName: z.string().optional(),
+    message: z.string().optional(),
+    suggestion: z.string().optional(),
+  }).passthrough()).optional(),
+  summary: z.object({
+    critical: z.number().optional(),
+    warning: z.number().optional(),
+    suggestion: z.number().optional(),
+  }).passthrough().optional(),
+  graphStats: z.object({
+    maxDepth: z.number().optional(),
+    rootNodes: z.number().optional(),
+    leafNodes: z.number().optional(),
+    avgFanOut: z.number().optional(),
+  }).passthrough().optional(),
+  warnings: z.array(z.string()).optional(),
+}).passthrough();
+
+const WorkshopSessionOutputSchema = z.object({
+  sessionID: z.string().optional(),
+  workspaceID: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+  nodes: z.array(z.object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    nodeType: z.string().nullable().optional(),
+    predecessorIDs: z.array(z.string()).optional(),
+    columns: z.array(z.string()).optional(),
+    created: z.boolean().optional(),
+    createdNodeID: z.string().nullable().optional(),
+  }).passthrough()).optional(),
+  history: z.array(z.object({
+    instruction: z.string().optional(),
+    timestamp: z.string().optional(),
+    result: z.string().optional(),
+  }).passthrough()).optional(),
+  resolvedEntities: z.array(z.object({
+    name: z.string().optional(),
+    nodeID: z.string().optional(),
+    locationName: z.string().nullable().optional(),
+  }).passthrough()).optional(),
+  openQuestions: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
+  error: z.string().optional(),
+}).passthrough();
+
+const WorkshopInstructOutputSchema = z.object({
+  sessionID: z.string().optional(),
+  action: z.string().optional(),
+  changes: z.array(z.string()).optional(),
+  currentPlan: z.array(z.object({}).passthrough()).optional(),
+  openQuestions: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
+  error: z.string().optional(),
+}).passthrough();
+
+const WorkshopCloseOutputSchema = z.object({
+  closed: z.boolean().optional(),
+  message: z.string().optional(),
+  error: z.string().optional(),
+}).passthrough();
+
+const DeploymentNodeSummarySchema = z.object({
+  nodeID: z.string().optional(),
+  name: z.string().optional(),
+  nodeType: z.string().optional(),
+}).passthrough();
+
+const PreviewDeploymentOutputSchema = z.object({
+  workspaceID: z.string().optional(),
+  environmentID: z.string().optional(),
+  diffedAt: z.string().optional(),
+  summary: z.object({
+    total: z.number().optional(),
+    new: z.number().optional(),
+    removed: z.number().optional(),
+    modified: z.number().optional(),
+    unchanged: z.number().optional(),
+  }).passthrough().optional(),
+  new: z.array(DeploymentNodeSummarySchema).optional(),
+  removed: z.array(DeploymentNodeSummarySchema).optional(),
+  modified: z.array(z.object({
+    nodeID: z.string().optional(),
+    workspaceName: z.string().optional(),
+    environmentName: z.string().optional(),
+    workspaceNodeType: z.string().optional(),
+    environmentNodeType: z.string().optional(),
+  }).passthrough()).optional(),
 }).passthrough();
 
 const LIST_TOOL_NAMES = new Set([
@@ -384,6 +581,8 @@ export function getToolOutputSchema(toolName: string) {
       return RunWaitOutputSchema;
     case "get_environment_overview":
       return EnvironmentOverviewOutputSchema;
+    case "get_environment_health":
+      return EnvironmentHealthOutputSchema;
     case "list_repo_packages":
       return RepoPackagesOutputSchema;
     case "list_repo_node_types":
@@ -403,18 +602,28 @@ export function getToolOutputSchema(toolName: string) {
     case "create_pipeline_from_sql":
     case "build_pipeline_from_intent":
       return PipelineCreateOutputSchema;
-    case "review_pipeline":
-      return PipelineReviewOutputSchema;
     case "diagnose_run_failure":
-      return RunDiagnosisOutputSchema;
+      return DiagnoseRunOutputSchema;
+    case "review_pipeline":
+      return ReviewPipelineOutputSchema;
     case "pipeline_workshop_open":
-      return WorkshopOpenOutputSchema;
+    case "pipeline_workshop_status":
+      return WorkshopSessionOutputSchema;
     case "pipeline_workshop_instruct":
       return WorkshopInstructOutputSchema;
-    case "pipeline_workshop_status":
-      return WorkshopOpenOutputSchema;
     case "pipeline_workshop_close":
       return WorkshopCloseOutputSchema;
+    case "get_upstream_nodes":
+    case "get_downstream_nodes":
+      return LineageTraversalOutputSchema;
+    case "get_column_lineage":
+      return ColumnLineageOutputSchema;
+    case "analyze_impact":
+      return ImpactAnalysisOutputSchema;
+    case "propagate_column_change":
+      return PropagateColumnChangeOutputSchema;
+    case "preview_deployment":
+      return PreviewDeploymentOutputSchema;
     default:
       return JsonToolOutputSchema;
   }

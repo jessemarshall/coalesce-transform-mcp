@@ -184,7 +184,7 @@ export function registerRunTools(
     async (params) => {
       try {
         const result = await diagnoseRunFailure(client, params);
-        return buildJsonToolResponse("diagnose_run_failure", result);
+        return buildJsonToolResponse("diagnose_run_failure", sanitizeResponse(result));
       } catch (error) {
         return handleToolError(error);
       }
