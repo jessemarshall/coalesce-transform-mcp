@@ -447,6 +447,34 @@ const WorkshopCloseOutputSchema = z.object({
   error: z.string().optional(),
 }).passthrough();
 
+const DeploymentNodeSummarySchema = z.object({
+  nodeID: z.string().optional(),
+  name: z.string().optional(),
+  nodeType: z.string().optional(),
+}).passthrough();
+
+const PreviewDeploymentOutputSchema = z.object({
+  workspaceID: z.string().optional(),
+  environmentID: z.string().optional(),
+  diffedAt: z.string().optional(),
+  summary: z.object({
+    total: z.number().optional(),
+    new: z.number().optional(),
+    removed: z.number().optional(),
+    modified: z.number().optional(),
+    unchanged: z.number().optional(),
+  }).passthrough().optional(),
+  new: z.array(DeploymentNodeSummarySchema).optional(),
+  removed: z.array(DeploymentNodeSummarySchema).optional(),
+  modified: z.array(z.object({
+    nodeID: z.string().optional(),
+    workspaceName: z.string().optional(),
+    environmentName: z.string().optional(),
+    workspaceNodeType: z.string().optional(),
+    environmentNodeType: z.string().optional(),
+  }).passthrough()).optional(),
+}).passthrough();
+
 const LIST_TOOL_NAMES = new Set([
   "list_environments",
   "list_projects",
@@ -594,6 +622,8 @@ export function getToolOutputSchema(toolName: string) {
       return ImpactAnalysisOutputSchema;
     case "propagate_column_change":
       return PropagateColumnChangeOutputSchema;
+    case "preview_deployment":
+      return PreviewDeploymentOutputSchema;
     default:
       return JsonToolOutputSchema;
   }
