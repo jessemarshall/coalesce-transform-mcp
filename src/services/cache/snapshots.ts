@@ -11,6 +11,7 @@ import { isPlainObject } from "../../utils.js";
 import { CACHE_DIR_NAME } from "../../cache-dir.js";
 
 const DEFAULT_PAGE_SIZE = 250;
+const DETAIL_FETCH_TIMEOUT_MS = 120_000; // 2 minutes per page for detail=true fetches
 
 type PaginatedParams = {
   pageSize?: number;
@@ -300,8 +301,9 @@ export async function fetchAllWorkspaceNodes(
   client: CoalesceClient,
   params: { workspaceID: string; detail?: boolean } & PaginatedParams
 ): Promise<PaginatedCollectionResult> {
+  const requestOptions = params.detail ? { timeoutMs: DETAIL_FETCH_TIMEOUT_MS } : undefined;
   return fetchAllPaginatedToMemory(
-    (queryParams) => listWorkspaceNodes(client, queryParams as QueryParams & { workspaceID: string }),
+    (queryParams) => listWorkspaceNodes(client, queryParams as QueryParams & { workspaceID: string }, requestOptions),
     {
       workspaceID: validatePathSegment(params.workspaceID, "workspaceID"),
       ...(params.detail !== undefined ? { detail: params.detail } : {}),
@@ -314,9 +316,10 @@ export async function fetchAllEnvironmentNodes(
   client: CoalesceClient,
   params: { environmentID: string; detail?: boolean } & PaginatedParams
 ): Promise<PaginatedCollectionResult> {
+  const requestOptions = params.detail ? { timeoutMs: DETAIL_FETCH_TIMEOUT_MS } : undefined;
   return fetchAllPaginatedToMemory(
     (queryParams) =>
-      listEnvironmentNodes(client, queryParams as QueryParams & { environmentID: string }),
+      listEnvironmentNodes(client, queryParams as QueryParams & { environmentID: string }, requestOptions),
     {
       environmentID: validatePathSegment(params.environmentID, "environmentID"),
       ...(params.detail !== undefined ? { detail: params.detail } : {}),
@@ -395,9 +398,10 @@ export async function cacheWorkspaceNodes(
   const ndjsonPath = join(directory, baseName);
   const metaPath = join(directory, baseName.replace(/\.ndjson$/, ".meta.json"));
 
+  const requestOptions = detail ? { timeoutMs: DETAIL_FETCH_TIMEOUT_MS } : undefined;
   const result = await streamAllPaginatedToDisk(
     (queryParams) =>
-      listWorkspaceNodes(client, queryParams as QueryParams & { workspaceID: string }),
+      listWorkspaceNodes(client, queryParams as QueryParams & { workspaceID: string }, requestOptions),
     {
       workspaceID: validatePathSegment(params.workspaceID, "workspaceID"),
       ...(detail !== undefined ? { detail } : {}),
@@ -443,9 +447,10 @@ export async function cacheEnvironmentNodes(
   const ndjsonPath = join(directory, baseName);
   const metaPath = join(directory, baseName.replace(/\.ndjson$/, ".meta.json"));
 
+  const requestOptions = detail ? { timeoutMs: DETAIL_FETCH_TIMEOUT_MS } : undefined;
   const result = await streamAllPaginatedToDisk(
     (queryParams) =>
-      listEnvironmentNodes(client, queryParams as QueryParams & { environmentID: string }),
+      listEnvironmentNodes(client, queryParams as QueryParams & { environmentID: string }, requestOptions),
     {
       environmentID: validatePathSegment(params.environmentID, "environmentID"),
       ...(detail !== undefined ? { detail } : {}),

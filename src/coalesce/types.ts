@@ -50,7 +50,7 @@ export const WorkspaceNodeBodySchema = z
 
 // Pagination params — only used by endpoints that support it
 export const PaginationParams = z.object({
-  limit: z.number().optional().describe("Number of results to return"),
+  limit: z.number().int().positive().max(500).optional().describe("Number of results to return (max 500)"),
   startingFrom: z
     .string()
     .optional()

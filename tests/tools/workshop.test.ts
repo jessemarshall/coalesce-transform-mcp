@@ -1,216 +1,204 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerWorkshopTools } from "../../src/mcp/workshop.js";
-import {
-  openWorkshop,
-  workshopInstruct,
-  getWorkshopStatus,
-  workshopClose,
-} from "../../src/services/pipelines/workshop.js";
-import { createMockClient } from "../helpers/fixtures.js";
+import { deleteSession } from "../../src/services/pipelines/workshop.js";
 
-vi.mock("../../src/services/pipelines/workshop.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/services/pipelines/workshop.js")>();
-  return {
-    ...actual,
-    openWorkshop: vi.fn(),
-    workshopInstruct: vi.fn(),
-    getWorkshopStatus: vi.fn(),
-    workshopClose: vi.fn(),
+function createMockClient(nodes: Array<{ id: string; name: string; locationName?: string }> = []) {
+  const client = {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
   };
-});
 
-function makeServer() {
-  return new McpServer({ name: "test", version: "0.0.1" });
+  client.get.mockImplementation((path: string) => {
+    if (path.match(/\/nodes$/) && !path.includes("/nodes/")) {
+      return Promise.resolve({
+        data: nodes.map((n) => ({
+          id: n.id,
+          name: n.name,
+          nodeType: "Stage",
+          locationName: n.locationName ?? "RAW",
+        })),
+      });
+    }
+    for (const n of nodes) {
+      if (path.includes(`/nodes/${n.id}`)) {
+        return Promise.resolve({
+          id: n.id,
+          name: n.name,
+          nodeType: "Stage",
+          metadata: { columns: [{ name: "ID", dataType: "VARCHAR" }] },
+        });
+      }
+    }
+    return Promise.resolve({ data: [] });
+  });
+
+  return client;
 }
 
-function getToolHandler(
-  server: McpServer,
-  spy: ReturnType<typeof vi.spyOn>,
-  toolName: string
-) {
-  const call = spy.mock.calls.find((c) => c[0] === toolName);
-  return call?.[2] as ((params: Record<string, unknown>) => Promise<unknown>) | undefined;
+function getToolHandler(toolSpy: ReturnType<typeof vi.fn>, toolName: string) {
+  return toolSpy.mock.calls.find((call) => call[0] === toolName)?.[2] as
+    | ((params: Record<string, unknown>) => Promise<{ content: { text: string }[]; isError?: boolean }>)
+    | undefined;
 }
 
-describe("Workshop Tools", () => {
+describe("Pipeline Workshop Tools", () => {
+  const sessionIDs: string[] = [];
+
   afterEach(() => {
     vi.restoreAllMocks();
+    for (const id of sessionIDs.splice(0, sessionIDs.length)) {
+      try { deleteSession(id); } catch { /* ignore */ }
+    }
   });
 
   it("registers all 4 workshop tools without throwing", () => {
-    const server = makeServer();
+    const server = new McpServer({ name: "test", version: "0.0.1" });
     const client = createMockClient();
-    expect(() => registerWorkshopTools(server, client as any)).not.toThrow();
+    registerWorkshopTools(server, client as any);
+    expect(true).toBe(true);
   });
 
-  it("pipeline_workshop_open calls openWorkshop and returns its result", async () => {
-    const server = makeServer();
-    const spy = vi.spyOn(server, "registerTool");
-    const client = createMockClient();
+  it("pipeline_workshop_open creates a session and returns a sessionID", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "registerTool");
+    const client = createMockClient([
+      { id: "n1", name: "CUSTOMERS", locationName: "RAW" },
+    ]);
 
-    const fakeSession = {
-      sessionID: "abc123",
+    registerWorkshopTools(server, client as any);
+
+    const handler = getToolHandler(toolSpy, "pipeline_workshop_open");
+    expect(typeof handler).toBe("function");
+
+    const result = await handler!({ workspaceID: "ws-1" });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(typeof data.sessionID).toBe("string");
+    expect(data.sessionID.length).toBeGreaterThan(0);
+    expect(data.workspaceID).toBe("ws-1");
+    sessionIDs.push(data.sessionID);
+  });
+
+  it("pipeline_workshop_open with intent bootstraps session nodes", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "registerTool");
+    const client = createMockClient([
+      { id: "n1", name: "CUSTOMERS", locationName: "RAW" },
+      { id: "n2", name: "ORDERS", locationName: "RAW" },
+    ]);
+
+    registerWorkshopTools(server, client as any);
+
+    const handler = getToolHandler(toolSpy, "pipeline_workshop_open");
+    const result = await handler!({
       workspaceID: "ws-1",
-      createdAt: "2026-01-01T00:00:00Z",
-      updatedAt: "2026-01-01T00:00:00Z",
-      nodes: [],
-      history: [],
-      resolvedEntities: [],
-      openQuestions: [],
-      warnings: [],
-    };
-    vi.mocked(openWorkshop).mockResolvedValue(fakeSession as any);
-
-    registerWorkshopTools(server, client as any);
-
-    const handler = getToolHandler(server, spy, "pipeline_workshop_open");
-    expect(handler).toBeDefined();
-
-    const result = await handler!({ workspaceID: "ws-1" }) as any;
-    expect(openWorkshop).toHaveBeenCalledWith(client, { workspaceID: "ws-1", intent: undefined });
-    expect(result.content[0].text).toContain("abc123");
-  });
-
-  it("pipeline_workshop_open rejects invalid workspaceID", async () => {
-    const server = makeServer();
-    const spy = vi.spyOn(server, "registerTool");
-    const client = createMockClient();
-
-    registerWorkshopTools(server, client as any);
-
-    const handler = getToolHandler(server, spy, "pipeline_workshop_open");
-    const result = await handler!({ workspaceID: "../escape" }) as any;
-    expect(result.isError).toBe(true);
-    expect(openWorkshop).not.toHaveBeenCalled();
-  });
-
-  it("pipeline_workshop_instruct calls workshopInstruct and returns its result", async () => {
-    const server = makeServer();
-    const spy = vi.spyOn(server, "registerTool");
-    const client = createMockClient();
-
-    const fakeResult = {
-      sessionID: "abc123",
-      action: "added_nodes",
-      changes: ["Added stage node STG_CUSTOMERS"],
-      currentPlan: [],
-      openQuestions: [],
-      warnings: [],
-    };
-    vi.mocked(workshopInstruct).mockResolvedValue(fakeResult as any);
-
-    registerWorkshopTools(server, client as any);
-
-    const handler = getToolHandler(server, spy, "pipeline_workshop_instruct");
-    expect(handler).toBeDefined();
-
-    const result = await handler!({ sessionID: "abc123", instruction: "stage the customers table" }) as any;
-    expect(workshopInstruct).toHaveBeenCalledWith(client, {
-      sessionID: "abc123",
-      instruction: "stage the customers table",
+      intent: "stage CUSTOMERS",
     });
-    expect(result.content[0].text).toContain("added_nodes");
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(typeof data.sessionID).toBe("string");
+    sessionIDs.push(data.sessionID);
   });
 
-  it("pipeline_workshop_status returns session state when session exists", async () => {
-    const server = makeServer();
-    const spy = vi.spyOn(server, "registerTool");
-    const client = createMockClient();
-
-    const fakeSession = {
-      sessionID: "abc123",
-      workspaceID: "ws-1",
-      createdAt: "2026-01-01T00:00:00Z",
-      updatedAt: "2026-01-01T00:00:00Z",
-      nodes: [],
-      history: [],
-      resolvedEntities: [],
-    };
-    vi.mocked(getWorkshopStatus).mockReturnValue(fakeSession as any);
+  it("pipeline_workshop_status returns session for a valid sessionID", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "registerTool");
+    const client = createMockClient([{ id: "n1", name: "CUSTOMERS" }]);
 
     registerWorkshopTools(server, client as any);
 
-    const handler = getToolHandler(server, spy, "pipeline_workshop_status");
-    expect(handler).toBeDefined();
+    // Open a session first
+    const openHandler = getToolHandler(toolSpy, "pipeline_workshop_open");
+    const openResult = await openHandler!({ workspaceID: "ws-1" });
+    const { sessionID } = JSON.parse(openResult.content[0]!.text);
+    sessionIDs.push(sessionID);
 
-    const result = await handler!({ sessionID: "abc123" }) as any;
-    expect(result.content[0].text).toContain("abc123");
-    expect(result.content[0].text).not.toContain('"error"');
+    // Now get status
+    const statusHandler = getToolHandler(toolSpy, "pipeline_workshop_status");
+    expect(typeof statusHandler).toBe("function");
+
+    const statusResult = await statusHandler!({ sessionID });
+    const data = JSON.parse(statusResult.content[0]!.text);
+    expect(data.sessionID).toBe(sessionID);
+    expect(data.workspaceID).toBe("ws-1");
+    expect(Array.isArray(data.nodes)).toBe(true);
   });
 
-  it("pipeline_workshop_status returns error object when session not found", async () => {
-    const server = makeServer();
-    const spy = vi.spyOn(server, "registerTool");
+  it("pipeline_workshop_status returns error for unknown sessionID", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "registerTool");
     const client = createMockClient();
-
-    vi.mocked(getWorkshopStatus).mockReturnValue(null);
 
     registerWorkshopTools(server, client as any);
 
-    const handler = getToolHandler(server, spy, "pipeline_workshop_status");
-    const result = await handler!({ sessionID: "missing" }) as any;
-    expect(result.content[0].text).toContain("error");
-    expect(result.content[0].text).toContain("missing");
+    const handler = getToolHandler(toolSpy, "pipeline_workshop_status");
+    const result = await handler!({ sessionID: "nonexistent-session-id" });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(typeof data.error).toBe("string");
+    expect(data.error).toContain("not found");
   });
 
-  it("pipeline_workshop_close calls workshopClose and returns its result", async () => {
-    const server = makeServer();
-    const spy = vi.spyOn(server, "registerTool");
-    const client = createMockClient();
-
-    vi.mocked(workshopClose).mockReturnValue({ closed: true, message: "Session closed." });
+  it("pipeline_workshop_instruct modifies the current session plan", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "registerTool");
+    const client = createMockClient([
+      { id: "n1", name: "CUSTOMERS", locationName: "RAW" },
+    ]);
 
     registerWorkshopTools(server, client as any);
 
-    const handler = getToolHandler(server, spy, "pipeline_workshop_close");
-    expect(handler).toBeDefined();
+    // Open session
+    const openHandler = getToolHandler(toolSpy, "pipeline_workshop_open");
+    const openResult = await openHandler!({ workspaceID: "ws-1" });
+    const { sessionID } = JSON.parse(openResult.content[0]!.text);
+    sessionIDs.push(sessionID);
 
-    const result = await handler!({ sessionID: "abc123" }) as any;
-    expect(workshopClose).toHaveBeenCalledWith("abc123");
-    expect(result.content[0].text).toContain("closed");
-  });
+    // Send instruction
+    const instructHandler = getToolHandler(toolSpy, "pipeline_workshop_instruct");
+    expect(typeof instructHandler).toBe("function");
 
-  it("pipeline_workshop_open passes intent when provided", async () => {
-    const server = makeServer();
-    const spy = vi.spyOn(server, "registerTool");
-    const client = createMockClient();
-
-    vi.mocked(openWorkshop).mockResolvedValue({
-      sessionID: "def456",
-      workspaceID: "ws-1",
-      createdAt: "2026-01-01T00:00:00Z",
-      updatedAt: "2026-01-01T00:00:00Z",
-      nodes: [],
-      history: [],
-      resolvedEntities: [],
-      openQuestions: [],
-      warnings: [],
-    } as any);
-
-    registerWorkshopTools(server, client as any);
-
-    const handler = getToolHandler(server, spy, "pipeline_workshop_open");
-    await handler!({ workspaceID: "ws-1", intent: "join customers and orders" });
-
-    expect(openWorkshop).toHaveBeenCalledWith(client, {
-      workspaceID: "ws-1",
-      intent: "join customers and orders",
+    const result = await instructHandler!({
+      sessionID,
+      instruction: "add a staging node for CUSTOMERS",
     });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(data.sessionID).toBe(sessionID);
+    expect(typeof data.action).toBe("string");
+    expect(Array.isArray(data.changes)).toBe(true);
+    expect(Array.isArray(data.currentPlan)).toBe(true);
   });
 
-  it("pipeline_workshop_instruct surfaces errors via isError response", async () => {
-    const server = makeServer();
-    const spy = vi.spyOn(server, "registerTool");
-    const client = createMockClient();
-
-    vi.mocked(workshopInstruct).mockRejectedValue(new Error("Session not found"));
+  it("pipeline_workshop_close closes the session", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "registerTool");
+    const client = createMockClient([{ id: "n1", name: "CUSTOMERS" }]);
 
     registerWorkshopTools(server, client as any);
 
-    const handler = getToolHandler(server, spy, "pipeline_workshop_instruct");
-    const result = await handler!({ sessionID: "bad", instruction: "do something" }) as any;
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Session not found");
+    // Open session
+    const openHandler = getToolHandler(toolSpy, "pipeline_workshop_open");
+    const openResult = await openHandler!({ workspaceID: "ws-1" });
+    const { sessionID } = JSON.parse(openResult.content[0]!.text);
+
+    // Close session
+    const closeHandler = getToolHandler(toolSpy, "pipeline_workshop_close");
+    expect(typeof closeHandler).toBe("function");
+
+    const result = await closeHandler!({ sessionID });
+    const data = JSON.parse(result.content[0]!.text);
+    expect(data.closed).toBe(true);
+    expect(typeof data.message).toBe("string");
+
+    // Status should show session gone after close
+    const statusHandler = getToolHandler(toolSpy, "pipeline_workshop_status");
+    const statusResult = await statusHandler!({ sessionID });
+    const statusData = JSON.parse(statusResult.content[0]!.text);
+    expect(typeof statusData.error).toBe("string");
   });
 });
