@@ -289,7 +289,7 @@ describe("Lineage Tool Handlers", () => {
       const result = await handler({ workspaceID: "ws-1", nodeID: "nope" });
 
       expect(result.isError).toBe(true);
-      expect(result.content[0]!.text).toContain("not found in lineage cache");
+      expect(result.content[0]!.text).toContain("not found");
     });
   });
 

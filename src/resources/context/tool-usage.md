@@ -92,6 +92,13 @@ Your capabilities are defined by the tools in this MCP server:
 - **Helper warnings**: `warning`, `validation`, and `resultsError` fields are actionable. A successful call with warnings may not be fully correct.
 - **Node readiness**: A node is fully usable only when `validation` confirms coverage and correctness.
 
+## Lineage Tools
+
+- **First call is slow**: `get_upstream_nodes`, `get_downstream_nodes`, `analyze_impact`, and `propagate_column_change` all build a full lineage cache on first use (fetches every node with `detail=true`). Expect latency on the first call per workspace; subsequent calls within the same session reuse the cache.
+- **Exploration vs impact**: Use `get_upstream_nodes` / `get_downstream_nodes` when you need to trace the graph. Use `analyze_impact` when you want to understand what breaks if a specific node or column changes — it returns affected downstream counts without traversal lists.
+- **`propagate_column_change` is destructive and expensive**: It PUTs updated node bodies for every downstream node. Always confirm with the user before calling it. Requires at least one of `columnName` or `dataType` in `changes` — an empty `changes: {}` is rejected.
+- **Node ID required, not name**: All lineage tools take a `nodeID`, not a node name. Resolve the ID first with `list_workspace_nodes` or `get_workspace_node`.
+
 ## Related Resources
 
 - `coalesce://context/pipeline-workflows` — building pipelines end-to-end
