@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const JsonObjectSchema = z.object({}).passthrough();
 
-const JsonToolErrorSchema = z.object({
+export const JsonToolErrorSchema = z.object({
   message: z.string(),
   status: z.number().optional(),
   detail: z.unknown().optional(),
