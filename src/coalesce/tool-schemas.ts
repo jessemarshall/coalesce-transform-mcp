@@ -293,6 +293,8 @@ const WorkshopSessionOutputSchema = z.object({
     nodeID: z.string().optional(),
     locationName: z.string().nullable().optional(),
   }).passthrough()).optional(),
+  openQuestions: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
   error: z.string().optional(),
 }).passthrough();
 
