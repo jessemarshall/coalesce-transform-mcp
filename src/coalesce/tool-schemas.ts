@@ -362,7 +362,7 @@ const DiagnoseRunOutputSchema = z.object({
     other: z.number().optional(),
   }).passthrough().optional(),
   failures: z.array(z.object({
-    nodeID: z.string(),
+    nodeID: z.string().optional(),
     nodeName: z.string().nullable().optional(),
     nodeType: z.string().nullable().optional(),
     status: z.string().optional(),
@@ -408,7 +408,7 @@ const WorkshopSessionOutputSchema = z.object({
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
   nodes: z.array(z.object({
-    id: z.string(),
+    id: z.string().optional(),
     name: z.string().optional(),
     nodeType: z.string().nullable().optional(),
     predecessorIDs: z.array(z.string()).optional(),
@@ -442,7 +442,6 @@ const WorkshopInstructOutputSchema = z.object({
 }).passthrough();
 
 const WorkshopCloseOutputSchema = z.object({
-  sessionID: z.string().optional(),
   closed: z.boolean().optional(),
   message: z.string().optional(),
   error: z.string().optional(),
