@@ -13,6 +13,7 @@ import {
   cancelRun,
 } from "../../src/coalesce/api/runs.js";
 import { registerRunTools } from "../../src/mcp/runs.js";
+import { CoalesceApiError } from "../../src/client.js";
 import {
   POSTMAN_CANCEL_RUN_BODY,
   POSTMAN_RERUN_RESPONSE,
@@ -289,5 +290,78 @@ describe("Run Tools", () => {
       "orgID",
       "environmentID",
     ]);
+  });
+
+  it("diagnose_run_failure tool returns a run diagnosis with classified failures", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "registerTool");
+    const client = createMockClient();
+
+    client.get.mockImplementation((path: string) => {
+      if (path === "/api/v1/runs/42") {
+        return Promise.resolve({
+          id: "42",
+          runStatus: "failed",
+          runType: "refresh",
+          runStartTime: "2026-03-01T10:00:00Z",
+          runEndTime: "2026-03-01T10:05:00Z",
+          runDetails: { environmentID: "env-1", nodesInRun: "2" },
+        });
+      }
+      if (path === "/api/v1/runs/42/results") {
+        return Promise.resolve({
+          data: [
+            {
+              nodeID: "n1",
+              nodeName: "STG_ORDERS",
+              status: "failed",
+              error: "SQL compilation error: syntax error",
+            },
+            { nodeID: "n2", nodeName: "STG_CUSTOMERS", status: "completed" },
+          ],
+        });
+      }
+      throw new Error(`Unexpected GET ${path}`);
+    });
+
+    registerRunTools(server, client as any);
+
+    const handler = toolSpy.mock.calls.find(
+      (call) => call[0] === "diagnose_run_failure"
+    )?.[2] as ((params: { runID: string }) => Promise<{ content: { text: string }[] }>) | undefined;
+
+    expect(typeof handler).toBe("function");
+
+    const result = await handler!({ runID: "42" });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(data.runID).toBe("42");
+    expect(data.runStatus).toBe("failed");
+    expect(data.summary.totalNodes).toBe(2);
+    expect(data.summary.failed).toBe(1);
+    expect(data.summary.succeeded).toBe(1);
+    expect(data.failures).toHaveLength(1);
+    expect(data.failures[0].nodeID).toBe("n1");
+    expect(data.failures[0].category).toBe("sql_error");
+    expect(Array.isArray(data.failures[0].suggestedFixes)).toBe(true);
+    expect(Array.isArray(data.recommendations)).toBe(true);
+  });
+
+  it("diagnose_run_failure tool returns isError when API call fails", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "registerTool");
+    const client = createMockClient();
+
+    client.get.mockRejectedValue(new CoalesceApiError("Resource not found", 404));
+
+    registerRunTools(server, client as any);
+
+    const handler = toolSpy.mock.calls.find(
+      (call) => call[0] === "diagnose_run_failure"
+    )?.[2] as ((params: { runID: string }) => Promise<{ isError?: boolean; content: { text: string }[] }>) | undefined;
+
+    const result = await handler!({ runID: "99" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain("not found");
   });
 });

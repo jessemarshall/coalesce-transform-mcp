@@ -2655,4 +2655,170 @@ describe("Pipeline Tools", () => {
       expect(result.status).toBe("ready");
     });
   });
+
+  describe("review_pipeline tool", () => {
+    it("returns findings for an empty workspace", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const toolSpy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+
+      client.get.mockImplementation((path: string) => {
+        if (path === "/api/v1/workspaces/ws-1/nodes") {
+          return Promise.resolve({ data: [] });
+        }
+        return Promise.resolve({ data: [] });
+      });
+
+      registerPipelineTools(server, client as any);
+
+      const handler = toolSpy.mock.calls.find(
+        (call) => call[0] === "review_pipeline"
+      )?.[2] as ((params: { workspaceID: string }) => Promise<{ content: { text: string }[] }>) | undefined;
+
+      expect(typeof handler).toBe("function");
+
+      const result = await handler!({ workspaceID: "ws-1" });
+
+      const data = JSON.parse(result.content[0]!.text);
+      expect(data.workspaceID).toBe("ws-1");
+      expect(data.nodeCount).toBe(0);
+      expect(Array.isArray(data.findings)).toBe(true);
+      expect(typeof data.summary).toBe("object");
+    });
+
+    it("returns findings for a workspace with a passthrough node", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const toolSpy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+
+      const summaryNode = {
+        id: "stg-1",
+        name: "STG_CUSTOMERS",
+        nodeType: "Stage",
+        locationName: "STAGING",
+        predecessorNodeIDs: ["src-1"],
+      };
+      const sourceNode = {
+        id: "src-1",
+        name: "CUSTOMERS",
+        nodeType: "Source",
+        locationName: "RAW",
+        predecessorNodeIDs: [],
+      };
+
+      client.get.mockImplementation((path: string) => {
+        if (path === "/api/v1/workspaces/ws-1/nodes") {
+          return Promise.resolve({ data: [summaryNode, sourceNode] });
+        }
+        if (path === "/api/v1/workspaces/ws-1/nodes/stg-1") {
+          return Promise.resolve({
+            id: "stg-1",
+            name: "STG_CUSTOMERS",
+            nodeType: "Stage",
+            config: {},
+            metadata: {
+              columns: [
+                { name: "ID", transform: "", sources: [{ columnReferences: [{ nodeID: "src-1" }] }] },
+              ],
+            },
+          });
+        }
+        if (path === "/api/v1/workspaces/ws-1/nodes/src-1") {
+          return Promise.resolve({
+            id: "src-1",
+            name: "CUSTOMERS",
+            nodeType: "Source",
+            config: {},
+            metadata: { columns: [{ name: "ID", transform: "" }] },
+          });
+        }
+        return Promise.resolve({ data: [] });
+      });
+
+      registerPipelineTools(server, client as any);
+
+      const handler = toolSpy.mock.calls.find(
+        (call) => call[0] === "review_pipeline"
+      )?.[2] as ((params: { workspaceID: string }) => Promise<{ content: { text: string }[] }>) | undefined;
+
+      const result = await handler!({ workspaceID: "ws-1" });
+
+      const data = JSON.parse(result.content[0]!.text);
+      expect(data.workspaceID).toBe("ws-1");
+      expect(data.nodeCount).toBeGreaterThan(0);
+      expect(typeof data.summary.critical).toBe("number");
+      expect(typeof data.summary.warning).toBe("number");
+      expect(typeof data.summary.suggestion).toBe("number");
+    });
+
+    it("returns isError when workspace node fetch fails", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const toolSpy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+
+      client.get.mockRejectedValue(new CoalesceApiError("Resource not found", 404));
+
+      registerPipelineTools(server, client as any);
+
+      const handler = toolSpy.mock.calls.find(
+        (call) => call[0] === "review_pipeline"
+      )?.[2] as ((params: { workspaceID: string }) => Promise<{ isError?: boolean; content: { text: string }[] }>) | undefined;
+
+      const result = await handler!({ workspaceID: "missing" });
+      expect(result.isError).toBe(true);
+    });
+  });
+
+  describe("build_pipeline_from_intent tool", () => {
+    it("returns needs_clarification when workspace has no matching entities", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const toolSpy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+
+      client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+        // workspace nodes list (for node-type observation)
+        if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+          return Promise.resolve({ data: [] });
+        }
+        if (path === "/api/v1/workspaces/ws-1/nodes") {
+          return Promise.resolve({ data: [] });
+        }
+        return Promise.resolve({ data: [] });
+      });
+
+      registerPipelineTools(server, client as any);
+
+      const handler = toolSpy.mock.calls.find(
+        (call) => call[0] === "build_pipeline_from_intent"
+      )?.[2] as ((params: { workspaceID: string; intent: string }) => Promise<{ content: { text: string }[] }>) | undefined;
+
+      expect(typeof handler).toBe("function");
+
+      const result = await handler!({
+        workspaceID: "ws-1",
+        intent: "join CUSTOMERS and ORDERS on CUSTOMER_ID",
+      });
+
+      const data = JSON.parse(result.content[0]!.text);
+      // Should not have created nodes (empty workspace → can't resolve entities)
+      expect(data.created).toBe(false);
+    });
+
+    it("returns isError when workspace fetch fails", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const toolSpy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+
+      client.get.mockRejectedValue(new CoalesceApiError("Unauthorized", 401));
+
+      registerPipelineTools(server, client as any);
+
+      const handler = toolSpy.mock.calls.find(
+        (call) => call[0] === "build_pipeline_from_intent"
+      )?.[2] as ((params: { workspaceID: string; intent: string }) => Promise<{ isError?: boolean; content: { text: string }[] }>) | undefined;
+
+      const result = await handler!({ workspaceID: "ws-1", intent: "stage customers" });
+      expect(result.isError).toBe(true);
+    });
+  });
 });
