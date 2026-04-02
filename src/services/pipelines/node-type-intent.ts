@@ -375,12 +375,8 @@ export function hasStrongSignal(family: PipelineNodeTypeFamily, text: string): b
 }
 
 /**
- * Detect specialized materialization patterns in a candidate and return
- * the penalty to apply if the context doesn't explicitly request it.
- */
-/**
  * Detect if a candidate matches a specialized pattern where the context
- * does NOT request it. Returns the pattern info if the type should not be used.
+ * does NOT request it. Returns the penalty to apply if found, or null otherwise.
  */
 export function detectSpecializedPatternPenalty(
   candidateSignals: string,

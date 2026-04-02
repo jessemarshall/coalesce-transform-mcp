@@ -89,7 +89,7 @@ describe("Tool Registration", () => {
     expect(toolNames).toContain("review_pipeline");
     expect(toolNames).toContain("pipeline_workshop_open");
     expect(toolNames).toContain("pipeline_workshop_instruct");
-    expect(toolNames).toContain("pipeline_workshop_status");
+    expect(toolNames).toContain("get_pipeline_workshop_status");
     expect(toolNames).toContain("pipeline_workshop_close");
     expect(toolNames).toContain("list_workspace_node_types");
     expect(toolNames).toContain("complete_node_configuration");

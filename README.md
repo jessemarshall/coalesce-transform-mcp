@@ -246,7 +246,7 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 
 - `pipeline_workshop_open` - Open an iterative pipeline builder session with workspace context pre-loaded
 - `pipeline_workshop_instruct` - Send a natural language instruction to modify the current workshop plan
-- `pipeline_workshop_status` - Get the current state of a workshop session
+- `get_pipeline_workshop_status` - Get the current state of a workshop session
 - `pipeline_workshop_close` - Close a workshop session and release resources
 
 #### Repo-Backed Node Types and Templates
