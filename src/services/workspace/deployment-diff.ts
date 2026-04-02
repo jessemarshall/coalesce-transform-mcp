@@ -34,11 +34,21 @@ export type DeploymentDiff = {
   modified: ModifiedNodeSummary[];
 };
 
+// The Coalesce API may return `next` as a number (page index) — normalise to
+// string so the cursor loop handles both formats. Mirrors coerceListPaginationFields
+// in tool-response.ts.
+function normalizeCursor(next: unknown): string | undefined {
+  if (typeof next === "string" && next.length > 0) return next;
+  if (typeof next === "number") return String(next);
+  return undefined;
+}
+
 async function fetchAllWorkspaceNodes(
   client: CoalesceClient,
   workspaceID: string
 ): Promise<DeploymentNodeSummary[]> {
   const nodes: DeploymentNodeSummary[] = [];
+  const seenCursors = new Set<string>();
   let cursor: string | undefined;
 
   do {
@@ -62,7 +72,13 @@ async function fetchAllWorkspaceNodes(
       }
     }
 
-    cursor = typeof page.next === "string" ? page.next : undefined;
+    cursor = normalizeCursor(page.next);
+    if (cursor) {
+      if (seenCursors.has(cursor)) {
+        throw new Error(`Pagination repeated cursor ${cursor}`);
+      }
+      seenCursors.add(cursor);
+    }
   } while (cursor);
 
   return nodes;
@@ -73,6 +89,7 @@ async function fetchAllEnvironmentNodes(
   environmentID: string
 ): Promise<DeploymentNodeSummary[]> {
   const nodes: DeploymentNodeSummary[] = [];
+  const seenCursors = new Set<string>();
   let cursor: string | undefined;
 
   do {
@@ -96,7 +113,13 @@ async function fetchAllEnvironmentNodes(
       }
     }
 
-    cursor = typeof page.next === "string" ? page.next : undefined;
+    cursor = normalizeCursor(page.next);
+    if (cursor) {
+      if (seenCursors.has(cursor)) {
+        throw new Error(`Pagination repeated cursor ${cursor}`);
+      }
+      seenCursors.add(cursor);
+    }
   } while (cursor);
 
   return nodes;

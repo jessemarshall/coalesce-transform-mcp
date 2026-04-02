@@ -264,13 +264,13 @@ describe("preview_deployment tool", () => {
     expect(typeof result.diffedAt).toBe("string");
   });
 
-  it("paginates through multiple pages of workspace nodes", async () => {
+  it("paginates through multiple pages of workspace nodes and forwards cursor", async () => {
     const client = createMockClient();
-    let wsCallCount = 0;
-    client.get.mockImplementation((path: string) => {
+    const wsCalls: Array<Record<string, unknown>> = [];
+    client.get.mockImplementation((path: string, params: Record<string, unknown>) => {
       if (path.includes("/workspaces/")) {
-        wsCallCount++;
-        if (wsCallCount === 1) {
+        wsCalls.push(params);
+        if (wsCalls.length === 1) {
           return Promise.resolve({
             data: [buildNode("n1", "STG_A", "Stage"), buildNode("n2", "STG_B", "Stage")],
             next: "cursor-2",
@@ -283,7 +283,48 @@ describe("preview_deployment tool", () => {
 
     const result = await previewDeployment(client as any, "ws-1", "env-1");
 
-    expect(wsCallCount).toBe(2);
+    expect(wsCalls).toHaveLength(2);
+    expect(wsCalls[1]!.startingFrom).toBe("cursor-2");
     expect(result.summary.new).toBe(3);
+  });
+
+  it("handles numeric next cursor (API returns page index as number)", async () => {
+    const client = createMockClient();
+    let callCount = 0;
+    client.get.mockImplementation((path: string, params: Record<string, unknown>) => {
+      if (path.includes("/workspaces/")) {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({
+            data: [buildNode("n1", "STG_A", "Stage")],
+            next: 2,  // numeric cursor — Coalesce API can return page index as number
+          });
+        }
+        return Promise.resolve({ data: [buildNode("n2", "STG_B", "Stage")] });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    const result = await previewDeployment(client as any, "ws-1", "env-1");
+
+    expect(callCount).toBe(2);
+    expect(result.summary.new).toBe(2);
+  });
+
+  it("throws when pagination returns a repeated cursor", async () => {
+    const client = createMockClient();
+    client.get.mockImplementation((path: string) => {
+      if (path.includes("/workspaces/")) {
+        return Promise.resolve({
+          data: [buildNode("n1", "STG_A", "Stage")],
+          next: "same-cursor",  // same cursor on every page → infinite loop guard
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    await expect(previewDeployment(client as any, "ws-1", "env-1")).rejects.toThrow(
+      "Pagination repeated cursor same-cursor"
+    );
   });
 });
