@@ -9,15 +9,10 @@ import {
 import { z } from "zod";
 import { isPlainObject } from "../utils.js";
 import { CoalesceApiError } from "../client.js";
+import { JsonToolErrorSchema } from "./tool-schemas.js";
 
 const SESSION_START_TIME = new Date();
 const DEFAULT_AUTO_CACHE_MAX_BYTES = 32 * 1024;
-
-const JsonToolErrorSchema = z.object({
-  message: z.string(),
-  status: z.number().optional(),
-  detail: z.unknown().optional(),
-}).passthrough();
 
 type TextContent = { type: "text"; text: string };
 

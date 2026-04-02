@@ -24,7 +24,7 @@ const DEFAULT_BASE_URL = "https://app.coalescesoftware.io";
 const MAX_RETRY_ATTEMPTS = 5;
 const RETRY_BASE_DELAY_MS = 1_000;
 const RETRY_MAX_DELAY_MS = 30_000;
-const RETRYABLE_RATE_LIMIT_METHODS = new Set(["GET"]);
+const RETRYABLE_RATE_LIMIT_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
 
 export function validateConfig(): ClientConfig {
   const accessToken = process.env.COALESCE_ACCESS_TOKEN?.trim();

@@ -146,6 +146,7 @@ Coalesce Platform Tools: manage workspaces, environments, projects, runs, and ot
 - `create_environment` - Create a new environment within a project
 - `update_environment` - Update an existing environment
 - `delete_environment` - Delete an environment ⚠️
+- `preview_deployment` - Diff workspace (dev) state against environment (deployed) state — returns new, removed, and modified node lists before triggering a deploy run
 
 #### Workspaces
 
@@ -245,7 +246,7 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 
 - `pipeline_workshop_open` - Open an iterative pipeline builder session with workspace context pre-loaded
 - `pipeline_workshop_instruct` - Send a natural language instruction to modify the current workshop plan
-- `pipeline_workshop_status` - Get the current state of a workshop session
+- `get_pipeline_workshop_status` - Get the current state of a workshop session
 - `pipeline_workshop_close` - Close a workshop session and release resources
 
 #### Repo-Backed Node Types and Templates

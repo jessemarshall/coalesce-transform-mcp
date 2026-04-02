@@ -20,7 +20,7 @@ Do NOT use when:
 ```
 1. pipeline_workshop_open    → Start session, get sessionID
 2. pipeline_workshop_instruct → Send instructions to refine the plan (repeat)
-3. pipeline_workshop_status   → Check current plan state
+3. get_pipeline_workshop_status   → Check current plan state
 4. pipeline_workshop_close    → Clean up when done
 ```
 
