@@ -546,7 +546,7 @@ export function registerNodeTools(
     {
       title: "List Workspace Node Types",
       description:
-        "List distinct node types observed in current workspace nodes. This scans existing nodes only; it is not a true installed-type registry.\n\nWARNING: Do NOT use these values directly as the nodeType parameter for create_workspace_node_from_predecessor or create_workspace_node_from_scratch. The observed values may be bare numeric IDs (e.g. '31') that differ from the proper package-prefixed format (e.g. 'base-nodes:::Stage'). Always call plan_pipeline first to discover the correct nodeType.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n\nReturns:\n  { nodeTypes: { id, name, count }[] }",
+        "List distinct node types observed in current workspace nodes. This scans existing nodes only; it is not a true installed-type registry.\n\nWARNING: Do NOT use these values directly as the nodeType parameter for create_workspace_node_from_predecessor or create_workspace_node_from_scratch. The observed values may be bare numeric IDs (e.g. '31') that differ from the proper package-prefixed format (e.g. 'base-nodes:::Stage'). Always call plan_pipeline first to discover the correct nodeType.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n\nReturns:\n  { nodeTypes: string[], counts: Record<string, number>, total: number } — nodeTypes is sorted by frequency descending; counts maps each type to its usage count.",
       inputSchema: z.object({
         workspaceID: z.string().describe("The workspace ID"),
       }),
