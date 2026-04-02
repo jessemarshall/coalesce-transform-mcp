@@ -138,9 +138,8 @@ describe("Pipeline Workshop Tools", () => {
     const handler = getToolHandler(toolSpy, "pipeline_workshop_status");
     const result = await handler!({ sessionID: "nonexistent-session-id" });
 
-    const data = JSON.parse(result.content[0]!.text);
-    expect(typeof data.error).toBe("string");
-    expect(data.error).toContain("not found");
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain("not found");
   });
 
   it("pipeline_workshop_instruct modifies the current session plan", async () => {
@@ -198,7 +197,7 @@ describe("Pipeline Workshop Tools", () => {
     // Status should show session gone after close
     const statusHandler = getToolHandler(toolSpy, "pipeline_workshop_status");
     const statusResult = await statusHandler!({ sessionID });
-    const statusData = JSON.parse(statusResult.content[0]!.text);
-    expect(typeof statusData.error).toBe("string");
+    expect(statusResult.isError).toBe(true);
+    expect(statusResult.content[0]!.text).toContain("not found");
   });
 });

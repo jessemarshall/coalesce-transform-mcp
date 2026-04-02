@@ -110,9 +110,9 @@ export function registerWorkshopTools(
       try {
         const session = getWorkshopStatus(params.sessionID);
         if (!session) {
-          return buildJsonToolResponse("pipeline_workshop_status", {
-            error: `Session "${params.sessionID}" not found. Use pipeline_workshop_open to start a new session.`,
-          });
+          throw new Error(
+            `Session "${params.sessionID}" not found. Use pipeline_workshop_open to start a new session.`
+          );
         }
         return buildJsonToolResponse("pipeline_workshop_status", session);
       } catch (error) {

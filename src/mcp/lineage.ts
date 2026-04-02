@@ -258,6 +258,12 @@ export function registerLineageTools(
           reportProgress: progressReporter,
         });
 
+        if (!cache.nodes.has(params.nodeID)) {
+          throw new Error(
+            `Node ${params.nodeID} not found in workspace ${params.workspaceID}. Available nodes: ${cache.nodes.size}. Ensure the node ID is correct.`
+          );
+        }
+
         const result = analyzeNodeImpact(cache, params.nodeID, params.columnID);
 
         return buildJsonToolResponse("analyze_impact", result);
@@ -295,7 +301,10 @@ export function registerLineageTools(
         changes: z.object({
           columnName: z.string().optional().describe("New column name to propagate"),
           dataType: z.string().optional().describe("New data type to propagate"),
-        }).describe("Changes to propagate — at least one of columnName or dataType required"),
+        }).refine(
+          (c) => c.columnName !== undefined || c.dataType !== undefined,
+          { message: "At least one of columnName or dataType is required" }
+        ).describe("Changes to propagate — at least one of columnName or dataType required"),
       }),
       outputSchema: getToolOutputSchema("propagate_column_change"),
       annotations: WRITE_ANNOTATIONS,

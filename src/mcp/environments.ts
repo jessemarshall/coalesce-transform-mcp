@@ -166,7 +166,11 @@ export function registerEnvironmentTools(
     {
       title: "Preview Deployment",
       description: [
-        "Diff workspace (dev) state against environment (deployed) state to show exactly what will change before triggering a deploy run.",
+        "Diff workspace (dev) state against environment (deployed) state to show structural node changes before triggering a deploy run.",
+        "",
+        "Compares node presence and identity only (name and nodeType). SQL body, column definitions, and",
+        "config changes are NOT surfaced here — a node with identical name and type but different SQL will",
+        "appear as 'unchanged'. For a full content diff, fetch individual node details separately.",
         "",
         "Returns three lists:",
         "  - new: nodes present in the workspace but not yet deployed to the environment (will be created)",
