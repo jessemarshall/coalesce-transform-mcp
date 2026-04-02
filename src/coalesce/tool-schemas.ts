@@ -607,7 +607,7 @@ export function getToolOutputSchema(toolName: string) {
     case "review_pipeline":
       return ReviewPipelineOutputSchema;
     case "pipeline_workshop_open":
-    case "pipeline_workshop_status":
+    case "get_pipeline_workshop_status":
       return WorkshopSessionOutputSchema;
     case "pipeline_workshop_instruct":
       return WorkshopInstructOutputSchema;

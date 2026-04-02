@@ -104,7 +104,7 @@ describe("Pipeline Workshop Tools", () => {
     sessionIDs.push(data.sessionID);
   });
 
-  it("pipeline_workshop_status returns session for a valid sessionID", async () => {
+  it("get_pipeline_workshop_status returns session for a valid sessionID", async () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
     const toolSpy = vi.spyOn(server, "registerTool");
     const client = createMockClient([{ id: "n1", name: "CUSTOMERS" }]);
@@ -118,7 +118,7 @@ describe("Pipeline Workshop Tools", () => {
     sessionIDs.push(sessionID);
 
     // Now get status
-    const statusHandler = getToolHandler(toolSpy, "pipeline_workshop_status");
+    const statusHandler = getToolHandler(toolSpy, "get_pipeline_workshop_status");
     expect(typeof statusHandler).toBe("function");
 
     const statusResult = await statusHandler!({ sessionID });
@@ -128,14 +128,14 @@ describe("Pipeline Workshop Tools", () => {
     expect(Array.isArray(data.nodes)).toBe(true);
   });
 
-  it("pipeline_workshop_status returns error for unknown sessionID", async () => {
+  it("get_pipeline_workshop_status returns error for unknown sessionID", async () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
     const toolSpy = vi.spyOn(server, "registerTool");
     const client = createMockClient();
 
     registerWorkshopTools(server, client as any);
 
-    const handler = getToolHandler(toolSpy, "pipeline_workshop_status");
+    const handler = getToolHandler(toolSpy, "get_pipeline_workshop_status");
     const result = await handler!({ sessionID: "nonexistent-session-id" });
 
     expect(result.isError).toBe(true);
@@ -195,7 +195,7 @@ describe("Pipeline Workshop Tools", () => {
     expect(typeof data.message).toBe("string");
 
     // Status should show session gone after close
-    const statusHandler = getToolHandler(toolSpy, "pipeline_workshop_status");
+    const statusHandler = getToolHandler(toolSpy, "get_pipeline_workshop_status");
     const statusResult = await statusHandler!({ sessionID });
     expect(statusResult.isError).toBe(true);
     expect(statusResult.content[0]!.text).toContain("not found");

@@ -55,7 +55,7 @@ const READ_ONLY_TOOLS = [
   "list_user_roles",
   "plan_pipeline",
   "review_pipeline",
-  "pipeline_workshop_status",
+  "get_pipeline_workshop_status",
   "search_node_type_variants",
   "get_node_type_variant",
   "generate_set_workspace_node_template_from_variant",

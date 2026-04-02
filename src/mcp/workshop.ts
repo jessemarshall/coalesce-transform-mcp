@@ -94,7 +94,7 @@ export function registerWorkshopTools(
   );
 
   server.registerTool(
-    "pipeline_workshop_status",
+    "get_pipeline_workshop_status",
     {
       title: "Pipeline Workshop Status",
       description:
@@ -103,7 +103,7 @@ export function registerWorkshopTools(
       inputSchema: z.object({
         sessionID: z.string().describe("The workshop session ID"),
       }),
-      outputSchema: getToolOutputSchema("pipeline_workshop_status"),
+      outputSchema: getToolOutputSchema("get_pipeline_workshop_status"),
       annotations: READ_ONLY_ANNOTATIONS,
     },
     async (params) => {
@@ -114,7 +114,7 @@ export function registerWorkshopTools(
             `Session "${params.sessionID}" not found. Use pipeline_workshop_open to start a new session.`
           );
         }
-        return buildJsonToolResponse("pipeline_workshop_status", session);
+        return buildJsonToolResponse("get_pipeline_workshop_status", session);
       } catch (error) {
         return handleToolError(error);
       }
