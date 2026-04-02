@@ -1,8 +1,10 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
-import { fetchAllEnvironmentNodes } from "../services/cache/snapshots.js";
-import { listRuns } from "../coalesce/api/runs.js";
+import {
+  fetchAllEnvironmentNodes,
+  fetchAllRuns,
+} from "../services/cache/snapshots.js";
 import {
   READ_ONLY_ANNOTATIONS,
   buildJsonToolResponse,
@@ -70,11 +72,8 @@ function extractNodes(items: unknown[]): NodeRecord[] {
   return items.filter((item): item is NodeRecord => isPlainObject(item));
 }
 
-function extractRuns(response: unknown): RunRecord[] {
-  if (!isPlainObject(response)) return [];
-  const data = (response as Record<string, unknown>).data;
-  if (!Array.isArray(data)) return [];
-  return data.filter((item): item is RunRecord =>
+function extractRuns(items: unknown[]): RunRecord[] {
+  return items.filter((item): item is RunRecord =>
     isPlainObject(item) && typeof (item as Record<string, unknown>).id === "string"
   );
 }
@@ -413,19 +412,18 @@ export async function getEnvironmentHealth(
     "environmentID"
   );
 
-  const [nodesResult, runsResponse] = await Promise.all([
+  const [nodesResult, runsResult] = await Promise.all([
     fetchAllEnvironmentNodes(client, { environmentID, detail: true }),
-    listRuns(client, {
+    fetchAllRuns(client, {
       environmentID,
       detail: true,
-      limit: 250,
       orderBy: "id",
       orderByDirection: "desc",
     }),
   ]);
 
   const nodes = extractNodes(nodesResult.items);
-  const runs = extractRuns(runsResponse);
+  const runs = extractRuns(runsResult.items);
   const assessedAt = new Date().toISOString();
 
   const nodesByType = countNodesByType(nodes);
@@ -465,7 +463,7 @@ export function registerGetEnvironmentHealth(
     {
       title: "Get Environment Health",
       description:
-        "Get a comprehensive health dashboard for a deployed environment. Composes multiple API calls into a single health summary.\n\nArgs:\n  - environmentID (string, required): The environment ID\n\nReturns:\n  {\n    environmentID, assessedAt, totalNodes,\n    nodesByType: { Stage: 5, Dimension: 3, ... },\n    nodeRunStatus: [{ nodeID, nodeName, lastRunStatus, lastRunTime }],\n    failedRunsLast24h: [{ runID, runStatus, startTime, endTime }],\n    staleNodes: [{ nodeID, nodeName, nodeType, lastRunTime, daysSinceLastRun }],\n    dependencyHealth: { orphanNodes: [...], totalDependencyEdges },\n    healthScore: \"healthy\" | \"warning\" | \"critical\",\n    healthReasons: [\"...\"]\n  }",
+        "Get a comprehensive health dashboard for a deployed environment. Composes multiple API calls into a single health summary.\n\nThis tool paginates through all environment nodes and all environment runs before scoring health, so it may take longer on large or busy environments.\n\nArgs:\n  - environmentID (string, required): The environment ID\n\nReturns:\n  {\n    environmentID, assessedAt, totalNodes,\n    nodesByType: { Stage: 5, Dimension: 3, ... },\n    nodeRunStatus: [{ nodeID, nodeName, lastRunStatus, lastRunTime }],\n    failedRunsLast24h: [{ runID, runStatus, startTime, endTime }],\n    staleNodes: [{ nodeID, nodeName, nodeType, lastRunTime, daysSinceLastRun }],\n    dependencyHealth: { orphanNodes: [...], totalDependencyEdges },\n    healthScore: \"healthy\" | \"warning\" | \"critical\",\n    healthReasons: [\"...\"]\n  }",
       inputSchema: z.object({
         environmentID: z
           .string()

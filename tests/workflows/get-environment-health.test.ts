@@ -386,6 +386,45 @@ describe("get-environment-health workflow", () => {
     expect(result.nodesByType).toEqual({ Stage: 1, Dimension: 1 });
   });
 
+  it("auto-paginates runs across multiple pages before deriving node status", async () => {
+    const client = createMockClient();
+    const nodes = [makeNode("n1", "NODE_1", "Stage")];
+
+    client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+      if (path === "/api/v1/environments/env-1/nodes") {
+        return Promise.resolve({ data: nodes });
+      }
+      if (path === "/api/v1/runs") {
+        if (!params || !params.startingFrom) {
+          return Promise.resolve({
+            data: [],
+            next: "cursor-2",
+          });
+        }
+        if (params.startingFrom === "cursor-2") {
+          return Promise.resolve({
+            data: [
+              {
+                ...makeRun("r1", "completed", HOURS_AGO(3), HOURS_AGO(2)),
+                runDetails: {
+                  nodes: [{ nodeID: "n1" }],
+                  nodesInRun: 1,
+                },
+              },
+            ],
+          });
+        }
+      }
+      return Promise.resolve({});
+    });
+
+    const result = await getEnvironmentHealth(client as any, { environmentID: "env-1" });
+
+    expect(result.nodeRunStatus).toHaveLength(1);
+    expect(result.nodeRunStatus[0].lastRunStatus).toBe("passed");
+    expect(result.nodeRunStatus[0].lastRunTime).toBe(HOURS_AGO(2));
+  });
+
   it("returns assessedAt timestamp", async () => {
     const client = createMockClient();
 
