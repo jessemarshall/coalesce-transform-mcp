@@ -53,7 +53,13 @@ describe("get-environment-health workflow", () => {
       if (path === "/api/v1/runs") {
         return Promise.resolve({
           data: [
-            makeRun("r1", "completed", HOURS_AGO(2), HOURS_AGO(1)),
+            {
+              ...makeRun("r1", "completed", HOURS_AGO(2), HOURS_AGO(1)),
+              runDetails: {
+                nodes: [{ nodeID: "n1" }, { nodeID: "n2" }],
+                nodesInRun: 2,
+              },
+            },
           ],
         });
       }
@@ -84,7 +90,13 @@ describe("get-environment-health workflow", () => {
       if (path === "/api/v1/runs") {
         return Promise.resolve({
           data: [
-            makeRun("r1", "completed", DAYS_AGO(10), DAYS_AGO(10)),
+            {
+              ...makeRun("r1", "completed", DAYS_AGO(10), DAYS_AGO(10)),
+              runDetails: {
+                nodes: [{ nodeID: "n1" }, { nodeID: "n2" }],
+                nodesInRun: 2,
+              },
+            },
           ],
         });
       }
@@ -109,9 +121,27 @@ describe("get-environment-health workflow", () => {
       if (path === "/api/v1/runs") {
         return Promise.resolve({
           data: [
-            makeRun("r1", "failed", HOURS_AGO(3), HOURS_AGO(2)),
-            makeRun("r2", "failed", HOURS_AGO(5), HOURS_AGO(4)),
-            makeRun("r3", "failed", HOURS_AGO(7), HOURS_AGO(6)),
+            {
+              ...makeRun("r1", "failed", HOURS_AGO(3), HOURS_AGO(2)),
+              runDetails: {
+                nodes: [{ nodeID: "n1" }],
+                nodesInRun: 1,
+              },
+            },
+            {
+              ...makeRun("r2", "failed", HOURS_AGO(5), HOURS_AGO(4)),
+              runDetails: {
+                nodes: [{ nodeID: "n1" }],
+                nodesInRun: 1,
+              },
+            },
+            {
+              ...makeRun("r3", "failed", HOURS_AGO(7), HOURS_AGO(6)),
+              runDetails: {
+                nodes: [{ nodeID: "n1" }],
+                nodesInRun: 1,
+              },
+            },
           ],
         });
       }
@@ -123,6 +153,42 @@ describe("get-environment-health workflow", () => {
     expect(result.healthScore).toBe("critical");
     expect(result.failedRunsLast24h).toHaveLength(3);
     expect(result.healthReasons.some((r: string) => r.includes("failed runs"))).toBe(true);
+  });
+
+  it("does not attribute scoped summary runs to unrelated nodes", async () => {
+    const client = createMockClient();
+    const nodes = [
+      makeNode("n1", "STG_ORDERS", "Stage"),
+      makeNode("n2", "DIM_CUSTOMER", "Dimension"),
+    ];
+
+    client.get.mockImplementation((path: string) => {
+      if (path === "/api/v1/environments/env-1/nodes") {
+        return Promise.resolve({ data: nodes });
+      }
+      if (path === "/api/v1/runs") {
+        return Promise.resolve({
+          data: [
+            {
+              ...makeRun("r1", "failed", HOURS_AGO(1), HOURS_AGO(0)),
+              runDetails: {
+                environmentID: "env-1",
+                jobID: "job-1",
+                nodesInRun: 1,
+              },
+            },
+          ],
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    const result = await getEnvironmentHealth(client as any, { environmentID: "env-1" });
+
+    expect(result.nodeRunStatus.every((status) => status.lastRunStatus === "never_run")).toBe(true);
+    expect(
+      result.healthReasons.some((reason: string) => reason.includes("failed last run"))
+    ).toBe(false);
   });
 
   it("handles empty environment", async () => {
@@ -173,6 +239,38 @@ describe("get-environment-health workflow", () => {
       { nodeID: "n3", nodeName: "ORPHAN_TABLE", nodeType: "Stage" },
     ]);
     expect(result.dependencyHealth.totalDependencyEdges).toBe(1);
+  });
+
+  it("resolves alias-based dependencies when detecting orphan nodes", async () => {
+    const client = createMockClient();
+    const nodes = [
+      makeNode("n1", "SRC_ORDERS", "Source"),
+      makeNode("n2", "STG_ORDERS", "Stage", {
+        metadata: {
+          sourceMapping: [
+            {
+              aliases: { SRC_ORDERS: "n1" },
+              dependencies: [{ locationName: "SRC", nodeName: "SRC_ORDERS" }],
+            },
+          ],
+        },
+      }),
+    ];
+
+    client.get.mockImplementation((path: string) => {
+      if (path === "/api/v1/environments/env-1/nodes") {
+        return Promise.resolve({ data: nodes });
+      }
+      if (path === "/api/v1/runs") {
+        return Promise.resolve({ data: [] });
+      }
+      return Promise.resolve({});
+    });
+
+    const result = await getEnvironmentHealth(client as any, { environmentID: "env-1" });
+
+    expect(result.dependencyHealth.totalDependencyEdges).toBe(1);
+    expect(result.dependencyHealth.orphanNodes).toHaveLength(0);
   });
 
   it("identifies never-run nodes", async () => {
@@ -335,6 +433,47 @@ describe("get-environment-health workflow", () => {
     expect(result.dependencyHealth.orphanNodes).toHaveLength(0);
   });
 
+  it("ignores non-terminal runs when deriving node last-run status", async () => {
+    const client = createMockClient();
+    const nodes = [
+      makeNode("n1", "STG_ORDERS", "Stage"),
+      makeNode("n2", "DIM_ORDERS", "Dimension", { predecessorNodeIDs: ["n1"] }),
+    ];
+
+    client.get.mockImplementation((path: string) => {
+      if (path === "/api/v1/environments/env-1/nodes") {
+        return Promise.resolve({ data: nodes });
+      }
+      if (path === "/api/v1/runs") {
+        return Promise.resolve({
+          data: [
+            {
+              ...makeRun("r-running", "running", HOURS_AGO(1)),
+              runDetails: {
+                nodes: [{ nodeID: "n1" }, { nodeID: "n2" }],
+                nodesInRun: 2,
+              },
+            },
+            {
+              ...makeRun("r-completed", "completed", HOURS_AGO(3), HOURS_AGO(2)),
+              runDetails: {
+                nodes: [{ nodeID: "n1" }, { nodeID: "n2" }],
+                nodesInRun: 2,
+              },
+            },
+          ],
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    const result = await getEnvironmentHealth(client as any, { environmentID: "env-1" });
+
+    expect(result.nodeRunStatus).toHaveLength(2);
+    expect(result.nodeRunStatus.every((status) => status.lastRunStatus === "passed")).toBe(true);
+    expect(result.healthScore).toBe("healthy");
+  });
+
   it("marks node with failed last run correctly", async () => {
     const client = createMockClient();
     const nodes = [
@@ -348,7 +487,13 @@ describe("get-environment-health workflow", () => {
       if (path === "/api/v1/runs") {
         return Promise.resolve({
           data: [
-            makeRun("r1", "failed", HOURS_AGO(2), HOURS_AGO(1)),
+            {
+              ...makeRun("r1", "failed", HOURS_AGO(2), HOURS_AGO(1)),
+              runDetails: {
+                nodes: [{ nodeID: "n1" }],
+                nodesInRun: 1,
+              },
+            },
           ],
         });
       }

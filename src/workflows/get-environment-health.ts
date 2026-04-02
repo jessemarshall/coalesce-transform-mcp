@@ -22,7 +22,7 @@ type RunRecord = {
   runStatus: string;
   runStartTime?: string;
   runEndTime?: string;
-  runDetails?: { nodes?: Array<{ nodeID?: string }> };
+  runDetails?: Record<string, unknown>;
   [key: string]: unknown;
 };
 
@@ -100,34 +100,85 @@ function getNodeType(node: NodeRecord): string {
   return typeof node.nodeType === "string" ? node.nodeType : "unknown";
 }
 
+function isTerminalRunStatus(
+  status: string
+): status is "completed" | "failed" {
+  return status === "completed" || status === "failed";
+}
+
+function isRunScoped(details: Record<string, unknown>): boolean {
+  return (
+    typeof details.jobID === "string" ||
+    typeof details.includeNodesSelector === "string" ||
+    typeof details.excludeNodesSelector === "string"
+  );
+}
+
+function getAttributedRunNodeIDs(
+  run: RunRecord,
+  allNodeIDs: string[]
+): string[] {
+  if (!isTerminalRunStatus(run.runStatus)) {
+    return [];
+  }
+
+  const runTime = run.runEndTime ?? run.runStartTime;
+  if (typeof runTime !== "string") {
+    return [];
+  }
+
+  const details = isPlainObject(run.runDetails) ? run.runDetails : undefined;
+  if (!details) {
+    return [];
+  }
+
+  const nodes = Array.isArray(details.nodes) ? details.nodes : [];
+  const explicitNodeIDs = nodes.flatMap((node) => {
+    if (!isPlainObject(node) || typeof node.nodeID !== "string") {
+      return [];
+    }
+    return [node.nodeID];
+  });
+  if (explicitNodeIDs.length > 0) {
+    return explicitNodeIDs;
+  }
+
+  if (isRunScoped(details)) {
+    return [];
+  }
+
+  const nodesInRun =
+    typeof details.nodesInRun === "number"
+      ? details.nodesInRun
+      : undefined;
+  if (nodesInRun === allNodeIDs.length) {
+    return allNodeIDs;
+  }
+
+  return [];
+}
+
 function buildNodeRunStatuses(
   nodes: NodeRecord[],
   runs: RunRecord[]
 ): NodeRunStatus[] {
   const nodeLastRun = new Map<string, { status: string; time: string }>();
+  const allNodeIDs = nodes.map(getNodeID);
+  const knownNodeIDs = new Set(allNodeIDs);
 
   for (const run of runs) {
+    if (!isTerminalRunStatus(run.runStatus)) {
+      continue;
+    }
+
     const runTime = run.runEndTime ?? run.runStartTime;
     if (!runTime || typeof runTime !== "string") continue;
 
-    const runNodes = run.runDetails?.nodes;
-    if (Array.isArray(runNodes)) {
-      for (const rn of runNodes) {
-        if (!isPlainObject(rn)) continue;
-        const nodeID = (rn as Record<string, unknown>).nodeID;
-        if (typeof nodeID !== "string") continue;
-        const existing = nodeLastRun.get(nodeID);
-        if (!existing || runTime > existing.time) {
-          nodeLastRun.set(nodeID, { status: run.runStatus, time: runTime });
-        }
-      }
-    } else {
-      for (const node of nodes) {
-        const nodeID = getNodeID(node);
-        const existing = nodeLastRun.get(nodeID);
-        if (!existing || runTime > existing.time) {
-          nodeLastRun.set(nodeID, { status: run.runStatus, time: runTime });
-        }
+    for (const nodeID of getAttributedRunNodeIDs(run, allNodeIDs)) {
+      if (!knownNodeIDs.has(nodeID)) continue;
+      const existing = nodeLastRun.get(nodeID);
+      if (!existing || runTime > existing.time) {
+        nodeLastRun.set(nodeID, { status: run.runStatus, time: runTime });
       }
     }
   }
@@ -208,50 +259,60 @@ function getStaleNodes(
 function analyzeDependencyHealth(nodes: NodeRecord[]): DependencyHealth {
   const nodeIDs = new Set(nodes.map(getNodeID));
   const referencedNodes = new Set<string>();
-  let totalEdges = 0;
+  const edgeKeys = new Set<string>();
 
+  const nodesWithUpstream = new Set<string>();
   for (const node of nodes) {
+    const nodeID = getNodeID(node);
+    const predecessors = node.predecessorNodeIDs;
+    if (Array.isArray(predecessors) && predecessors.length > 0) {
+      nodesWithUpstream.add(nodeID);
+    }
+
     const metadata = node.metadata as Record<string, unknown> | undefined;
     if (isPlainObject(metadata)) {
       const sourceMapping = metadata.sourceMapping;
+      if (Array.isArray(sourceMapping) && sourceMapping.length > 0) {
+        nodesWithUpstream.add(nodeID);
+      }
       if (Array.isArray(sourceMapping)) {
         for (const mapping of sourceMapping) {
           if (!isPlainObject(mapping)) continue;
-          const deps = (mapping as Record<string, unknown>).dependencies;
-          if (Array.isArray(deps)) {
-            for (const dep of deps) {
-              if (typeof dep === "string" && nodeIDs.has(dep)) {
-                referencedNodes.add(dep);
-                totalEdges++;
-              }
+
+          const aliases = isPlainObject(mapping.aliases) ? mapping.aliases : {};
+          for (const value of Object.values(aliases)) {
+            if (typeof value === "string" && nodeIDs.has(value)) {
+              referencedNodes.add(value);
+              edgeKeys.add(`${value}->${nodeID}`);
+            }
+          }
+
+          const deps = Array.isArray(mapping.dependencies)
+            ? mapping.dependencies
+            : [];
+          for (const dep of deps) {
+            if (typeof dep === "string" && nodeIDs.has(dep)) {
+              referencedNodes.add(dep);
+              edgeKeys.add(`${dep}->${nodeID}`);
+            } else if (
+              isPlainObject(dep) &&
+              typeof dep.nodeID === "string" &&
+              nodeIDs.has(dep.nodeID)
+            ) {
+              referencedNodes.add(dep.nodeID);
+              edgeKeys.add(`${dep.nodeID}->${nodeID}`);
             }
           }
         }
       }
     }
 
-    const predecessors = node.predecessorNodeIDs;
     if (Array.isArray(predecessors)) {
       for (const pred of predecessors) {
         if (typeof pred === "string" && nodeIDs.has(pred)) {
           referencedNodes.add(pred);
-          totalEdges++;
+          edgeKeys.add(`${pred}->${nodeID}`);
         }
-      }
-    }
-  }
-
-  const nodesWithUpstream = new Set<string>();
-  for (const node of nodes) {
-    const predecessors = node.predecessorNodeIDs;
-    if (Array.isArray(predecessors) && predecessors.length > 0) {
-      nodesWithUpstream.add(getNodeID(node));
-    }
-    const metadata = node.metadata as Record<string, unknown> | undefined;
-    if (isPlainObject(metadata)) {
-      const sourceMapping = metadata.sourceMapping;
-      if (Array.isArray(sourceMapping) && sourceMapping.length > 0) {
-        nodesWithUpstream.add(getNodeID(node));
       }
     }
   }
@@ -267,7 +328,7 @@ function analyzeDependencyHealth(nodes: NodeRecord[]): DependencyHealth {
       nodeType: getNodeType(node),
     }));
 
-  return { orphanNodes, totalDependencyEdges: totalEdges };
+  return { orphanNodes, totalDependencyEdges: edgeKeys.size };
 }
 
 function computeHealthScore(
@@ -353,8 +414,14 @@ export async function getEnvironmentHealth(
   );
 
   const [nodesResult, runsResponse] = await Promise.all([
-    fetchAllEnvironmentNodes(client, { environmentID }),
-    listRuns(client, { environmentID, limit: 250, orderBy: "id", orderByDirection: "desc" }),
+    fetchAllEnvironmentNodes(client, { environmentID, detail: true }),
+    listRuns(client, {
+      environmentID,
+      detail: true,
+      limit: 250,
+      orderBy: "id",
+      orderByDirection: "desc",
+    }),
   ]);
 
   const nodes = extractNodes(nodesResult.items);

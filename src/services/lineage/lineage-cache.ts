@@ -747,7 +747,9 @@ export async function propagateColumnChange(
       const metadata = currentNode.metadata as Record<string, unknown>;
       const columns = Array.isArray(metadata.columns) ? [...metadata.columns] : [];
       const colIndex = columns.findIndex(
-        (c) => isPlainObject(c) && c.id === entry.columnID
+        (c) =>
+          isPlainObject(c) &&
+          (c.id === entry.columnID || c.columnID === entry.columnID)
       );
 
       if (colIndex === -1) {

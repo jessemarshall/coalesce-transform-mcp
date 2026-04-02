@@ -596,6 +596,83 @@ describe("lineage-cache", () => {
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.errors[0].message).toContain("API down");
     });
+
+    it("updates downstream columns addressed by columnID", async () => {
+      const apiClient = createMockClient();
+
+      const srcNode = {
+        id: "src-1",
+        name: "ORDERS_SF1",
+        nodeType: "Source",
+        metadata: {
+          columns: [
+            { columnID: "col-src-1", name: "O_ORDERKEY", dataType: "NUMBER(38,0)", sources: [] },
+          ],
+          sourceMapping: [],
+        },
+      };
+
+      const stgNode = {
+        id: "stg-1",
+        name: "STG_ORDERS",
+        nodeType: "Stage",
+        metadata: {
+          columns: [
+            {
+              columnID: "col-stg-1",
+              name: "O_ORDERKEY",
+              dataType: "NUMBER(38,0)",
+              sources: [{ columnReferences: [{ nodeID: "src-1", columnID: "col-src-1" }] }],
+            },
+          ],
+          sourceMapping: [
+            {
+              aliases: { ORDERS_SF1: "src-1" },
+              dependencies: [{ locationName: "SRC", nodeName: "ORDERS_SF1" }],
+            },
+          ],
+        },
+      };
+
+      mockPaginatedNodes(apiClient, [srcNode, stgNode]);
+      const apiCache = await buildLineageCache(apiClient as any, "ws-col-id", {
+        baseDir: createTempDir(),
+        forceRefresh: true,
+      });
+
+      apiClient.get.mockImplementation((path: string) => {
+        if (path.includes("/nodes/stg-1")) {
+          return Promise.resolve(JSON.parse(JSON.stringify(stgNode)));
+        }
+        return Promise.resolve({});
+      });
+      apiClient.put.mockResolvedValue({ ok: true });
+
+      const result = await propagateColumnChange(
+        apiClient as any,
+        apiCache,
+        "ws-col-id",
+        "src-1",
+        "col-src-1",
+        { columnName: "O_ORDERKEY_RENAMED" }
+      );
+
+      expect(result.totalUpdated).toBe(1);
+      expect(result.errors).toHaveLength(0);
+      expect(apiClient.put).toHaveBeenCalledWith(
+        "/api/v1/workspaces/ws-col-id/nodes/stg-1",
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            columns: [
+              expect.objectContaining({
+                columnID: "col-stg-1",
+                name: "O_ORDERKEY_RENAMED",
+              }),
+            ],
+          }),
+        })
+      );
+    });
   });
 
   describe("deep chain traversal (20+ nodes)", () => {
