@@ -162,6 +162,72 @@ const CorpusVariantOutputSchema = z.object({
   warnings: z.array(z.string()).optional(),
 }).passthrough();
 
+const PipelineReviewOutputSchema = z.object({
+  workspaceID: z.string().optional(),
+  analyzedAt: z.string().optional(),
+  scope: z.enum(["full", "subgraph"]).optional(),
+  nodeCount: z.number().optional(),
+  methodology: z.string().optional(),
+  findings: z.array(z.object({
+    severity: z.string().optional(),
+    category: z.string().optional(),
+    nodeID: z.string().optional(),
+    nodeName: z.string().optional(),
+    message: z.string().optional(),
+    suggestion: z.string().optional(),
+  }).passthrough()).optional(),
+  summary: JsonObjectSchema.optional(),
+  graphStats: JsonObjectSchema.optional(),
+}).passthrough();
+
+const RunDiagnosisOutputSchema = z.object({
+  runID: z.string().optional(),
+  analyzedAt: z.string().optional(),
+  runStatus: z.string().optional(),
+  runType: z.string().nullable().optional(),
+  environmentID: z.string().nullable().optional(),
+  startTime: z.string().nullable().optional(),
+  endTime: z.string().nullable().optional(),
+  summary: JsonObjectSchema.optional(),
+  failures: z.array(z.object({
+    nodeID: z.string().optional(),
+    nodeName: z.string().nullable().optional(),
+    nodeType: z.string().nullable().optional(),
+    status: z.string().optional(),
+    category: z.string().optional(),
+    errorMessage: z.string().nullable().optional(),
+    suggestedFixes: z.array(z.string()).optional(),
+  }).passthrough()).optional(),
+  warnings: z.array(z.string()).optional(),
+  recommendations: z.array(z.string()).optional(),
+}).passthrough();
+
+const WorkshopOpenOutputSchema = z.object({
+  sessionID: z.string().optional(),
+  workspaceID: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+  nodes: z.array(z.unknown()).optional(),
+  history: z.array(z.unknown()).optional(),
+  resolvedEntities: z.array(z.unknown()).optional(),
+  openQuestions: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
+}).passthrough();
+
+const WorkshopInstructOutputSchema = z.object({
+  sessionID: z.string().optional(),
+  action: z.string().optional(),
+  changes: z.array(z.string()).optional(),
+  currentPlan: z.array(z.unknown()).optional(),
+  openQuestions: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
+}).passthrough();
+
+const WorkshopCloseOutputSchema = z.object({
+  closed: z.boolean().optional(),
+  message: z.string().optional(),
+}).passthrough();
+
 const PipelinePlanOutputSchema = z.object({
   version: z.number().optional(),
   intent: z.string().optional(),
@@ -335,7 +401,20 @@ export function getToolOutputSchema(toolName: string) {
       return PipelinePlanOutputSchema;
     case "create_pipeline_from_plan":
     case "create_pipeline_from_sql":
+    case "build_pipeline_from_intent":
       return PipelineCreateOutputSchema;
+    case "review_pipeline":
+      return PipelineReviewOutputSchema;
+    case "diagnose_run_failure":
+      return RunDiagnosisOutputSchema;
+    case "pipeline_workshop_open":
+      return WorkshopOpenOutputSchema;
+    case "pipeline_workshop_instruct":
+      return WorkshopInstructOutputSchema;
+    case "pipeline_workshop_status":
+      return WorkshopOpenOutputSchema;
+    case "pipeline_workshop_close":
+      return WorkshopCloseOutputSchema;
     default:
       return JsonToolOutputSchema;
   }
