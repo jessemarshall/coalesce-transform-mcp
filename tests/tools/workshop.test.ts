@@ -6,7 +6,6 @@ import {
   workshopInstruct,
   getWorkshopStatus,
   workshopClose,
-  deleteSession,
 } from "../../src/services/pipelines/workshop.js";
 import { createMockClient } from "../helpers/fixtures.js";
 
