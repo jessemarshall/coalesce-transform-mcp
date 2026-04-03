@@ -304,6 +304,9 @@ describe("Lineage Tool Handlers", () => {
       vi.mocked(buildLineageCache).mockResolvedValue(buildFakeCache({
         "n1": { name: "SRC_RAW", nodeType: "Source", columns: [{ id: "c1", name: "order_id" }] },
       }) as never);
+      vi.mocked(walkColumnLineage).mockReturnValue([
+        { nodeID: "n2", nodeName: "STG_ORDERS", nodeType: "Stage", columnID: "c2", columnName: "order_id", direction: "downstream" as const, depth: 1 },
+      ]);
       vi.mocked(propagateColumnChange).mockResolvedValue({
         sourceNodeID: "n1",
         sourceColumnID: "c1",
@@ -344,6 +347,9 @@ describe("Lineage Tool Handlers", () => {
       vi.mocked(buildLineageCache).mockResolvedValue(buildFakeCache({
         "n1": { name: "SRC_RAW", nodeType: "Source", columns: [{ id: "c1", name: "order_id" }] },
       }) as never);
+      vi.mocked(walkColumnLineage).mockReturnValue([
+        { nodeID: "n2", nodeName: "STG_ORDERS", nodeType: "Stage", columnID: "c2", columnName: "order_id", direction: "downstream" as const, depth: 1 },
+      ]);
 
       const handler = extractHandler<{
         workspaceID: string;
@@ -376,6 +382,7 @@ describe("Lineage Tool Handlers", () => {
       vi.mocked(buildLineageCache).mockResolvedValue(buildFakeCache({
         "n1": { name: "SRC_RAW", nodeType: "Source", columns: [{ id: "c1", name: "order_id" }] },
       }) as never);
+      vi.mocked(walkColumnLineage).mockReturnValue([]);
       vi.mocked(propagateColumnChange).mockRejectedValue(new Error("At least one change required"));
 
       const handler = extractHandler<{

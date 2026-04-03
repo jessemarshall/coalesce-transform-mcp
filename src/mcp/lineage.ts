@@ -22,7 +22,6 @@ import {
   createWorkflowProgressReporter,
   type WorkflowProgressExtra,
 } from "../workflows/progress.js";
-import { isPlainObject } from "../utils.js";
 
 export function registerLineageTools(
   server: McpServer,
@@ -328,10 +327,19 @@ export function registerLineageTools(
           reportProgress: progressReporter,
         });
 
-        // Count affected downstream nodes for the confirmation message
+        // Validate node + column exist before asking for confirmation
         const node = cache.nodes.get(params.nodeID);
-        const nodeName = node?.name ?? params.nodeID;
-        const downstream = walkDownstream(cache, params.nodeID) ?? [];
+        if (!node) {
+          throw new Error(`Node ${params.nodeID} not found in lineage cache`);
+        }
+        const sourceCol = node.columns.find((c) => c.id === params.columnID);
+        if (!sourceCol) {
+          throw new Error(`Column ${params.columnID} not found on node ${params.nodeID} (${node.name})`);
+        }
+
+        // Use column-level lineage (not node-level) for an accurate count
+        const downstreamColumns = walkColumnLineage(cache, params.nodeID, params.columnID)
+          .filter((e) => e.direction === "downstream");
         const changeDesc = [
           params.changes.columnName ? `rename to "${params.changes.columnName}"` : null,
           params.changes.dataType ? `change type to ${params.changes.dataType}` : null,
@@ -340,9 +348,9 @@ export function registerLineageTools(
         const approvalResponse = await requireDestructiveConfirmation(
           server,
           "propagate_column_change",
-          `This will update column references across ${downstream.length} downstream node(s) of "${nodeName}" (${changeDesc}). This modifies node bodies via the API and cannot be easily undone.`,
+          `This will update column references across ${downstreamColumns.length} downstream node(s) of "${node.name}" (${changeDesc}). This modifies node bodies via the API and cannot be easily undone.`,
           params.confirmed,
-          { nodeID: params.nodeID, columnID: params.columnID, downstreamCount: downstream.length },
+          { nodeID: params.nodeID, columnID: params.columnID, downstreamCount: downstreamColumns.length },
         );
         if (approvalResponse) return approvalResponse;
 
@@ -357,13 +365,20 @@ export function registerLineageTools(
         );
 
         const response = buildJsonToolResponse("propagate_column_change", result);
-        if (
-          isPlainObject(result) &&
-          Array.isArray(result.errors) &&
-          result.errors.length > 0 &&
-          Array.isArray(result.updatedNodes) &&
-          result.updatedNodes.length === 0
-        ) {
+        if (result.partialFailure) {
+          return {
+            ...response,
+            isError: true,
+            content: [
+              {
+                type: "text" as const,
+                text: `⚠️ PARTIAL FAILURE: ${result.totalUpdated} node(s) were updated before a write failed. ${result.skippedNodes?.length ?? 0} node(s) were skipped. ${result.errors.length} total error(s). The workspace is in an inconsistent state — review updatedNodes, skippedNodes, and errors in the result to determine which nodes need manual correction.`,
+              },
+              ...(Array.isArray(response.content) ? response.content : []),
+            ],
+          };
+        }
+        if (result.errors.length > 0 && result.totalUpdated === 0) {
           return { ...response, isError: true };
         }
         return response;

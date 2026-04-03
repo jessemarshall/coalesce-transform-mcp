@@ -689,6 +689,62 @@ describe("lineage-cache", () => {
         })
       );
     });
+
+    it("stops on first write failure and reports partial failure with skipped nodes", async () => {
+      const nodeMap = new Map(ALL_NODES.map((n) => [n.id, n]));
+      client.get.mockImplementation((path: string) => {
+        for (const [id, node] of nodeMap) {
+          if (path.includes(`/nodes/${id}`)) {
+            return Promise.resolve(JSON.parse(JSON.stringify(node)));
+          }
+        }
+        return Promise.resolve({ data: [] });
+      });
+      // First PUT (n2) succeeds, second PUT (n3) fails
+      client.put
+        .mockResolvedValueOnce({ ok: true })
+        .mockRejectedValueOnce(new Error("Write failed on n3"));
+
+      const result = await propagateColumnChange(
+        client as any,
+        cache,
+        "ws-prop",
+        "n1",
+        "c1",
+        { columnName: "renamed" }
+      );
+
+      // n2 written, n3 failed, n4+n5 skipped
+      expect(result.totalUpdated).toBe(1);
+      expect(result.updatedNodes[0].nodeID).toBe("n2");
+      expect(result.partialFailure).toBe(true);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].message).toContain("Write failed on n3");
+      expect(result.skippedNodes).toBeDefined();
+      expect(result.skippedNodes!.map((s) => s.nodeID)).toEqual(["n4", "n5"]);
+      // Only 2 PUTs attempted (1 success + 1 failure), not 4
+      expect(client.put).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not attempt writes when all fetches fail in prepare phase", async () => {
+      client.get.mockRejectedValue(new Error("API down"));
+
+      const result = await propagateColumnChange(
+        client as any,
+        cache,
+        "ws-prop",
+        "n1",
+        "c1",
+        { columnName: "renamed" }
+      );
+
+      expect(result.totalUpdated).toBe(0);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.partialFailure).toBeUndefined();
+      expect(result.skippedNodes).toBeUndefined();
+      // No PUT calls at all — prepare phase caught all errors
+      expect(client.put).not.toHaveBeenCalled();
+    });
   });
 
   describe("deep chain traversal (20+ nodes)", () => {
