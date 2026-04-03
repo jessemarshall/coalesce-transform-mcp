@@ -59,6 +59,9 @@ function columnKey(nodeID: string, columnID: string): string {
 
 export function parseColumnKey(key: string): { nodeID: string; columnID: string } {
   const sepIndex = key.indexOf(":");
+  if (sepIndex < 1) {
+    throw new Error(`Malformed column key: expected "nodeID:columnID" but got "${key}"`);
+  }
   return {
     nodeID: key.slice(0, sepIndex),
     columnID: key.slice(sepIndex + 1),
