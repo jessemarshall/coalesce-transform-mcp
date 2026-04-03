@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 
 // --- startRun / run-and-wait schemas ---
 
@@ -33,7 +33,7 @@ export const UserCredentialsSchema = z.object({
   snowflakeKeyPairKey: z
     .string()
     .describe(
-      "PEM-encoded private key for Snowflake auth. Use \\n for line breaks in JSON."
+      "File path to a PEM-encoded private key for Snowflake key-pair auth."
     ),
   snowflakeKeyPairPass: z
     .string()
@@ -101,11 +101,21 @@ const ALLOWED_PEM_HEADERS = [
   `${PEM_BOUNDARY}BEGIN ENCRYPTED PRIVATE KEY${PEM_BOUNDARY}`,
 ] as const;
 
+const MAX_KEY_FILE_BYTES = 64 * 1024; // 64 KB — generous limit for PEM keys
+
 function readKeyPairFile(filePath: string): string {
   if (!existsSync(filePath)) {
     throw new Error(
       "SNOWFLAKE_KEY_PAIR_KEY file not found at the configured path. " +
       "Check that the environment variable points to an existing PEM private key file."
+    );
+  }
+  const fileSize = statSync(filePath).size;
+  if (fileSize > MAX_KEY_FILE_BYTES) {
+    const sizeKB = Math.round(fileSize / 1024);
+    throw new Error(
+      `SNOWFLAKE_KEY_PAIR_KEY file is ${sizeKB} KB, which exceeds the ${MAX_KEY_FILE_BYTES / 1024} KB limit for PEM key files. ` +
+      "Check that the path points to a private key file, not a different file."
     );
   }
   const content = readFileSync(filePath, "utf-8").trim();

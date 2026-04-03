@@ -648,31 +648,93 @@ function findCriticalPath(cache: LineageCacheEntry, startNodeID: string): string
   const node = cache.nodes.get(startNodeID);
   if (!node) return [];
 
-  let longestPath: string[] = [node.name];
-  const visited = new Set<string>([startNodeID]);
-
-  function dfs(currentID: string, path: string[]): void {
-    const downstream = cache.downstreamNodes.get(currentID);
-    if (!downstream || downstream.size === 0) {
-      if (path.length > longestPath.length) {
-        longestPath = [...path];
-      }
-      return;
-    }
-
-    for (const nextID of downstream) {
-      if (visited.has(nextID)) continue;
-      const nextNode = cache.nodes.get(nextID);
-      if (nextNode) {
-        visited.add(nextID);
-        dfs(nextID, [...path, nextNode.name]);
-        visited.delete(nextID);
+  // Collect reachable downstream subgraph via BFS
+  const reachable = new Set<string>();
+  const bfsQueue = [startNodeID];
+  while (bfsQueue.length > 0) {
+    const id = bfsQueue.shift()!;
+    if (reachable.has(id)) continue;
+    reachable.add(id);
+    const downstream = cache.downstreamNodes.get(id);
+    if (downstream) {
+      for (const nextID of downstream) {
+        if (!reachable.has(nextID)) bfsQueue.push(nextID);
       }
     }
   }
 
-  dfs(startNodeID, longestPath);
-  return longestPath;
+  // Topological sort (Kahn's algorithm) over the reachable subgraph
+  const inDegree = new Map<string, number>();
+  for (const id of reachable) inDegree.set(id, 0);
+  for (const id of reachable) {
+    const downstream = cache.downstreamNodes.get(id);
+    if (downstream) {
+      for (const nextID of downstream) {
+        if (reachable.has(nextID)) {
+          inDegree.set(nextID, (inDegree.get(nextID) ?? 0) + 1);
+        }
+      }
+    }
+  }
+  const topoQueue: string[] = [];
+  for (const [id, deg] of inDegree) {
+    if (deg === 0) topoQueue.push(id);
+  }
+  const topoOrder: string[] = [];
+  while (topoQueue.length > 0) {
+    const id = topoQueue.shift()!;
+    topoOrder.push(id);
+    const downstream = cache.downstreamNodes.get(id);
+    if (downstream) {
+      for (const nextID of downstream) {
+        if (!reachable.has(nextID)) continue;
+        const newDeg = (inDegree.get(nextID) ?? 1) - 1;
+        inDegree.set(nextID, newDeg);
+        if (newDeg === 0) topoQueue.push(nextID);
+      }
+    }
+  }
+
+  // DP longest path from startNodeID — O(V+E)
+  const dist = new Map<string, number>();
+  const predecessor = new Map<string, string>();
+  dist.set(startNodeID, 0);
+
+  for (const id of topoOrder) {
+    const d = dist.get(id);
+    if (d === undefined) continue; // not reachable from start
+    const downstream = cache.downstreamNodes.get(id);
+    if (downstream) {
+      for (const nextID of downstream) {
+        if (!reachable.has(nextID)) continue;
+        if (d + 1 > (dist.get(nextID) ?? -1)) {
+          dist.set(nextID, d + 1);
+          predecessor.set(nextID, id);
+        }
+      }
+    }
+  }
+
+  // Find the farthest node
+  let farthestID = startNodeID;
+  let maxDist = 0;
+  for (const [id, d] of dist) {
+    if (d > maxDist) {
+      maxDist = d;
+      farthestID = id;
+    }
+  }
+
+  // Reconstruct path
+  const pathIDs: string[] = [];
+  let cur: string | undefined = farthestID;
+  while (cur !== undefined) {
+    pathIDs.push(cur);
+    cur = predecessor.get(cur);
+  }
+  pathIDs.reverse();
+
+  return pathIDs.map((id) => cache.nodes.get(id)?.name ?? id);
 }
 
 export type PropagationChange = {
