@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { createCoalesceMcpServer, SERVER_NAME } from "../../src/server.js";
 
-class LoopbackTransport implements Transport {
+export class LoopbackTransport implements Transport {
   onclose?: () => void;
   onerror?: (error: Error) => void;
   onmessage?: Transport["onmessage"];
