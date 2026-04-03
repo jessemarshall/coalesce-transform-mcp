@@ -490,7 +490,7 @@ async function processInstruction(
     }
 
     const workshopNode: WorkshopNode = {
-      id: `workshop-${randomUUID().slice(0, 8)}`,
+      id: `workshop-${randomUUID()}`,
       name: buildNodeName(step, predecessorIDs, resolvedEntities),
       nodeType: null, // Selected at apply time
       predecessorIDs,
