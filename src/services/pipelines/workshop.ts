@@ -164,7 +164,7 @@ export async function openWorkshop(
   client: CoalesceClient,
   params: { workspaceID: string; intent?: string }
 ): Promise<WorkshopSession & { openQuestions: string[]; warnings: string[] }> {
-  const sessionID = randomUUID().slice(0, 8);
+  const sessionID = randomUUID();
   const session: WorkshopSession = {
     sessionID,
     workspaceID: params.workspaceID,

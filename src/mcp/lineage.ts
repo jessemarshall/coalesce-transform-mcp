@@ -5,8 +5,8 @@ import {
   buildJsonToolResponse,
   getToolOutputSchema,
   handleToolError,
+  DESTRUCTIVE_ANNOTATIONS,
   READ_ONLY_ANNOTATIONS,
-  WRITE_ANNOTATIONS,
   validatePathSegment,
 } from "../coalesce/types.js";
 import { requireDestructiveConfirmation } from "../services/shared/elicitation.js";
@@ -312,7 +312,7 @@ export function registerLineageTools(
           .describe("Set to true after the user explicitly confirms the propagation. Required because this operation modifies multiple downstream nodes."),
       }),
       outputSchema: getToolOutputSchema("propagate_column_change"),
-      annotations: WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params, extra) => {
       try {
