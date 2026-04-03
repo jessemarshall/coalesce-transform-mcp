@@ -17,6 +17,7 @@ export const RunDetailsSchema = z.object({
   parallelism: z
     .number()
     .int()
+    .positive()
     .optional()
     .describe("Max parallel nodes to run (API default: 16)"),
   forceIgnoreWorkspaceStatus: z
@@ -127,34 +128,28 @@ export function getSnowflakeCredentials() {
   const snowflakeWarehouse = process.env.SNOWFLAKE_WAREHOUSE?.trim();
   const snowflakeRole = process.env.SNOWFLAKE_ROLE?.trim();
 
-  if (!snowflakeUsername) {
+  // Validate all required env vars at once so users can fix them in a single pass
+  const missing: string[] = [];
+  if (!snowflakeUsername) missing.push("SNOWFLAKE_USERNAME");
+  if (!snowflakeKeyPairKeyRaw) missing.push("SNOWFLAKE_KEY_PAIR_KEY");
+  if (!snowflakeWarehouse) missing.push("SNOWFLAKE_WAREHOUSE");
+  if (!snowflakeRole) missing.push("SNOWFLAKE_ROLE");
+
+  if (missing.length > 0) {
     throw new Error(
-      "SNOWFLAKE_USERNAME environment variable is required for Snowflake Key Pair run tools."
-    );
-  }
-  if (!snowflakeKeyPairKeyRaw) {
-    throw new Error(
-      "SNOWFLAKE_KEY_PAIR_KEY environment variable is required for Snowflake Key Pair run tools."
-    );
-  }
-  const snowflakeKeyPairKey = readKeyPairFile(snowflakeKeyPairKeyRaw);
-  if (!snowflakeWarehouse) {
-    throw new Error(
-      "SNOWFLAKE_WAREHOUSE environment variable is required for Snowflake Key Pair run tools."
-    );
-  }
-  if (!snowflakeRole) {
-    throw new Error(
-      "SNOWFLAKE_ROLE environment variable is required for Snowflake Key Pair run tools."
+      `Missing required Snowflake environment variable${missing.length > 1 ? "s" : ""} for run tools: ${missing.join(", ")}. ` +
+      "Set these in your shell profile and pass them through in your MCP client config."
     );
   }
 
+  const snowflakeKeyPairKey = readKeyPairFile(snowflakeKeyPairKeyRaw!);
+
   return {
-    snowflakeUsername,
+    snowflakeUsername: snowflakeUsername!,
     snowflakeKeyPairKey,
     ...(snowflakeKeyPairPass ? { snowflakeKeyPairPass } : {}),
-    snowflakeWarehouse,
-    snowflakeRole,
+    snowflakeWarehouse: snowflakeWarehouse!,
+    snowflakeRole: snowflakeRole!,
     snowflakeAuthType: "KeyPair" as const,
   };
 }
