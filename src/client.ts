@@ -239,6 +239,7 @@ export function createClient(config: ClientConfig) {
         headers: headers(method),
         body: serializedBody,
         signal: controller.signal,
+        credentials: "omit",
       });
       return await handleResponse(response);
     } catch (error) {
