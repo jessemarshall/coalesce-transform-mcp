@@ -10,6 +10,7 @@ import type { WorkflowProgressReporter } from "../../workflows/progress.js";
 
 const DEFAULT_PAGE_SIZE = 250;
 const DEFAULT_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_CACHE_ENTRIES = 50;
 const PROGRESS_INTERVAL = 500;
 const DETAIL_FETCH_TIMEOUT_MS = 120_000; // 2 minutes per page for detail=true fetches
 
@@ -369,6 +370,26 @@ export async function buildLineageCache(
     cachedAt: Date.now(),
     ttlMs,
   };
+
+  // Evict expired entries and enforce max cache size
+  const now = Date.now();
+  for (const [key, cached] of cacheStore) {
+    if (now - cached.cachedAt > cached.ttlMs) {
+      cacheStore.delete(key);
+    }
+  }
+  if (cacheStore.size >= MAX_CACHE_ENTRIES) {
+    // Evict the oldest entry by cachedAt
+    let oldestKey: string | undefined;
+    let oldestTime = Infinity;
+    for (const [key, cached] of cacheStore) {
+      if (cached.cachedAt < oldestTime) {
+        oldestTime = cached.cachedAt;
+        oldestKey = key;
+      }
+    }
+    if (oldestKey) cacheStore.delete(oldestKey);
+  }
 
   cacheStore.set(safeID, entry);
   return entry;

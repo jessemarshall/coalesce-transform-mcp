@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import type { CoalesceClient } from "../../client.js";
@@ -158,12 +158,41 @@ export function deleteSession(sessionID: string): boolean {
   }
 }
 
+// ── Stale session cleanup ───────────────────────────────────────────────────
+
+const STALE_SESSION_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function cleanupStaleSessions(): void {
+  const dir = getWorkshopDir();
+  if (!existsSync(dir)) return;
+  const now = Date.now();
+  let files: string[];
+  try {
+    files = readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const file of files) {
+    if (!file.endsWith(".json")) continue;
+    try {
+      const filePath = join(dir, file);
+      const mtime = statSync(filePath).mtimeMs;
+      if (now - mtime > STALE_SESSION_MS) {
+        unlinkSync(filePath);
+      }
+    } catch {
+      // Ignore per-file errors (concurrent deletion, permission issues)
+    }
+  }
+}
+
 // ── Session lifecycle ────────────────────────────────────────────────────────
 
 export async function openWorkshop(
   client: CoalesceClient,
   params: { workspaceID: string; intent?: string }
 ): Promise<WorkshopSession & { openQuestions: string[]; warnings: string[] }> {
+  cleanupStaleSessions();
   const sessionID = randomUUID();
   const session: WorkshopSession = {
     sessionID,
