@@ -76,7 +76,6 @@ const READ_ONLY_TOOLS = [
   "get_downstream_nodes",
   "get_column_lineage",
   "analyze_impact",
-  "preview_deployment",
 ];
 
 // Tools that should be hidden in read-only mode
