@@ -52,6 +52,8 @@ export async function cancelRun(
   client: CoalesceClient,
   params: { runID: string; orgID?: string; environmentID: string }
 ): Promise<unknown> {
+  validatePathSegment(params.runID, "runID");
+  validatePathSegment(params.environmentID, "environmentID");
   const orgID = params.orgID?.trim() || process.env.COALESCE_ORG_ID?.trim();
   if (!orgID) {
     throw new Error(

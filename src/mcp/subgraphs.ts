@@ -17,6 +17,7 @@ import {
   WRITE_ANNOTATIONS,
   DESTRUCTIVE_ANNOTATIONS,
 } from "../coalesce/types.js";
+import { requireDestructiveConfirmation } from "../services/shared/elicitation.js";
 
 export function registerSubgraphTools(
   server: McpServer,
@@ -125,16 +126,28 @@ export function registerSubgraphTools(
     {
       title: "Delete Workspace Subgraph",
       description:
-        "Delete a subgraph from a workspace. Destructive — the subgraph is removed but its member nodes are NOT deleted.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - subgraphID (string, required): The subgraph ID\n\nReturns:\n  Confirmation message.",
+        "Delete a subgraph from a workspace. Destructive — the subgraph is removed but its member nodes are NOT deleted.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - subgraphID (string, required): The subgraph ID\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms deletion\n\nReturns:\n  Confirmation message.",
       inputSchema: z.object({
         workspaceID: z.string().describe("The workspace ID"),
         subgraphID: z.string().describe("The subgraph ID to delete"),
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Set to true after the user explicitly confirms the deletion."),
       }),
       outputSchema: getToolOutputSchema("delete_workspace_subgraph"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
+        const approvalResponse = await requireDestructiveConfirmation(
+          server,
+          "delete_workspace_subgraph",
+          `This will permanently delete subgraph "${params.subgraphID}" from workspace "${params.workspaceID}". Member nodes will NOT be deleted.`,
+          params.confirmed,
+        );
+        if (approvalResponse) return approvalResponse;
+
         const result = await deleteWorkspaceSubgraph(client, params);
         return buildJsonToolResponse("delete_workspace_subgraph", result);
       } catch (error) {

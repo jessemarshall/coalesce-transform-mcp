@@ -10,6 +10,7 @@ import {
   handleToolError,
   getToolOutputSchema,
 } from "../coalesce/types.js";
+import { requireDestructiveConfirmation } from "../services/shared/elicitation.js";
 import { getCacheDir, CACHE_DIR_NAME } from "../cache-dir.js";
 import {
   cacheEnvironmentNodes,
@@ -153,13 +154,26 @@ export function registerCacheTools(
     {
       title: "Clear Data Cache",
       description:
-        "Clear the MCP server's local data cache. Removes all cached artifacts from disk.\n\nReturns:\n  { deleted: boolean, fileCount: number, totalBytes: number, message: string }",
-      inputSchema: z.object({}),
+        "Clear the MCP server's local data cache. Removes all cached artifacts from disk.\n\nArgs:\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms cache clearing\n\nReturns:\n  { deleted: boolean, fileCount: number, totalBytes: number, message: string }",
+      inputSchema: z.object({
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Set to true after the user explicitly confirms the cache clearing."),
+      }),
       outputSchema: getToolOutputSchema("clear_data_cache"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
-    async () => {
+    async (params) => {
       try {
+        const approvalResponse = await requireDestructiveConfirmation(
+          server,
+          "clear_data_cache",
+          "This will delete all cached data from disk. Cached snapshots will need to be re-fetched.",
+          params.confirmed,
+        );
+        if (approvalResponse) return approvalResponse;
+
         const cacheDir = getCacheDir();
         if (!existsSync(cacheDir)) {
           return buildJsonToolResponse("clear_data_cache", {
