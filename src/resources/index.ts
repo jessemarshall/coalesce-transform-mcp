@@ -1,5 +1,5 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { Dirent, existsSync, readFileSync, readdirSync } from "fs";
+import { Dirent, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { basename, join, dirname } from "path";
 import { fileURLToPath } from "url";
 import {
@@ -225,12 +225,131 @@ const RESOURCE_METADATA: Record<
   },
 };
 
+const OVERRIDE_MARKER = "<!-- OVERRIDE -->";
+const STUB_MARKER = "<!-- STUB -->";
+
+let skillsInitialized = false;
+
+/** Reset skills initialization state (for testing only). */
+export function resetSkillsState(): void {
+  skillsInitialized = false;
+}
+
 /**
- * Read a resource content file
+ * Extract the resource name from a relative path like "context/overview.md" → "overview"
+ */
+function extractResourceName(relativePath: string): string {
+  return basename(relativePath, ".md");
+}
+
+/**
+ * Read the bundled (fallback) content for a resource from dist/resources/context/
+ */
+function readBundledContent(relativePath: string): string {
+  return readFileSync(join(__dirname, relativePath), "utf-8");
+}
+
+/**
+ * Seed the skills directory with default coalesce_skills.* and user_skills.* files.
+ * Idempotent — never overwrites existing files.
+ */
+function initializeSkillsDir(skillsDir: string): void {
+  try {
+    mkdirSync(skillsDir, { recursive: true });
+
+    for (const relativePath of Object.values(RESOURCE_FILES)) {
+      const resourceName = extractResourceName(relativePath);
+      const skillsFile = join(skillsDir, `coalesce_skills.${resourceName}.md`);
+      const userFile = join(skillsDir, `user_skills.${resourceName}.md`);
+
+      const bundledContent = readBundledContent(relativePath);
+
+      if (!existsSync(skillsFile)) {
+        writeFileSync(skillsFile, bundledContent, "utf-8");
+      }
+
+      if (!existsSync(userFile)) {
+        const stub = [
+          STUB_MARKER,
+          "<!-- User customization file for this skill.",
+          `    To OVERRIDE the default, add "${OVERRIDE_MARKER}" as the very first line`,
+          "    followed by your replacement content.",
+          `    To AUGMENT the default, just add your content below (remove the "${STUB_MARKER}" line first).`,
+          "    To DISABLE, delete both this file and the coalesce_skills file. -->",
+        ].join("\n");
+        writeFileSync(userFile, stub, "utf-8");
+      }
+    }
+  } catch (error) {
+    console.error(
+      `Warning: Failed to initialize skills directory at ${skillsDir}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
+ * Read a resource content file, resolving from the skills directory when
+ * COALESCE_MCP_SKILLS_DIR is set, otherwise falling back to bundled files.
+ *
+ * Resolution order:
+ * 1. user_skills file starts with <!-- OVERRIDE --> → use only user file
+ * 2. user_skills file has content → concatenate coalesce_skills + user_skills
+ * 3. user_skills empty/missing → use coalesce_skills file
+ * 4. Both missing → return empty string
  */
 function readResourceContent(relativePath: string): string {
-  const fullPath = join(__dirname, relativePath);
-  return readFileSync(fullPath, "utf-8");
+  const skillsDir = process.env.COALESCE_MCP_SKILLS_DIR;
+
+  if (!skillsDir) {
+    return readBundledContent(relativePath);
+  }
+
+  if (!skillsInitialized) {
+    initializeSkillsDir(skillsDir);
+    skillsInitialized = true;
+  }
+
+  const resourceName = extractResourceName(relativePath);
+  const skillsFile = join(skillsDir, `coalesce_skills.${resourceName}.md`);
+  const userFile = join(skillsDir, `user_skills.${resourceName}.md`);
+
+  // Read user file content
+  let userContent: string | null = null;
+  if (existsSync(userFile)) {
+    // Strip UTF-8 BOM if present (common with Windows editors)
+    const raw = readFileSync(userFile, "utf-8").replace(/^\uFEFF/, "");
+    if (raw.startsWith(STUB_MARKER)) {
+      // Seeded stub — treat as empty (user hasn't customized yet)
+      userContent = null;
+    } else if (raw.trim().length > 0) {
+      userContent = raw;
+    }
+  }
+
+  // Case 1: user file has override marker → use only user content
+  if (userContent !== null && userContent.startsWith(OVERRIDE_MARKER)) {
+    return userContent;
+  }
+
+  // Read default skills file
+  const skillsExists = existsSync(skillsFile);
+  const skillsContent = skillsExists ? readFileSync(skillsFile, "utf-8") : null;
+
+  // Case 2: user file has content (no override) → concatenate
+  if (userContent !== null && skillsContent !== null) {
+    return skillsContent + "\n\n" + userContent;
+  }
+  if (userContent !== null) {
+    return userContent;
+  }
+
+  // Case 3: no user content → use default skills file
+  if (skillsContent !== null) {
+    return skillsContent;
+  }
+
+  // Case 4: both missing → empty
+  return "";
 }
 
 function listCacheFilePaths(directory: string): string[] {

@@ -72,6 +72,15 @@ export const ENV_METADATA = [
     isSecret: false,
   },
   {
+    name: "COALESCE_MCP_SKILLS_DIR",
+    group: "core",
+    description: "Directory for customizable AI skill resources. When set, reads context resources from this directory and seeds defaults on first run. Users can augment or override any skill.",
+    defaultValue: null,
+    requiredForServer: false,
+    requiredForRunTools: false,
+    isSecret: false,
+  },
+  {
     name: "SNOWFLAKE_USERNAME",
     group: "snowflake",
     description: "Snowflake account username",
