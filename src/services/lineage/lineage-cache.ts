@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CoalesceClient, QueryParams } from "../../client.js";
-import { listWorkspaceNodes } from "../../coalesce/api/nodes.js";
+import { listWorkspaceNodes, setWorkspaceNode } from "../../coalesce/api/nodes.js";
+import { buildUpdatedWorkspaceNodeBody } from "../workspace/node-update-helpers.js";
 import { validatePathSegment } from "../../coalesce/types.js";
 import { isPlainObject } from "../../utils.js";
 import { CACHE_DIR_NAME } from "../../cache-dir.js";
@@ -231,7 +232,9 @@ function tryLoadFromSnapshot(workspaceID: string, baseDir: string): Record<strin
     if (items.length > 0 && !isPlainObject(items[0].metadata)) return null;
 
     return items;
-  } catch {
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`[tryLoadFromSnapshot] Failed to load snapshot for workspace ${workspaceID}: ${reason}\n`);
     return null;
   }
 }
@@ -769,11 +772,13 @@ export async function propagateColumnChange(
       if (changes.dataType) updatedCol.dataType = changes.dataType;
       columns[colIndex] = updatedCol;
 
-      // Update the node via API
-      await client.put(
-        `/api/v1/workspaces/${safeWorkspaceID}/nodes/${validatePathSegment(entry.nodeID, "nodeID")}`,
-        { ...currentNode, metadata: { ...metadata, columns } }
-      );
+      // Update the node via the standard validation pipeline
+      const body = buildUpdatedWorkspaceNodeBody(currentNode, { metadata: { columns } });
+      await setWorkspaceNode(client, {
+        workspaceID: safeWorkspaceID,
+        nodeID: validatePathSegment(entry.nodeID, "nodeID"),
+        body,
+      });
 
       updatedNodes.push({
         nodeID: entry.nodeID,
