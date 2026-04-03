@@ -17,6 +17,7 @@ import {
   IDEMPOTENT_WRITE_ANNOTATIONS,
   DESTRUCTIVE_ANNOTATIONS,
 } from "../coalesce/types.js";
+import { requireDestructiveConfirmation } from "../services/shared/elicitation.js";
 
 export function registerProjectTools(
   server: McpServer,
@@ -130,15 +131,27 @@ export function registerProjectTools(
     {
       title: "Delete Project",
       description:
-        "Permanently delete a Coalesce project. This is destructive and cannot be undone.\n\nArgs:\n  - projectID (string, required): The project ID\n\nReturns:\n  Confirmation message.",
+        "Permanently delete a Coalesce project. This is destructive and cannot be undone.\n\nArgs:\n  - projectID (string, required): The project ID\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms deletion\n\nReturns:\n  Confirmation message.",
       inputSchema: z.object({
         projectID: z.string().describe("The project ID"),
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Set to true after the user explicitly confirms the deletion."),
       }),
       outputSchema: getToolOutputSchema("delete_project"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
+        const approvalResponse = await requireDestructiveConfirmation(
+          server,
+          "delete_project",
+          `This will permanently delete project "${params.projectID}" and all its workspaces. This cannot be undone.`,
+          params.confirmed,
+        );
+        if (approvalResponse) return approvalResponse;
+
         const result = await deleteProject(client, params);
         return buildJsonToolResponse("delete_project", result);
       } catch (error) {

@@ -42,6 +42,7 @@ import {
   DESTRUCTIVE_ANNOTATIONS,
   handleToolError,
 } from "../coalesce/types.js";
+import { requireDestructiveConfirmation } from "../services/shared/elicitation.js";
 
 export function registerNodeTools(
   server: McpServer,
@@ -568,16 +569,28 @@ export function registerNodeTools(
     {
       title: "Delete Workspace Node",
       description:
-        "Permanently delete a workspace node. Destructive — check for downstream dependencies first.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - nodeID (string, required): The node ID\n\nReturns:\n  Confirmation message.",
+        "Permanently delete a workspace node. Destructive — check for downstream dependencies first.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - nodeID (string, required): The node ID\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms deletion\n\nReturns:\n  Confirmation message.",
       inputSchema: z.object({
         workspaceID: z.string().describe("The workspace ID"),
         nodeID: z.string().describe("The node ID to delete"),
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Set to true after the user explicitly confirms the deletion."),
       }),
       outputSchema: getToolOutputSchema("delete_workspace_node"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
+        const approvalResponse = await requireDestructiveConfirmation(
+          server,
+          "delete_workspace_node",
+          `This will permanently delete node "${params.nodeID}" from workspace "${params.workspaceID}". This cannot be undone.`,
+          params.confirmed,
+        );
+        if (approvalResponse) return approvalResponse;
+
         const result = await deleteWorkspaceNode(client, params);
         return buildJsonToolResponse("delete_workspace_node", result);
       } catch (error) {

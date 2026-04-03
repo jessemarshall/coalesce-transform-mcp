@@ -9,6 +9,7 @@ import {
   WRITE_ANNOTATIONS,
   validatePathSegment,
 } from "../coalesce/types.js";
+import { requireDestructiveConfirmation } from "../services/shared/elicitation.js";
 import {
   buildLineageCache,
   walkUpstream,
@@ -305,6 +306,10 @@ export function registerLineageTools(
           (c) => c.columnName !== undefined || c.dataType !== undefined,
           { message: "At least one of columnName or dataType is required" }
         ).describe("Changes to propagate — at least one of columnName or dataType required"),
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Set to true after the user explicitly confirms the propagation. Required because this operation modifies multiple downstream nodes."),
       }),
       outputSchema: getToolOutputSchema("propagate_column_change"),
       annotations: WRITE_ANNOTATIONS,
@@ -321,6 +326,24 @@ export function registerLineageTools(
         const cache = await buildLineageCache(client, params.workspaceID, {
           reportProgress: progressReporter,
         });
+
+        // Count affected downstream nodes for the confirmation message
+        const node = cache.nodes.get(params.nodeID);
+        const nodeName = node?.name ?? params.nodeID;
+        const downstream = walkDownstream(cache, params.nodeID) ?? [];
+        const changeDesc = [
+          params.changes.columnName ? `rename to "${params.changes.columnName}"` : null,
+          params.changes.dataType ? `change type to ${params.changes.dataType}` : null,
+        ].filter(Boolean).join(" and ");
+
+        const approvalResponse = await requireDestructiveConfirmation(
+          server,
+          "propagate_column_change",
+          `This will update column references across ${downstream.length} downstream node(s) of "${nodeName}" (${changeDesc}). This modifies node bodies via the API and cannot be easily undone.`,
+          params.confirmed,
+          { nodeID: params.nodeID, columnID: params.columnID, downstreamCount: downstream.length },
+        );
+        if (approvalResponse) return approvalResponse;
 
         const result = await propagateColumnChange(
           client,

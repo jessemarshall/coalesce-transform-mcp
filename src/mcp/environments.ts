@@ -19,6 +19,7 @@ import {
   DESTRUCTIVE_ANNOTATIONS,
   validatePathSegment,
 } from "../coalesce/types.js";
+import { requireDestructiveConfirmation } from "../services/shared/elicitation.js";
 import { previewDeployment } from "../services/workspace/deployment-diff.js";
 
 export function registerEnvironmentTools(
@@ -144,15 +145,27 @@ export function registerEnvironmentTools(
     {
       title: "Delete Environment",
       description:
-        "Permanently delete a Coalesce environment. This is destructive and cannot be undone.\n\nArgs:\n  - environmentID (string, required): The environment ID to delete\n\nReturns:\n  Confirmation message.",
+        "Permanently delete a Coalesce environment. This is destructive and cannot be undone.\n\nArgs:\n  - environmentID (string, required): The environment ID to delete\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms deletion\n\nReturns:\n  Confirmation message.",
       inputSchema: z.object({
         environmentID: z.string().describe("The environment ID to delete"),
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Set to true after the user explicitly confirms the deletion."),
       }),
       outputSchema: getToolOutputSchema("delete_environment"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
+        const approvalResponse = await requireDestructiveConfirmation(
+          server,
+          "delete_environment",
+          `This will permanently delete environment "${params.environmentID}". This cannot be undone.`,
+          params.confirmed,
+        );
+        if (approvalResponse) return approvalResponse;
+
         const result = await deleteEnvironment(client, params);
         return buildJsonToolResponse("delete_environment", result);
       } catch (error) {

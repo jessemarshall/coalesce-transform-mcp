@@ -318,6 +318,39 @@ describe("Lineage Tool Handlers", () => {
         nodeID: string;
         columnID: string;
         changes: { columnName?: string; dataType?: string };
+        confirmed?: boolean;
+      }>(spy, "propagate_column_change");
+      const result = await handler({
+        workspaceID: "ws-1",
+        nodeID: "n1",
+        columnID: "c1",
+        changes: { columnName: "renamed_order_id" },
+        confirmed: true,
+      });
+
+      expect(result.isError).toBeUndefined();
+      const data = JSON.parse(result.content[0]!.text);
+      expect(data.totalUpdated).toBe(1);
+      expect(data.errors).toHaveLength(0);
+      expect(data.updatedNodes[0].nodeID).toBe("n2");
+    });
+
+    it("returns STOP_AND_CONFIRM when not confirmed", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const spy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+      registerLineageTools(server, client as never);
+
+      vi.mocked(buildLineageCache).mockResolvedValue(buildFakeCache({
+        "n1": { name: "SRC_RAW", nodeType: "Source", columns: [{ id: "c1", name: "order_id" }] },
+      }) as never);
+
+      const handler = extractHandler<{
+        workspaceID: string;
+        nodeID: string;
+        columnID: string;
+        changes: { columnName?: string; dataType?: string };
+        confirmed?: boolean;
       }>(spy, "propagate_column_change");
       const result = await handler({
         workspaceID: "ws-1",
@@ -328,9 +361,10 @@ describe("Lineage Tool Handlers", () => {
 
       expect(result.isError).toBeUndefined();
       const data = JSON.parse(result.content[0]!.text);
-      expect(data.totalUpdated).toBe(1);
-      expect(data.errors).toHaveLength(0);
-      expect(data.updatedNodes[0].nodeID).toBe("n2");
+      expect(data.executed).toBe(false);
+      expect(data.STOP_AND_CONFIRM).toBeDefined();
+      expect(data.STOP_AND_CONFIRM).toContain("confirmed=true");
+      expect(propagateColumnChange).not.toHaveBeenCalled();
     });
 
     it("returns isError when propagateColumnChange throws", async () => {
@@ -339,7 +373,9 @@ describe("Lineage Tool Handlers", () => {
       const client = createMockClient();
       registerLineageTools(server, client as never);
 
-      vi.mocked(buildLineageCache).mockResolvedValue(buildFakeCache({}) as never);
+      vi.mocked(buildLineageCache).mockResolvedValue(buildFakeCache({
+        "n1": { name: "SRC_RAW", nodeType: "Source", columns: [{ id: "c1", name: "order_id" }] },
+      }) as never);
       vi.mocked(propagateColumnChange).mockRejectedValue(new Error("At least one change required"));
 
       const handler = extractHandler<{
@@ -347,12 +383,14 @@ describe("Lineage Tool Handlers", () => {
         nodeID: string;
         columnID: string;
         changes: { columnName?: string; dataType?: string };
+        confirmed?: boolean;
       }>(spy, "propagate_column_change");
       const result = await handler({
         workspaceID: "ws-1",
         nodeID: "n1",
         columnID: "c1",
         changes: {},
+        confirmed: true,
       });
 
       expect(result.isError).toBe(true);
