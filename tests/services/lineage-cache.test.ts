@@ -196,6 +196,10 @@ describe("lineage-cache", () => {
     it("throws when colon is at position 0 (empty nodeID)", () => {
       expect(() => parseColumnKey(":columnID")).toThrow("Malformed column key");
     });
+
+    it("throws when colon is at end (empty columnID)", () => {
+      expect(() => parseColumnKey("nodeID:")).toThrow("Malformed column key");
+    });
   });
 
   describe("buildLineageCache", () => {

@@ -38,7 +38,7 @@ export type DeploymentDiff = {
 // string so the cursor loop handles both formats. Mirrors coerceListPaginationFields
 // in tool-response.ts.
 function normalizeCursor(next: unknown): string | undefined {
-  if (typeof next === "string" && next.length > 0) return next;
+  if (typeof next === "string" && next.trim().length > 0) return next;
   if (typeof next === "number") return String(next);
   return undefined;
 }
