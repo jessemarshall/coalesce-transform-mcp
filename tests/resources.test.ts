@@ -1,10 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { buildCacheResourceUri } from "../src/cache-dir.js";
-import { registerResources } from "../src/resources/index.js";
+import { registerResources, resetSkillsState } from "../src/resources/index.js";
 
 describe("Resources", () => {
   let server: McpServer;
@@ -401,5 +401,190 @@ describe("Resources", () => {
     ).rejects.toThrow(`Unknown cache resource: ${backupUri}`);
 
     cwdSpy.mockRestore();
+  });
+});
+
+describe("Skills directory", () => {
+  let server: McpServer;
+  let resourceSpy: ReturnType<typeof vi.spyOn>;
+  const tempDirs: string[] = [];
+  const ORIGINAL_SKILLS_DIR = process.env.COALESCE_MCP_SKILLS_DIR;
+
+  beforeEach(() => {
+    server = new McpServer({ name: "test", version: "0.0.1" });
+    resourceSpy = vi.spyOn(server, "resource");
+    resetSkillsState();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (ORIGINAL_SKILLS_DIR === undefined) {
+      delete process.env.COALESCE_MCP_SKILLS_DIR;
+    } else {
+      process.env.COALESCE_MCP_SKILLS_DIR = ORIGINAL_SKILLS_DIR;
+    }
+    for (const directory of tempDirs.splice(0, tempDirs.length)) {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  function makeSkillsDir(): string {
+    const dir = mkdtempSync(join(tmpdir(), "coalesce-skills-"));
+    tempDirs.push(dir);
+    process.env.COALESCE_MCP_SKILLS_DIR = dir;
+    return dir;
+  }
+
+  function getResourceCallback(uri: string) {
+    return resourceSpy.mock.calls.find((call) => call[1] === uri)?.[3] as
+      | ((uri: URL, extra: never) => Promise<{ contents: { uri: string; mimeType: string; text: string }[] }>)
+      | undefined;
+  }
+
+  it("seeds coalesce_skills.* and user_skills.* files on first resource read", async () => {
+    const dir = makeSkillsDir();
+    registerResources(server);
+
+    const callback = getResourceCallback("coalesce://context/overview");
+    expect(callback).toBeDefined();
+    await callback!(new URL("coalesce://context/overview"), {} as never);
+
+    // Verify coalesce_skills files exist
+    expect(existsSync(join(dir, "coalesce_skills.overview.md"))).toBe(true);
+    expect(existsSync(join(dir, "coalesce_skills.sql-snowflake.md"))).toBe(true);
+    expect(existsSync(join(dir, "coalesce_skills.node-payloads.md"))).toBe(true);
+
+    // Verify user_skills files exist
+    expect(existsSync(join(dir, "user_skills.overview.md"))).toBe(true);
+    expect(existsSync(join(dir, "user_skills.sql-snowflake.md"))).toBe(true);
+
+    // Verify user_skills stubs start with STUB marker and contain instructions
+    const userStub = readFileSync(join(dir, "user_skills.overview.md"), "utf-8");
+    expect(userStub.startsWith("<!-- STUB -->")).toBe(true);
+    expect(userStub).toContain("<!-- OVERRIDE -->");
+    expect(userStub).toContain("User customization file");
+  });
+
+  it("serves only default content when user file is the seeded stub", async () => {
+    const dir = makeSkillsDir();
+    registerResources(server);
+
+    const callback = getResourceCallback("coalesce://context/overview");
+    const result = await callback!(new URL("coalesce://context/overview"), {} as never);
+
+    // The seeded stub should NOT trigger augmentation — only default content is served
+    const defaultContent = readFileSync(join(dir, "coalesce_skills.overview.md"), "utf-8");
+    expect(result.contents[0].text).toBe(defaultContent);
+    expect(result.contents[0].text).not.toContain("<!-- STUB -->");
+    expect(result.contents[0].text).not.toContain("User customization file");
+  });
+
+  it("does not overwrite existing files during seeding", async () => {
+    const dir = makeSkillsDir();
+    const customContent = "# My custom overview";
+    writeFileSync(join(dir, "coalesce_skills.overview.md"), customContent, "utf-8");
+
+    registerResources(server);
+    const callback = getResourceCallback("coalesce://context/overview");
+    await callback!(new URL("coalesce://context/overview"), {} as never);
+
+    expect(readFileSync(join(dir, "coalesce_skills.overview.md"), "utf-8")).toBe(customContent);
+  });
+
+  it("serves only user content when override marker is present", async () => {
+    const dir = makeSkillsDir();
+    writeFileSync(join(dir, "coalesce_skills.overview.md"), "Default content", "utf-8");
+    writeFileSync(join(dir, "user_skills.overview.md"), "<!-- OVERRIDE -->\nMy custom override", "utf-8");
+
+    registerResources(server);
+    const callback = getResourceCallback("coalesce://context/overview");
+    const result = await callback!(new URL("coalesce://context/overview"), {} as never);
+
+    expect(result.contents[0].text).toBe("<!-- OVERRIDE -->\nMy custom override");
+  });
+
+  it("concatenates default + user content when no override marker", async () => {
+    const dir = makeSkillsDir();
+    writeFileSync(join(dir, "coalesce_skills.overview.md"), "Default content", "utf-8");
+    writeFileSync(join(dir, "user_skills.overview.md"), "Extra user notes", "utf-8");
+
+    registerResources(server);
+    const callback = getResourceCallback("coalesce://context/overview");
+    const result = await callback!(new URL("coalesce://context/overview"), {} as never);
+
+    expect(result.contents[0].text).toBe("Default content\n\nExtra user notes");
+  });
+
+  it("serves default content when user file is empty", async () => {
+    const dir = makeSkillsDir();
+    writeFileSync(join(dir, "coalesce_skills.overview.md"), "Default content", "utf-8");
+    writeFileSync(join(dir, "user_skills.overview.md"), "   \n  ", "utf-8");
+
+    registerResources(server);
+    const callback = getResourceCallback("coalesce://context/overview");
+    const result = await callback!(new URL("coalesce://context/overview"), {} as never);
+
+    expect(result.contents[0].text).toBe("Default content");
+  });
+
+  it("serves default content when user file is missing", async () => {
+    const dir = makeSkillsDir();
+    writeFileSync(join(dir, "coalesce_skills.overview.md"), "Default content", "utf-8");
+
+    registerResources(server);
+    const callback = getResourceCallback("coalesce://context/overview");
+
+    // Trigger seeding (creates user_skills stub), then delete the user file
+    await callback!(new URL("coalesce://context/overview"), {} as never);
+    rmSync(join(dir, "user_skills.overview.md"), { force: true });
+
+    const result = await callback!(new URL("coalesce://context/overview"), {} as never);
+    expect(result.contents[0].text).toBe("Default content");
+  });
+
+  it("serves empty string when both files are deleted", async () => {
+    const dir = makeSkillsDir();
+    // Don't create any files, and mark as initialized to skip seeding
+    mkdirSync(dir, { recursive: true });
+
+    registerResources(server);
+
+    // Trigger seeding first (creates files), then delete them
+    const callback = getResourceCallback("coalesce://context/overview");
+    await callback!(new URL("coalesce://context/overview"), {} as never);
+
+    rmSync(join(dir, "coalesce_skills.overview.md"), { force: true });
+    rmSync(join(dir, "user_skills.overview.md"), { force: true });
+
+    // Read again — should return empty
+    const result = await callback!(new URL("coalesce://context/overview"), {} as never);
+    expect(result.contents[0].text).toBe("");
+  });
+
+  it("handles BOM prefix in user file with override marker", async () => {
+    const dir = makeSkillsDir();
+    writeFileSync(join(dir, "coalesce_skills.overview.md"), "Default content", "utf-8");
+    // BOM + override marker (common with Windows Notepad)
+    writeFileSync(join(dir, "user_skills.overview.md"), "\uFEFF<!-- OVERRIDE -->\nBOM override", "utf-8");
+
+    registerResources(server);
+    const callback = getResourceCallback("coalesce://context/overview");
+    const result = await callback!(new URL("coalesce://context/overview"), {} as never);
+
+    // BOM should be stripped, override marker should be detected
+    expect(result.contents[0].text).toBe("<!-- OVERRIDE -->\nBOM override");
+  });
+
+  it("allows disabling a resource via empty override", async () => {
+    const dir = makeSkillsDir();
+    writeFileSync(join(dir, "coalesce_skills.overview.md"), "Default content", "utf-8");
+    writeFileSync(join(dir, "user_skills.overview.md"), "<!-- OVERRIDE -->", "utf-8");
+
+    registerResources(server);
+    const callback = getResourceCallback("coalesce://context/overview");
+    const result = await callback!(new URL("coalesce://context/overview"), {} as never);
+
+    // Override with just the marker — effectively disables the resource
+    expect(result.contents[0].text).toBe("<!-- OVERRIDE -->");
   });
 });

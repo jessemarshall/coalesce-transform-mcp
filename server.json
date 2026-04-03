@@ -73,6 +73,13 @@
           "name": "COALESCE_MCP_READ_ONLY"
         },
         {
+          "description": "Directory for customizable AI skill resources. When set, reads context resources from this directory and seeds defaults on first run. Users can augment or override any skill.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_MCP_SKILLS_DIR"
+        },
+        {
           "description": "Snowflake account username (required for run tools)",
           "isRequired": false,
           "format": "string",

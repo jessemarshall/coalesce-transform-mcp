@@ -77,6 +77,7 @@ Only `COALESCE_ACCESS_TOKEN` is required. Everything else is optional.
 | `COALESCE_MCP_LINEAGE_TTL_MS` | In-memory lineage cache TTL in milliseconds. | `1800000` |
 | `COALESCE_MCP_MAX_REQUEST_BODY_BYTES` | Max outbound API request body size. | `524288` |
 | `COALESCE_MCP_READ_ONLY` | When `true`, hides all write/mutation tools during registration. Only read, list, search, cache, analyze, review, diagnose, and plan tools are exposed. | `false` |
+| `COALESCE_MCP_SKILLS_DIR` | Directory for customizable AI skill resources. When set, reads context resources from this directory and seeds defaults on first run. Users can augment or override any skill. | — |
 <!-- ENV_METADATA_CORE_TABLE_END -->
 
 ### Snowflake (for run tools only)
@@ -130,6 +131,60 @@ export SNOWFLAKE_ROLE="your-role"
 ```
 
 Only include the variables you need — the Quick Start config with just `COALESCE_ACCESS_TOKEN` is enough to get started.
+
+## Skills Directory
+
+The server ships 23 AI skill resources that guide how agents interact with Coalesce. By default these are bundled inside the package, but you can make them visible and editable by setting `COALESCE_MCP_SKILLS_DIR`.
+
+### Setup
+
+```bash
+export COALESCE_MCP_SKILLS_DIR="/path/to/my-skills"
+```
+
+On first run, the server seeds the directory with 46 files:
+
+- `coalesce_skills.<name>.md` — the default skill content (editable)
+- `user_skills.<name>.md` — your customization file (starts as an inactive stub with instructions)
+
+### How customization works
+
+Each resource resolves using this priority:
+
+1. **Override** — `user_skills.<name>.md` starts with `<!-- OVERRIDE -->` → only the user file is served
+2. **Augment** — `user_skills.<name>.md` has custom content (remove the `<!-- STUB -->` line first) → default + user content are concatenated
+3. **Default** — `user_skills.<name>.md` is missing, empty, or still has the seeded stub → default skill content is served
+4. **Disabled** — both files deleted → empty content is served (effectively disabled)
+
+Seeding is idempotent — it never overwrites files you've already modified.
+
+### Available Skills
+
+| Skill | File | Description |
+| ----- | ---- | ----------- |
+| Coalesce Overview | `overview` | General Coalesce concepts, response guidelines, and operational constraints |
+| SQL Platform Selection | `sql-platform-selection` | Determining the active SQL platform from project metadata |
+| SQL Rules: Snowflake | `sql-snowflake` | Snowflake-specific SQL conventions for node SQL |
+| SQL Rules: Databricks | `sql-databricks` | Databricks-specific SQL conventions for node SQL |
+| SQL Rules: BigQuery | `sql-bigquery` | BigQuery-specific SQL conventions for node SQL |
+| Data Engineering Principles | `data-engineering-principles` | Node type selection, layered architecture, methodology detection, and materialization strategies |
+| Storage Locations and References | `storage-mappings` | Storage location concepts, `{{ ref() }}` syntax, and reference patterns |
+| Tool Usage Patterns | `tool-usage` | Best practices for tool batching, parallelization, and SQL conversion |
+| ID Discovery | `id-discovery` | Resolving project, workspace, environment, job, run, node, and org IDs |
+| Node Creation Decision Tree | `node-creation-decision-tree` | Choosing between predecessor-based creation, updates, and full replacements |
+| Node Payloads | `node-payloads` | Working with workspace node bodies, metadata, config, and array-replacement risks |
+| Hydrated Metadata | `hydrated-metadata` | Coalesce hydrated metadata structures for advanced node payload editing |
+| Run Operations | `run-operations` | Starting, retrying, polling, diagnosing, and canceling Coalesce runs |
+| Node Type Corpus | `node-type-corpus` | Node type discovery, corpus search, and metadata patterns |
+| Aggregation Patterns | `aggregation-patterns` | JOIN ON generation, GROUP BY detection, and join-to-aggregation conversion |
+| Intelligent Node Configuration | `intelligent-node-configuration` | How intelligent config completion works, schema resolution, and automatic field detection |
+| Pipeline Workflows | `pipeline-workflows` | Building pipelines end-to-end: node type selection, multi-node sequences, and execution |
+| Node Operations | `node-operations` | Editing existing nodes: joins, columns, config fields, and SQL-to-graph conversion |
+| Node Type Selection Guide | `node-type-selection-guide` | When to use each Coalesce node type (Stage/Work vs Dimension/Fact vs specialized) |
+| Intent Pipeline Guide | `intent-pipeline-guide` | Using `build_pipeline_from_intent` to create pipelines from natural language |
+| Run Diagnostics Guide | `run-diagnostics-guide` | Using `diagnose_run_failure` to analyze failed runs and determine fixes |
+| Pipeline Review Guide | `pipeline-review-guide` | Using `review_pipeline` for pipeline analysis and optimization |
+| Pipeline Workshop Guide | `pipeline-workshop-guide` | Using pipeline workshop tools for iterative, conversational pipeline building |
 
 ## Tool Reference
 
@@ -240,6 +295,8 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 - `create_pipeline_from_sql` - Plan and create a pipeline directly from SQL
 - `build_pipeline_from_intent` - Build a pipeline from a natural language goal with automatic entity resolution and node type selection
 - `review_pipeline` - Analyze an existing pipeline for redundant nodes, missing joins, layer violations, naming issues, and optimization opportunities
+- `parse_sql_structure` - Parse a SQL statement into structural components (CTEs, source tables, projected columns) without touching the workspace
+- `select_pipeline_node_type` - Rank and select the best Coalesce node type for a pipeline step using the deliberative selection loop against repo or workspace-observed types
 
 #### Pipeline Workshop
 
