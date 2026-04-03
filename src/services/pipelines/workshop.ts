@@ -264,8 +264,8 @@ async function processInstruction(
   const lower = instruction.toLowerCase().trim();
 
   // Handle remove/delete instructions
-  const removeMatch = lower.match(/(?:remove|delete|drop)\s+(?:the\s+)?(?:node\s+)?["']?(\w+)["']?/);
-  const isColumnOp = lower.match(/(?:remove|delete|drop)\s+(?:the\s+)?column\s/);
+  const removeMatch = lower.match(/(?:remove|delete|drop)\s+(?:the\s+)?(?:node\s+)?["']?([\w-]+)["']?/);
+  const isColumnOp = /(?:remove|delete|drop)\s+(?:the\s+)?column\s/.test(lower);
 
   if (removeMatch && !isColumnOp) {
     const targetName = removeMatch[1]!.toUpperCase();
@@ -290,7 +290,7 @@ async function processInstruction(
   }
 
   // Handle rename instructions
-  const renameMatch = lower.match(/rename\s+["']?(\w+)["']?\s+(?:to|as)\s+["']?(\w+)["']?/);
+  const renameMatch = lower.match(/rename\s+["']?([\w-]+)["']?\s+(?:to|as)\s+["']?([\w-]+)["']?/);
   if (renameMatch) {
     const oldName = renameMatch[1]!.toUpperCase();
     const newName = renameMatch[2]!.toUpperCase();
@@ -307,8 +307,8 @@ async function processInstruction(
   }
 
   // Handle "change join key" / "join on X" instructions
-  const joinKeyMatch = lower.match(/(?:change|update|set)\s+(?:the\s+)?join\s+(?:key|column|condition)\s+(?:to|on)\s+["']?(\w+)["']?/);
-  const joinOnMatch = !joinKeyMatch ? lower.match(/join\s+on\s+["']?(\w+)["']?/) : null;
+  const joinKeyMatch = lower.match(/(?:change|update|set)\s+(?:the\s+)?join\s+(?:key|column|condition)\s+(?:to|on)\s+["']?([\w-]+)["']?/);
+  const joinOnMatch = !joinKeyMatch ? lower.match(/join\s+on\s+["']?([\w-]+)["']?/) : null;
   const keyMatch = joinKeyMatch || joinOnMatch;
   if (keyMatch) {
     const newKey = keyMatch[1]!.toUpperCase();
@@ -346,7 +346,7 @@ async function processInstruction(
   }
 
   // Handle "add column" instructions
-  const addColMatch = lower.match(/add\s+(?:a\s+)?column\s+["']?(\w+)["']?(?:\s+(?:as|with|=)\s+(.+))?/);
+  const addColMatch = lower.match(/add\s+(?:a\s+)?column\s+["']?([\w-]+)["']?(?:\s+(?:as|with|=)\s+(.+))?/);
   if (addColMatch) {
     const colName = addColMatch[1]!.toUpperCase();
     const transform = addColMatch[2] ?? null;
@@ -369,7 +369,7 @@ async function processInstruction(
   }
 
   // Handle "remove column" instructions
-  const removeColMatch = lower.match(/remove\s+(?:the\s+)?column\s+["']?(\w+)["']?/);
+  const removeColMatch = lower.match(/remove\s+(?:the\s+)?column\s+["']?([\w-]+)["']?/);
   if (removeColMatch) {
     const colName = removeColMatch[1]!.toUpperCase();
     const targetNode = session.nodes.length > 0
@@ -615,18 +615,16 @@ function buildInitialJoinCondition(
 
 function rebuildJoinCondition(
   node: WorkshopNode,
-  session: WorkshopSession,
+  _session: WorkshopSession,
   newKey: string
 ): string | null {
-  // Try to reconstruct from existing join condition
-  if (node.joinCondition) {
-    // Replace the ON clause key
-    return node.joinCondition.replace(
-      /ON\s+"([^"]+)"\."([^"]+)"\s*=\s*"([^"]+)"\."([^"]+)"/i,
-      `ON "$1"."${newKey}" = "$3"."${newKey}"`
-    );
-  }
-  return null;
+  if (!node.joinCondition) return null;
+  // Replace all join key references — handles compound joins (ON ... AND ...)
+  // by matching every `"alias"."column" = "alias"."column"` pair
+  return node.joinCondition.replace(
+    /"([^"]+)"\."([^"]+)"\s*=\s*"([^"]+)"\."([^"]+)"/gi,
+    `"$1"."${newKey}" = "$3"."${newKey}"`
+  );
 }
 
 function addHistory(session: WorkshopSession, instruction: string, result: string): void {

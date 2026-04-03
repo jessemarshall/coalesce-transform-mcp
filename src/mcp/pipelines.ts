@@ -235,7 +235,11 @@ function cleanupOldPlanFiles(dir: string, workspaceID: string, maxToKeep: number
       .reverse(); // most recent first (timestamp in filename)
 
     for (const file of files.slice(maxToKeep)) {
-      unlinkSync(join(dir, file));
+      try {
+        unlinkSync(join(dir, file));
+      } catch {
+        // Ignore ENOENT — another process may have already deleted this file
+      }
     }
   } catch (error) {
     // Best-effort cleanup — don't fail the write, but log for traceability
