@@ -8,6 +8,7 @@ import { registerRunTools } from "../../src/mcp/runs.js";
 import { registerCacheTools } from "../../src/mcp/cache.js";
 import { registerProjectTools } from "../../src/mcp/projects.js";
 import { registerEnvironmentTools } from "../../src/mcp/environments.js";
+import { registerNodeTools } from "../../src/mcp/nodes.js";
 
 function createMockClient() {
   return {
@@ -189,7 +190,108 @@ describe("Destructive tool confirmation gating", () => {
     expect(data.STOP_AND_CONFIRM).toContain("confirmed=true");
   });
 
+  it("delete_workspace_subgraph executes when confirmed=true", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const spy = vi.spyOn(server, "registerTool");
+    const client = createMockClient();
+    registerSubgraphTools(server, client as any);
+
+    const handler = extractHandler<{ workspaceID: string; subgraphID: string; confirmed?: boolean }>(spy, "delete_workspace_subgraph");
+    const result = await handler({ workspaceID: "ws-1", subgraphID: "sg-1", confirmed: true });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(data.STOP_AND_CONFIRM).toBeUndefined();
+    expect(client.delete).toHaveBeenCalled();
+  });
+
+  it("delete_git_account executes when confirmed=true", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const spy = vi.spyOn(server, "registerTool");
+    const client = createMockClient();
+    registerGitAccountTools(server, client as any);
+
+    const handler = extractHandler<{ gitAccountID: string; confirmed?: boolean }>(spy, "delete_git_account");
+    const result = await handler({ gitAccountID: "ga-1", confirmed: true });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(data.STOP_AND_CONFIRM).toBeUndefined();
+    expect(client.delete).toHaveBeenCalled();
+  });
+
+  it("delete_project_role executes when confirmed=true", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const spy = vi.spyOn(server, "registerTool");
+    const client = createMockClient();
+    registerUserTools(server, client as any);
+
+    const handler = extractHandler<{ userID: string; projectID: string; confirmed?: boolean }>(spy, "delete_project_role");
+    const result = await handler({ userID: "u-1", projectID: "proj-1", confirmed: true });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(data.STOP_AND_CONFIRM).toBeUndefined();
+    expect(client.delete).toHaveBeenCalled();
+  });
+
+  it("delete_env_role executes when confirmed=true", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const spy = vi.spyOn(server, "registerTool");
+    const client = createMockClient();
+    registerUserTools(server, client as any);
+
+    const handler = extractHandler<{ userID: string; environmentID: string; confirmed?: boolean }>(spy, "delete_env_role");
+    const result = await handler({ userID: "u-1", environmentID: "env-1", confirmed: true });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(data.STOP_AND_CONFIRM).toBeUndefined();
+    expect(client.delete).toHaveBeenCalled();
+  });
+
+  it("clear_data_cache executes when confirmed=true", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const spy = vi.spyOn(server, "registerTool");
+    const client = createMockClient();
+    registerCacheTools(server, client as any);
+
+    const handler = extractHandler<{ confirmed?: boolean }>(spy, "clear_data_cache");
+    const result = await handler({ confirmed: true });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(data.STOP_AND_CONFIRM).toBeUndefined();
+    // Tool proceeds past confirmation — deleted value depends on whether cache dir exists
+    expect(data).toHaveProperty("deleted");
+  });
+
   // Verify the 3 pre-existing guarded tools still gate correctly
+
+  it("delete_workspace_node returns STOP_AND_CONFIRM when not confirmed", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const spy = vi.spyOn(server, "registerTool");
+    const client = createMockClient();
+    registerNodeTools(server, client as any);
+
+    const handler = extractHandler<{ workspaceID: string; nodeID: string; confirmed?: boolean }>(spy, "delete_workspace_node");
+    const result = await handler({ workspaceID: "ws-1", nodeID: "node-1" });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(data.executed).toBe(false);
+    expect(data.STOP_AND_CONFIRM).toBeDefined();
+    expect(data.STOP_AND_CONFIRM).toContain("confirmed=true");
+    expect(client.delete).not.toHaveBeenCalled();
+  });
+
+  it("delete_workspace_node executes when confirmed=true", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const spy = vi.spyOn(server, "registerTool");
+    const client = createMockClient();
+    registerNodeTools(server, client as any);
+
+    const handler = extractHandler<{ workspaceID: string; nodeID: string; confirmed?: boolean }>(spy, "delete_workspace_node");
+    const result = await handler({ workspaceID: "ws-1", nodeID: "node-1", confirmed: true });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(data.STOP_AND_CONFIRM).toBeUndefined();
+    expect(client.delete).toHaveBeenCalled();
+  });
 
   it("delete_project returns STOP_AND_CONFIRM when not confirmed", async () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
@@ -221,5 +323,33 @@ describe("Destructive tool confirmation gating", () => {
     expect(data.STOP_AND_CONFIRM).toBeDefined();
     expect(data.STOP_AND_CONFIRM).toContain("confirmed=true");
     expect(client.delete).not.toHaveBeenCalled();
+  });
+
+  it("delete_project executes when confirmed=true", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const spy = vi.spyOn(server, "registerTool");
+    const client = createMockClient();
+    registerProjectTools(server, client as any);
+
+    const handler = extractHandler<{ projectID: string; confirmed?: boolean }>(spy, "delete_project");
+    const result = await handler({ projectID: "proj-1", confirmed: true });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(data.STOP_AND_CONFIRM).toBeUndefined();
+    expect(client.delete).toHaveBeenCalled();
+  });
+
+  it("delete_environment executes when confirmed=true", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const spy = vi.spyOn(server, "registerTool");
+    const client = createMockClient();
+    registerEnvironmentTools(server, client as any);
+
+    const handler = extractHandler<{ environmentID: string; confirmed?: boolean }>(spy, "delete_environment");
+    const result = await handler({ environmentID: "env-1", confirmed: true });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(data.STOP_AND_CONFIRM).toBeUndefined();
+    expect(client.delete).toHaveBeenCalled();
   });
 });
