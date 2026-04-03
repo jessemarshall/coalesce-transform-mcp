@@ -24,6 +24,9 @@ const DEFAULT_BASE_URL = "https://app.coalescesoftware.io";
 const MAX_RETRY_ATTEMPTS = 5;
 const RETRY_BASE_DELAY_MS = 1_000;
 const RETRY_MAX_DELAY_MS = 30_000;
+// Only retry rate-limited GET requests. POST/PUT/PATCH/DELETE are not retried
+// because they are not idempotent — retrying could cause duplicate runs, double
+// deletes, or other unintended side effects.
 const RETRYABLE_RATE_LIMIT_METHODS = new Set(["GET"]);
 
 export function validateConfig(): ClientConfig {
