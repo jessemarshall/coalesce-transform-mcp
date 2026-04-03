@@ -17,10 +17,8 @@ import {
   WRITE_ANNOTATIONS,
   IDEMPOTENT_WRITE_ANNOTATIONS,
   DESTRUCTIVE_ANNOTATIONS,
-  validatePathSegment,
 } from "../coalesce/types.js";
 import { requireDestructiveConfirmation } from "../services/shared/elicitation.js";
-import { previewDeployment } from "../services/workspace/deployment-diff.js";
 
 export function registerEnvironmentTools(
   server: McpServer,
@@ -174,45 +172,4 @@ export function registerEnvironmentTools(
     }
   );
 
-  server.registerTool(
-    "preview_deployment",
-    {
-      title: "Preview Deployment",
-      description: [
-        "Diff workspace (dev) state against environment (deployed) state to show structural node changes before triggering a deploy run.",
-        "",
-        "Compares node presence and identity only (name and nodeType). SQL body, column definitions, and",
-        "config changes are NOT surfaced here — a node with identical name and type but different SQL will",
-        "appear as 'unchanged'. For a full content diff, fetch individual node details separately.",
-        "",
-        "Returns three lists:",
-        "  - new: nodes present in the workspace but not yet deployed to the environment (will be created)",
-        "  - removed: nodes present in the environment but deleted from the workspace (will be removed)",
-        "  - modified: nodes present in both but with differing name or nodeType (will be updated)",
-        "",
-        "Args:",
-        "  workspaceID: The workspace ID (dev state)",
-        "  environmentID: The environment ID to diff against (deployed state)",
-        "",
-        "Use this tool before any start_run with runType=deploy to get a safe, auditable preview of the deployment impact.",
-        "Fetches all nodes from both sides with pagination — may take a moment for large workspaces.",
-      ].join("\n"),
-      inputSchema: z.object({
-        workspaceID: z.string().describe("Workspace ID (the dev/source state)"),
-        environmentID: z.string().describe("Environment ID to compare against (the deployed state)"),
-      }),
-      outputSchema: getToolOutputSchema("preview_deployment"),
-      annotations: READ_ONLY_ANNOTATIONS,
-    },
-    async (params) => {
-      try {
-        validatePathSegment(params.workspaceID, "workspaceID");
-        validatePathSegment(params.environmentID, "environmentID");
-        const result = await previewDeployment(client, params.workspaceID, params.environmentID);
-        return buildJsonToolResponse("preview_deployment", result);
-      } catch (error) {
-        return handleToolError(error);
-      }
-    }
-  );
 }

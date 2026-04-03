@@ -146,7 +146,6 @@ Coalesce Platform Tools: manage workspaces, environments, projects, runs, and ot
 - `create_environment` - Create a new environment within a project
 - `update_environment` - Update an existing environment
 - `delete_environment` - Delete an environment ⚠️
-- `preview_deployment` - Diff workspace (dev) state against environment (deployed) state — returns new, removed, and modified node lists before triggering a deploy run
 
 #### Workspaces
 
