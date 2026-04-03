@@ -20,3 +20,4 @@ RELEASE.md
 .sfdx/
 CLAUDE.md
 tests/services/intent-simulation.test.ts
+INTEGRATION-TESTING.md
