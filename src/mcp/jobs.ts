@@ -18,6 +18,7 @@ import {
   WRITE_ANNOTATIONS,
   DESTRUCTIVE_ANNOTATIONS,
 } from "../coalesce/types.js";
+import { requireDestructiveConfirmation } from "../services/shared/elicitation.js";
 
 export function registerJobTools(
   server: McpServer,
@@ -154,16 +155,28 @@ export function registerJobTools(
     {
       title: "Delete Workspace Job",
       description:
-        "Delete a job from a workspace. Destructive.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - jobID (string, required): The job ID\n\nReturns:\n  Confirmation message.",
+        "Delete a job from a workspace. Destructive — jobs define which nodes run together; deleting the wrong one breaks scheduled pipelines.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - jobID (string, required): The job ID\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms deletion\n\nReturns:\n  Confirmation message.",
       inputSchema: z.object({
         workspaceID: z.string().describe("The workspace ID"),
         jobID: z.string().describe("The job ID to delete"),
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Set to true after the user explicitly confirms the deletion."),
       }),
       outputSchema: getToolOutputSchema("delete_workspace_job"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
+        const approvalResponse = await requireDestructiveConfirmation(
+          server,
+          "delete_workspace_job",
+          `This will permanently delete job "${params.jobID}" from workspace "${params.workspaceID}". This cannot be undone.`,
+          params.confirmed,
+        );
+        if (approvalResponse) return approvalResponse;
+
         const result = await deleteWorkspaceJob(client, params);
         return buildJsonToolResponse("delete_workspace_job", result);
       } catch (error) {

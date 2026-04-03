@@ -23,6 +23,7 @@ import {
   WRITE_ANNOTATIONS,
   DESTRUCTIVE_ANNOTATIONS,
 } from "../coalesce/types.js";
+import { requireDestructiveConfirmation } from "../services/shared/elicitation.js";
 
 export function registerRunTools(
   server: McpServer,
@@ -196,7 +197,7 @@ export function registerRunTools(
     {
       title: "Cancel Run",
       description:
-        "Cancel an in-progress Coalesce run. This is destructive — the run will be terminated.\n\nArgs:\n  - runID (string, required): Numeric run ID to cancel\n  - environmentID (string, required): Environment the run belongs to\n  - orgID (string, optional): Organization ID. Falls back to COALESCE_ORG_ID env var.\n\nReturns:\n  Confirmation with updated run status.",
+        "Cancel an in-progress Coalesce run. Destructive — the run will be terminated immediately. Canceling a running pipeline mid-execution can leave data in an inconsistent state (partial loads, half-transformed tables). There is no 'undo cancel'.\n\nArgs:\n  - runID (string, required): Numeric run ID to cancel\n  - environmentID (string, required): Environment the run belongs to\n  - orgID (string, optional): Organization ID. Falls back to COALESCE_ORG_ID env var.\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms cancellation\n\nReturns:\n  Confirmation with updated run status.",
       inputSchema: z.object({
         runID: z.string().describe("The numeric run ID (integer) of the run to cancel"),
         orgID: z
@@ -204,12 +205,24 @@ export function registerRunTools(
           .optional()
           .describe("The organization ID. Optional if COALESCE_ORG_ID is set."),
         environmentID: z.string().describe("The environment ID the run belongs to"),
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Set to true after the user explicitly confirms the cancellation."),
       }),
       outputSchema: getToolOutputSchema("cancel_run"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
+        const approvalResponse = await requireDestructiveConfirmation(
+          server,
+          "cancel_run",
+          `This will cancel run "${params.runID}" in environment "${params.environmentID}". The run will be terminated immediately and cannot be resumed — data may be left in an inconsistent state.`,
+          params.confirmed,
+        );
+        if (approvalResponse) return approvalResponse;
+
         const result = await cancelRun(client, params);
         return buildJsonToolResponse("cancel_run", sanitizeResponse(result));
       } catch (error) {

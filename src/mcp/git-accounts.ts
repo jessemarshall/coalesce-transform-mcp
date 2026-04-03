@@ -17,6 +17,7 @@ import {
   IDEMPOTENT_WRITE_ANNOTATIONS,
   DESTRUCTIVE_ANNOTATIONS,
 } from "../coalesce/types.js";
+import { requireDestructiveConfirmation } from "../services/shared/elicitation.js";
 
 export function registerGitAccountTools(
   server: McpServer,
@@ -127,16 +128,28 @@ export function registerGitAccountTools(
     {
       title: "Delete Git Account",
       description:
-        "Permanently delete a Git account. Destructive and cannot be undone.\n\nArgs:\n  - gitAccountID (string, required): The account ID\n  - accountOwner (string, optional): User ID of the account owner\n\nReturns:\n  Confirmation message.",
+        "Permanently delete a Git account. Destructive and cannot be undone — if this is the only git account linked to a project, it breaks the CI/CD connection.\n\nArgs:\n  - gitAccountID (string, required): The account ID\n  - accountOwner (string, optional): User ID of the account owner\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms deletion\n\nReturns:\n  Confirmation message.",
       inputSchema: z.object({
         gitAccountID: z.string().describe("The git account ID"),
         accountOwner: accountOwnerParam,
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Set to true after the user explicitly confirms the deletion."),
       }),
       outputSchema: getToolOutputSchema("delete_git_account"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
+        const approvalResponse = await requireDestructiveConfirmation(
+          server,
+          "delete_git_account",
+          `This will permanently delete git account "${params.gitAccountID}". This cannot be undone.`,
+          params.confirmed,
+        );
+        if (approvalResponse) return approvalResponse;
+
         const result = await deleteGitAccount(client, params);
         return buildJsonToolResponse("delete_git_account", result);
       } catch (error) {

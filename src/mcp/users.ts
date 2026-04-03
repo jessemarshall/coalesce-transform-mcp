@@ -20,6 +20,7 @@ import {
   IDEMPOTENT_WRITE_ANNOTATIONS,
   DESTRUCTIVE_ANNOTATIONS,
 } from "../coalesce/types.js";
+import { requireDestructiveConfirmation } from "../services/shared/elicitation.js";
 
 export function registerUserTools(
   server: McpServer,
@@ -146,16 +147,28 @@ export function registerUserTools(
     {
       title: "Delete Project Role",
       description:
-        "Remove a user's role from a specific project. Destructive — the user will lose project access.\n\nArgs:\n  - userID (string, required): The user ID\n  - projectID (string, required): The project ID\n\nReturns:\n  Confirmation message.",
+        "Remove a user's role from a specific project. Destructive — the user will lose project access immediately.\n\nArgs:\n  - userID (string, required): The user ID\n  - projectID (string, required): The project ID\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms the role removal\n\nReturns:\n  Confirmation message.",
       inputSchema: z.object({
         userID: z.string().describe("The user ID"),
         projectID: z.string().describe("The project ID"),
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Set to true after the user explicitly confirms the role removal."),
       }),
       outputSchema: getToolOutputSchema("delete_project_role"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
+        const approvalResponse = await requireDestructiveConfirmation(
+          server,
+          "delete_project_role",
+          `This will remove the project role for user "${params.userID}" on project "${params.projectID}". The user will lose project access immediately.`,
+          params.confirmed,
+        );
+        if (approvalResponse) return approvalResponse;
+
         const result = await deleteProjectRole(client, params);
         return buildJsonToolResponse("delete_project_role", result);
       } catch (error) {
@@ -194,16 +207,28 @@ export function registerUserTools(
     {
       title: "Delete Env Role",
       description:
-        "Remove a user's role from a specific environment. Destructive.\n\nArgs:\n  - userID (string, required): The user ID\n  - environmentID (string, required): The environment ID\n\nReturns:\n  Confirmation message.",
+        "Remove a user's role from a specific environment. Destructive — the user will lose environment access immediately.\n\nArgs:\n  - userID (string, required): The user ID\n  - environmentID (string, required): The environment ID\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms the role removal\n\nReturns:\n  Confirmation message.",
       inputSchema: z.object({
         userID: z.string().describe("The user ID"),
         environmentID: z.string().describe("The environment ID"),
+        confirmed: z
+          .boolean()
+          .optional()
+          .describe("Set to true after the user explicitly confirms the role removal."),
       }),
       outputSchema: getToolOutputSchema("delete_env_role"),
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     async (params) => {
       try {
+        const approvalResponse = await requireDestructiveConfirmation(
+          server,
+          "delete_env_role",
+          `This will remove the environment role for user "${params.userID}" on environment "${params.environmentID}". The user will lose environment access immediately.`,
+          params.confirmed,
+        );
+        if (approvalResponse) return approvalResponse;
+
         const result = await deleteEnvRole(client, params);
         return buildJsonToolResponse("delete_env_role", result);
       } catch (error) {
