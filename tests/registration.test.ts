@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTaskStore, InMemoryTaskMessageQueue } from "../src/tasks/store.js";
-import { registerServerSurface } from "../src/server.js";
+import { registerServerSurface, SERVER_INSTRUCTIONS } from "../src/server.js";
 
 function createMockClient() {
   return {
@@ -116,5 +116,55 @@ describe("Tool Registration", () => {
       destructiveHint: true,
       },
     });
+  });
+});
+
+describe("Server Instructions", () => {
+  it("contains tool category sections for client-side navigation", () => {
+    const categories = [
+      "Discovery",
+      "Pipeline building",
+      "Node editing",
+      "Execution",
+      "Node type discovery",
+      "Lineage",
+      "Caching",
+      "Users and admin",
+    ];
+    for (const category of categories) {
+      expect(SERVER_INSTRUCTIONS).toContain(category);
+    }
+  });
+
+  it("contains typical workflow sequences", () => {
+    expect(SERVER_INSTRUCTIONS).toContain("TYPICAL WORKFLOWS:");
+    expect(SERVER_INSTRUCTIONS).toContain("Explore a workspace:");
+    expect(SERVER_INSTRUCTIONS).toContain("Build a pipeline:");
+    expect(SERVER_INSTRUCTIONS).toContain("Run a job:");
+    expect(SERVER_INSTRUCTIONS).toContain("Diagnose a failure:");
+  });
+
+  it("contains key operational rules", () => {
+    expect(SERVER_INSTRUCTIONS).toContain("plan_pipeline");
+    expect(SERVER_INSTRUCTIONS).toContain("Resolve IDs before mutating");
+    expect(SERVER_INSTRUCTIONS).toContain("warning, validation, resultsError");
+    expect(SERVER_INSTRUCTIONS).toContain("coalesce://context/*");
+  });
+
+  it("references representative tools from each category", () => {
+    const tools = [
+      "list_workspaces",
+      "list_workspace_nodes",
+      "plan_pipeline",
+      "create_pipeline_from_plan",
+      "update_workspace_node",
+      "run_and_wait",
+      "get_upstream_nodes",
+      "cache_workspace_nodes",
+      "diagnose_run_failure",
+    ];
+    for (const tool of tools) {
+      expect(SERVER_INSTRUCTIONS).toContain(tool);
+    }
   });
 });
