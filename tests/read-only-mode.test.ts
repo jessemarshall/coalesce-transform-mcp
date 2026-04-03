@@ -53,6 +53,8 @@ const READ_ONLY_TOOLS = [
   "list_org_users",
   "get_user_roles",
   "list_user_roles",
+  "parse_sql_structure",
+  "select_pipeline_node_type",
   "plan_pipeline",
   "review_pipeline",
   "get_pipeline_workshop_status",
@@ -74,6 +76,7 @@ const READ_ONLY_TOOLS = [
   "get_downstream_nodes",
   "get_column_lineage",
   "analyze_impact",
+  "preview_deployment",
 ];
 
 // Tools that should be hidden in read-only mode

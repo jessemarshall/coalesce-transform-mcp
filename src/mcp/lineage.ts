@@ -22,6 +22,7 @@ import {
   createWorkflowProgressReporter,
   type WorkflowProgressExtra,
 } from "../workflows/progress.js";
+import { isPlainObject } from "../utils.js";
 
 export function registerLineageTools(
   server: McpServer,
@@ -355,7 +356,17 @@ export function registerLineageTools(
           progressReporter
         );
 
-        return buildJsonToolResponse("propagate_column_change", result);
+        const response = buildJsonToolResponse("propagate_column_change", result);
+        if (
+          isPlainObject(result) &&
+          Array.isArray(result.errors) &&
+          result.errors.length > 0 &&
+          Array.isArray(result.updatedNodes) &&
+          result.updatedNodes.length === 0
+        ) {
+          return { ...response, isError: true };
+        }
+        return response;
       } catch (error) {
         return handleToolError(error);
       }

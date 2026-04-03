@@ -22,9 +22,9 @@ type PipelineIntent = "sql" | "goal";
 type PipelineStatus = "ready" | "needs_clarification";
 type PipelineNodeType = string;
 
-type PlannedSelectItemKind = "column" | "expression";
+export type PlannedSelectItemKind = "column" | "expression";
 
-type PlannedSelectItem = {
+export type PlannedSelectItem = {
   expression: string;
   outputName: string | null;
   sourceNodeAlias: string | null;
@@ -185,14 +185,14 @@ export const PipelinePlanSchema = z
   })
   .strict();
 
-type ResolvedSqlRef = {
+export type ResolvedSqlRef = {
   locationName: string;
   nodeName: string;
   alias: string | null;
   nodeID: string | null;
 };
 
-type ParsedSqlSourceRef = ResolvedSqlRef & {
+export type ParsedSqlSourceRef = ResolvedSqlRef & {
   sourceStyle: "coalesce_ref" | "table_name";
   locationCandidates: string[];
   relationStart: number;
@@ -205,7 +205,7 @@ type SqlParseResult = {
   warnings: string[];
 };
 
-type WorkspaceNodeTypeInventory = {
+export type WorkspaceNodeTypeInventory = {
   nodeTypes: string[];
   counts: Record<string, number>;
   total: number;
@@ -864,7 +864,7 @@ type SqlSourceParseResult = {
   refs: ParsedSqlSourceRef[];
 };
 
-function parseSqlSourceRefs(sql: string): SqlSourceParseResult {
+export function parseSqlSourceRefs(sql: string): SqlSourceParseResult {
   const fromClause = extractFromClause(sql);
   if (!fromClause) {
     return { fromClause: "", refs: [] };
@@ -955,7 +955,7 @@ function listToQuestion(values: string[]): string {
   return values.join(", ");
 }
 
-function parseSqlSelectItems(sql: string, refs: ParsedSqlSourceRef[]): SqlParseResult {
+export function parseSqlSelectItems(sql: string, refs: ParsedSqlSourceRef[]): SqlParseResult {
   const warnings: string[] = [];
   const refsByAlias = new Map<string, ParsedSqlSourceRef>();
   for (const ref of refs) {
@@ -1576,7 +1576,7 @@ function matchesObservedNodeType(
   });
 }
 
-async function getWorkspaceNodeTypeInventory(
+export async function getWorkspaceNodeTypeInventory(
   client: CoalesceClient,
   workspaceID: string
 ): Promise<WorkspaceNodeTypeInventory> {
@@ -1807,7 +1807,7 @@ function buildPlanFromSql(
 /**
  * Parsed CTE with name and body SQL.
  */
-type ParsedCte = {
+export type ParsedCte = {
   name: string;
   body: string;
   columns: CteColumn[];
@@ -1817,7 +1817,7 @@ type ParsedCte = {
   hasJoin: boolean;
 };
 
-type CteColumn = {
+export type CteColumn = {
   outputName: string;
   expression: string;
   isTransform: boolean;
@@ -1828,7 +1828,7 @@ type CteColumn = {
  * Uses quoting-aware scanning to find CTE headers and balanced parentheses,
  * avoiding false matches inside string literals, quoted identifiers, and comments.
  */
-function extractCtes(sql: string): ParsedCte[] {
+export function extractCtes(sql: string): ParsedCte[] {
   const trimmed = sql.trim();
 
   // Check for leading WITH keyword using quoting-aware search
@@ -2218,7 +2218,7 @@ function buildCtePlan(
       hasGroupBy: cte.hasGroupBy,
       hasJoin: cte.hasJoin,
       dependsOn: ctes
-        .filter((other) => other.name !== cte.name && cte.body.toUpperCase().includes(other.name))
+        .filter((other) => other.name !== cte.name && new RegExp(`\\b${escapeRegExp(other.name)}\\b`, "iu").test(cte.body))
         .map((other) => other.name),
     };
 
@@ -2310,7 +2310,7 @@ function buildCtePlan(
  * Escape a string for use in a RegExp constructor, ensuring special characters
  * like `$` in CTE names are treated as literals.
  */
-function escapeRegExp(value: string): string {
+export function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 

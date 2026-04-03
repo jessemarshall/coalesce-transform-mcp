@@ -198,6 +198,51 @@ const CorpusVariantOutputSchema = z.object({
   warnings: z.array(z.string()).optional(),
 }).passthrough();
 
+const ParseSqlStructureOutputSchema = z.object({
+  hasCtes: z.boolean().optional(),
+  cteCount: z.number().optional(),
+  ctes: z.array(z.object({
+    name: z.string().optional(),
+    sourceTable: z.string().nullable().optional(),
+    hasJoin: z.boolean().optional(),
+    hasGroupBy: z.boolean().optional(),
+    whereClause: z.string().nullable().optional(),
+    columnCount: z.number().optional(),
+    columns: z.array(z.unknown()).optional(),
+    transformCount: z.number().optional(),
+    passthroughCount: z.number().optional(),
+    dependsOnCtes: z.array(z.string()).optional(),
+  }).passthrough()).optional(),
+  sourceRefs: z.array(z.object({
+    locationName: z.string().optional(),
+    nodeName: z.string().optional(),
+    alias: z.string().nullable().optional(),
+    sourceStyle: z.string().optional(),
+  }).passthrough()).optional(),
+  sourceCount: z.number().optional(),
+  hasJoin: z.boolean().optional(),
+  selectItems: z.array(z.unknown()).optional(),
+  selectItemCount: z.number().optional(),
+  supportedSelectCount: z.number().optional(),
+  unsupportedSelectCount: z.number().optional(),
+  warnings: z.array(z.string()).optional(),
+  guidance: z.string().optional(),
+}).passthrough();
+
+const SelectPipelineNodeTypeOutputSchema = z.object({
+  selectedNodeType: z.string().nullable().optional(),
+  selectedDisplayName: z.string().nullable().optional(),
+  selectedFamily: z.string().nullable().optional(),
+  autoExecutable: z.boolean().optional(),
+  semanticSignals: z.array(z.string()).optional(),
+  missingDefaultFields: z.array(z.string()).optional(),
+  templateWarnings: z.array(z.string()).optional(),
+  selectionDegraded: z.boolean().optional(),
+  selection: JsonObjectSchema.optional(),
+  warnings: z.array(z.string()).optional(),
+  warning: z.string().optional(),
+}).passthrough();
+
 const PipelinePlanOutputSchema = z.object({
   version: z.number().optional(),
   intent: z.string().optional(),
@@ -596,6 +641,10 @@ export function getToolOutputSchema(toolName: string) {
       return CorpusSearchOutputSchema;
     case "get_node_type_variant":
       return CorpusVariantOutputSchema;
+    case "parse_sql_structure":
+      return ParseSqlStructureOutputSchema;
+    case "select_pipeline_node_type":
+      return SelectPipelineNodeTypeOutputSchema;
     case "plan_pipeline":
       return PipelinePlanOutputSchema;
     case "create_pipeline_from_plan":

@@ -9,7 +9,15 @@ import { buildPlanConfirmationToken, sortJsonValue } from "../services/pipelines
 import {
   PipelinePlanSchema,
   planPipeline,
+  extractCtes,
+  parseSqlSourceRefs,
+  parseSqlSelectItems,
+  getWorkspaceNodeTypeInventory,
+  escapeRegExp,
 } from "../services/pipelines/planning.js";
+import {
+  selectPipelineNodeType,
+} from "../services/pipelines/node-type-selection.js";
 import {
   createPipelineFromPlan,
 } from "../services/pipelines/execution.js";
@@ -736,6 +744,192 @@ export function registerPipelineTools(
           nodeIDs: params.nodeIDs,
         });
         return buildJsonToolResponse("review_pipeline", result);
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.registerTool(
+    "parse_sql_structure",
+    {
+      title: "Parse SQL Structure",
+      description:
+        "Parse a SQL statement into its structural components without touching the workspace. " +
+        "Returns CTEs (if any), source table references (FROM/JOIN), and projected columns (SELECT list). " +
+        "Use this as the first step in a multi-step pipeline creation workflow to inspect " +
+        "the SQL decomposition before choosing node types or building a plan.\n\n" +
+        "For CTE-based SQL, each CTE is returned with its columns (with transform detection), " +
+        "WHERE filters, source tables, structural flags (hasJoin, hasGroupBy), and inter-CTE dependency references.\n\n" +
+        "For non-CTE SQL, returns the parsed source refs and SELECT items with column/expression classification.\n\n" +
+        "This tool is pure parsing — no workspace reads, no node type selection, no mutations.",
+      inputSchema: z.object({
+        sql: z.string().describe("The SQL statement to parse. Pass it exactly as provided — do not rewrite or modify it."),
+      }),
+      outputSchema: getToolOutputSchema("parse_sql_structure"),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    async (params) => {
+      try {
+        const sql = params.sql.trim();
+        if (sql.length === 0) {
+          return {
+            ...buildJsonToolResponse("parse_sql_structure", {
+              error: "SQL parameter must not be empty.",
+            }),
+            isError: true,
+          };
+        }
+
+        const ctes = extractCtes(sql);
+
+        if (ctes.length > 0) {
+          // CTE-based SQL — return the decomposed CTEs plus the final SELECT
+          const cteNames = ctes.map((cte) => cte.name);
+          return buildJsonToolResponse("parse_sql_structure", {
+            hasCtes: true,
+            cteCount: ctes.length,
+            ctes: ctes.map((cte) => ({
+              name: cte.name,
+              sourceTable: cte.sourceTable,
+              hasJoin: cte.hasJoin,
+              hasGroupBy: cte.hasGroupBy,
+              whereClause: cte.whereClause,
+              columnCount: cte.columns.length,
+              columns: cte.columns.map((col) => ({
+                outputName: col.outputName,
+                expression: col.expression,
+                isTransform: col.isTransform,
+              })),
+              transformCount: cte.columns.filter((col) => col.isTransform).length,
+              passthroughCount: cte.columns.filter((col) => !col.isTransform).length,
+              dependsOnCtes: cteNames.filter(
+                (name) => name !== cte.name && new RegExp(`\\b${escapeRegExp(name)}\\b`, "iu").test(cte.body)
+              ),
+            })),
+            guidance:
+              "Each CTE should become a separate Coalesce node — Coalesce does not support CTEs. " +
+              "Use select_pipeline_node_type for each CTE to determine the best node type based on its pattern " +
+              "(staging vs join vs aggregation). Then use plan_pipeline or create_pipeline_from_plan to build the pipeline.",
+          });
+        }
+
+        // Non-CTE SQL — parse source refs and SELECT items
+        const sourceResult = parseSqlSourceRefs(sql);
+        const parseResult = parseSqlSelectItems(sql, sourceResult.refs);
+
+        return buildJsonToolResponse("parse_sql_structure", {
+          hasCtes: false,
+          sourceRefs: parseResult.refs.map((ref) => ({
+            locationName: ref.locationName,
+            nodeName: ref.nodeName,
+            alias: ref.alias,
+            sourceStyle: ref.sourceStyle,
+          })),
+          sourceCount: parseResult.refs.length,
+          hasJoin: parseResult.refs.length > 1,
+          selectItems: parseResult.selectItems.map((item) => ({
+            expression: item.expression,
+            outputName: item.outputName,
+            sourceNodeAlias: item.sourceNodeAlias,
+            sourceColumnName: item.sourceColumnName,
+            kind: item.kind,
+            supported: item.supported,
+            ...(item.reason ? { reason: item.reason } : {}),
+          })),
+          selectItemCount: parseResult.selectItems.length,
+          supportedSelectCount: parseResult.selectItems.filter((item) => item.supported).length,
+          unsupportedSelectCount: parseResult.selectItems.filter((item) => !item.supported).length,
+          warnings: parseResult.warnings,
+          guidance:
+            "Use select_pipeline_node_type with the structural hints from this result " +
+            "(sourceCount, hasJoin) to determine the best node type. " +
+            "Then use plan_pipeline or create_pipeline_from_plan to build the pipeline.",
+        });
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.registerTool(
+    "select_pipeline_node_type",
+    {
+      title: "Select Pipeline Node Type",
+      description:
+        "Rank and select the best Coalesce node type for a specific pipeline step. " +
+        "When repoPath or COALESCE_REPO_PATH is configured, scans the local repo for committed node type definitions. " +
+        "Otherwise, falls back to workspace-observed node types. Scores candidates against the provided context " +
+        "and returns ranked candidates with confidence levels.\n\n" +
+        "Use this after parse_sql_structure to select node types for each structural piece " +
+        "(e.g., each CTE, or the main query). Provide structural hints like sourceCount, hasJoin, hasGroupBy " +
+        "for more accurate selection.\n\n" +
+        "The tool runs the full deliberative selection loop: score all candidates, challenge the top pick " +
+        "against the intent corpus, disqualify if challenged, re-rank, and challenge again (2 rounds max).\n\n" +
+        "Returns the selected node type, confidence level, full ranking with scores, and any warnings. " +
+        "Use the selectedNodeType in subsequent plan_pipeline, create_workspace_node_from_predecessor, or create_workspace_node_from_scratch calls.\n\n" +
+        "This tool reads workspace node type inventory for ranking but does not mutate anything.",
+      inputSchema: z.object({
+        workspaceID: z.string().describe("The workspace ID — used to fetch observed node types for ranking context."),
+        goal: z.string().optional().describe(
+          "Natural-language description of what this pipeline step does. Be specific — " +
+          "'staging layer for raw customer data' is better than 'stage'. " +
+          "Include the transform pattern (join, aggregate, filter, rename, etc.)."
+        ),
+        targetName: z.string().optional().describe("Optional target node name — used for naming-signal scoring."),
+        sql: z.string().optional().describe("Optional SQL for this step — used for structural analysis during scoring."),
+        sourceCount: z.number().describe("Number of source/predecessor nodes feeding into this step."),
+        hasJoin: z.boolean().optional().describe("Does this step involve a JOIN? Prevents view-family selection and provides structural context for ranking."),
+        hasGroupBy: z.boolean().optional().describe("Does this step involve a GROUP BY? Influences selection toward aggregation-capable types."),
+        hasBusinessKeys: z.boolean().optional().describe("Are business keys explicitly defined? Influences dimensional/data-vault type selection."),
+        targetNodeType: z.string().optional().describe("Optional explicit node type override — bypasses ranking and validates this specific type."),
+        repoPath: z.string().optional().describe("Optional local committed Coalesce repo path. Falls back to COALESCE_REPO_PATH when omitted."),
+      }),
+      outputSchema: getToolOutputSchema("select_pipeline_node_type"),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    async (params) => {
+      try {
+        const inventory = await getWorkspaceNodeTypeInventory(
+          client,
+          validatePathSegment(params.workspaceID, "workspaceID")
+        );
+
+        const result = selectPipelineNodeType({
+          explicitNodeType: params.targetNodeType,
+          goal: params.goal,
+          targetName: params.targetName,
+          sql: params.sql,
+          sourceCount: params.sourceCount,
+          hasJoin: params.hasJoin,
+          hasGroupBy: params.hasGroupBy,
+          hasBusinessKeys: params.hasBusinessKeys,
+          workspaceNodeTypes: inventory.nodeTypes,
+          workspaceNodeTypeCounts: inventory.counts,
+          repoPath: params.repoPath,
+        });
+
+        const candidate = result.selectedCandidate;
+        const inventoryDegraded = inventory.nodeTypes.length === 0 && inventory.warnings.length > 0;
+        const response = {
+          ...(candidate ? {
+            selectedNodeType: candidate.nodeType,
+            selectedDisplayName: candidate.displayName,
+            selectedFamily: candidate.family,
+            autoExecutable: candidate.autoExecutable,
+            ...(candidate.semanticSignals.length > 0 ? { semanticSignals: candidate.semanticSignals } : {}),
+            ...(candidate.missingDefaultFields.length > 0 ? { missingDefaultFields: candidate.missingDefaultFields } : {}),
+            ...(candidate.templateWarnings.length > 0 ? { templateWarnings: candidate.templateWarnings } : {}),
+          } : {
+            selectedNodeType: null,
+            warning: "No suitable node type found. Review the ranked candidates or specify an explicit targetNodeType.",
+          }),
+          ...(inventoryDegraded ? { selectionDegraded: true } : {}),
+          selection: result.selection,
+          warnings: [...result.warnings, ...inventory.warnings],
+        };
+
+        return buildJsonToolResponse("select_pipeline_node_type", response);
       } catch (error) {
         return handleToolError(error);
       }
