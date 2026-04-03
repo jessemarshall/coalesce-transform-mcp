@@ -635,6 +635,7 @@ export async function createWorkspaceNodeFromPredecessor(
 
   // Re-fetch the node if changes were applied but config completion failed
   let resultNode: unknown = completion.configCompletion?.node ?? createdNode;
+  let nodeDataStale = false;
   if (completion.configCompletionSkipped) {
     const hasChanges = (params.changes && Object.keys(params.changes).length > 0) || params.columns;
     if (hasChanges) {
@@ -644,6 +645,7 @@ export async function createWorkspaceNodeFromPredecessor(
         const reason = error instanceof Error ? error.message : String(error);
         process.stderr.write(`[createWorkspaceNodeFromPredecessor] Re-fetch after config completion skip failed: ${reason}\n`);
         resultNode = createdNode;
+        nodeDataStale = true;
       }
     }
   }
@@ -656,6 +658,7 @@ export async function createWorkspaceNodeFromPredecessor(
     ...completion,
     nextSteps,
     ...(nodeTypeValidation ? { nodeTypeValidation } : {}),
+    ...(nodeDataStale ? { warning: "Node was created successfully but re-fetch failed after config completion was skipped. The returned node data may not reflect the current server state." } : {}),
   };
 }
 
