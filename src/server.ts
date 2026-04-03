@@ -110,7 +110,7 @@ Execution:
 
 Node type discovery:
   list_workspace_node_types — types currently in workspace
-  search_node_type_corpus, search_node_type_variants — broader type search
+  search_node_type_variants — broader type search
   list_repo_node_types, get_repo_node_type_definition — repo-backed type inspection
   generate_set_workspace_node_template — scaffold node body from type definition
 
@@ -125,7 +125,7 @@ Caching (for large datasets):
   Results returned as coalesce://cache/... resource URIs — read the resource, not inline JSON.
 
 Users and admin:
-  search_users, list_org_users — user discovery
+  list_org_users — user discovery
   list_git_accounts — git integration
 
 TYPICAL WORKFLOWS:
