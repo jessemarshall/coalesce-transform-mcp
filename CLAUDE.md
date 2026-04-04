@@ -1,0 +1,1 @@
+/Users/admin/Documents/GitHub/mcp-smithy/CLAUDE.md
