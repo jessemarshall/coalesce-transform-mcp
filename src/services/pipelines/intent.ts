@@ -1,6 +1,6 @@
-import { CoalesceApiError, type CoalesceClient } from "../../client.js";
+import { type CoalesceClient } from "../../client.js";
 import { getWorkspaceNode, listWorkspaceNodes } from "../../coalesce/api/nodes.js";
-import { isPlainObject, uniqueInOrder, rethrowNonRecoverableApiError } from "../../utils.js";
+import { isPlainObject, uniqueInOrder, rethrowNonRecoverableApiError, rethrowNonRecoverableOrServerError } from "../../utils.js";
 import {
   normalizeSqlIdentifier,
   getColumnNamesFromNode,
@@ -535,9 +535,7 @@ async function getWorkspaceNodeTypeInventory(
       warnings: [],
     };
   } catch (error) {
-    if (error instanceof CoalesceApiError && [401, 403, 500, 503].includes(error.status)) {
-      throw error;
-    }
+    rethrowNonRecoverableOrServerError(error);
     const reason = error instanceof Error ? error.message : String(error);
     return {
       nodeTypes: [],
