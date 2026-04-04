@@ -492,6 +492,14 @@ const WorkshopCloseOutputSchema = z.object({
   error: z.string().optional(),
 }).passthrough();
 
+const PersonalizeSkillsOutputSchema = z.object({
+  directory: z.string().optional(),
+  created: z.array(z.string()).optional(),
+  alreadyExisted: z.array(z.string()).optional(),
+  totalSkills: z.number().optional(),
+  configHint: z.string().nullable().optional(),
+}).passthrough();
+
 const LIST_TOOL_NAMES = new Set([
   "list_environments",
   "list_projects",
@@ -642,6 +650,8 @@ export function getToolOutputSchema(toolName: string) {
       return ImpactAnalysisOutputSchema;
     case "propagate_column_change":
       return PropagateColumnChangeOutputSchema;
+    case "personalize_skills":
+      return PersonalizeSkillsOutputSchema;
     default:
       return JsonToolOutputSchema;
   }
