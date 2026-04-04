@@ -17,6 +17,8 @@ import {
   walkColumnLineage,
   analyzeNodeImpact,
   propagateColumnChange,
+  searchWorkspaceContent,
+  type SearchField,
 } from "../services/lineage/lineage-cache.js";
 import {
   createWorkflowProgressReporter,
@@ -382,6 +384,71 @@ export function registerLineageTools(
           return { ...response, isError: true };
         }
         return response;
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  // --- search_workspace_content ---
+  server.registerTool(
+    "search_workspace_content",
+    {
+      title: "Search Workspace Content",
+      description: [
+        "Search across node names, SQL, column names, descriptions, and config values in a workspace using the lineage cache as the data source.",
+        "",
+        "Args:",
+        "  workspaceID: Workspace to search",
+        "  query: Text to search for (case-insensitive substring match)",
+        "  fields: (optional) Array of fields to search — any of: name, nodeType, sql, columnName, columnDataType, description, config. Defaults to all fields.",
+        "  nodeType: (optional) Filter results to a specific node type",
+        "  limit: (optional) Max results to return (1-200, default 50)",
+        "",
+        "Returns: Matching nodes with the fields that matched and content snippets.",
+        "Efficient for large workspaces — searches the in-memory cache instead of making per-node API calls.",
+        "",
+        "Requires a populated lineage cache — will fetch all workspace nodes with detail=true on first call (may take a moment for large workspaces). Subsequent calls use the cached data (default TTL: 30 min).",
+      ].join("\n"),
+      inputSchema: z.object({
+        workspaceID: z.string().describe("Workspace ID"),
+        query: z.string().min(1).describe("Search text (case-insensitive)"),
+        fields: z
+          .array(z.enum(["name", "nodeType", "sql", "columnName", "columnDataType", "description", "config"]))
+          .optional()
+          .describe("Fields to search — defaults to all if omitted"),
+        nodeType: z.string().optional().describe("Filter to a specific node type"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Max results (default 50)"),
+      }),
+      outputSchema: getToolOutputSchema("search_workspace_content"),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    async (params, extra) => {
+      try {
+        validatePathSegment(params.workspaceID, "workspaceID");
+
+        const progressReporter = createWorkflowProgressReporter(
+          extra as WorkflowProgressExtra | undefined
+        );
+
+        const cache = await buildLineageCache(client, params.workspaceID, {
+          reportProgress: progressReporter,
+        });
+
+        const result = searchWorkspaceContent(cache, {
+          query: params.query,
+          fields: params.fields as SearchField[] | undefined,
+          nodeType: params.nodeType,
+          limit: params.limit,
+        });
+
+        return buildJsonToolResponse("search_workspace_content", result);
       } catch (error) {
         return handleToolError(error);
       }

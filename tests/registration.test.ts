@@ -13,8 +13,8 @@ function createMockClient() {
   };
 }
 
-// 90 via registerTool + 3 via registerToolTask (start_run, run_and_wait, retry_and_wait)
-const REGISTER_TOOL_COUNT = 90;
+// 91 via registerTool + 3 via registerToolTask (start_run, run_and_wait, retry_and_wait)
+const REGISTER_TOOL_COUNT = 91;
 const TASK_TOOL_NAMES = ["start_run", "run_and_wait", "retry_and_wait"];
 
 describe("Tool Registration", () => {

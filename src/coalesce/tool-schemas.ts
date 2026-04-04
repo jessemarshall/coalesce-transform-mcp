@@ -342,6 +342,27 @@ const ImpactAnalysisOutputSchema = z.object({
   criticalPath: z.array(z.string()).optional(),
 }).passthrough();
 
+const WorkspaceSearchOutputSchema = z.object({
+  query: z.string().optional(),
+  fields: z.array(z.string()).optional(),
+  nodeTypeFilter: z.string().optional(),
+  totalMatches: z.number().optional(),
+  returnedCount: z.number().optional(),
+  truncated: z.boolean().optional(),
+  results: z.array(z.object({
+    nodeID: z.string().optional(),
+    nodeName: z.string().optional(),
+    nodeType: z.string().optional(),
+    matchedFields: z.array(z.string()).optional(),
+    matches: z.array(z.object({
+      field: z.string().optional(),
+      columnName: z.string().optional(),
+      snippet: z.string().optional(),
+    }).passthrough()).optional(),
+  }).passthrough()).optional(),
+  cacheAge: z.string().optional(),
+}).passthrough();
+
 const PropagateColumnChangeOutputSchema = z.object({
   sourceNodeID: z.string().optional(),
   sourceColumnID: z.string().optional(),
@@ -648,6 +669,8 @@ export function getToolOutputSchema(toolName: string) {
       return ColumnLineageOutputSchema;
     case "analyze_impact":
       return ImpactAnalysisOutputSchema;
+    case "search_workspace_content":
+      return WorkspaceSearchOutputSchema;
     case "propagate_column_change":
       return PropagateColumnChangeOutputSchema;
     case "personalize_skills":
