@@ -9,7 +9,6 @@ import {
   deleteWorkspaceSubgraph,
 } from "../coalesce/api/subgraphs.js";
 import {
-  PaginationParams,
   buildJsonToolResponse,
   handleToolError,
   getToolOutputSchema,
@@ -28,9 +27,10 @@ export function registerSubgraphTools(
     {
       title: "List Workspace Subgraphs",
       description:
-        "List all subgraphs in a Coalesce workspace. Use this to discover subgraph IDs.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - limit, startingFrom, orderBy, orderByDirection: Pagination\n\nReturns:\n  { data: Subgraph[], next?: string, total?: number }",
-      inputSchema: PaginationParams.extend({
+        "List all subgraphs in a Coalesce workspace. Use this to discover subgraph IDs. Discovers subgraphs by scanning sequential IDs.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - limit (number, optional): Maximum number of subgraphs to return\n\nReturns:\n  { data: Subgraph[] }",
+      inputSchema: z.object({
         workspaceID: z.string().describe("The workspace ID"),
+        limit: z.number().optional().describe("Maximum number of subgraphs to return"),
       }),
       outputSchema: getToolOutputSchema("list_workspace_subgraphs"),
       annotations: READ_ONLY_ANNOTATIONS,

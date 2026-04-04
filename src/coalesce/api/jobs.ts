@@ -1,25 +1,16 @@
-import type { CoalesceClient, QueryParams } from "../../client.js";
+import type { CoalesceClient } from "../../client.js";
 import { validatePathSegment } from "../types.js";
-
-export async function listWorkspaceJobs(
-  client: CoalesceClient,
-  params: { workspaceID: string } & QueryParams
-): Promise<unknown> {
-  const { workspaceID, ...query } = params;
-  return client.get(
-    `/api/v1/workspaces/${validatePathSegment(workspaceID, "workspaceID")}/jobs`,
-    query
-  );
-}
+import { scanResourcesByID } from "./scan.js";
 
 export async function listEnvironmentJobs(
   client: CoalesceClient,
-  params: { environmentID: string } & QueryParams
+  params: { environmentID: string; limit?: number | string }
 ): Promise<unknown> {
-  const { environmentID, ...query } = params;
-  return client.get(
-    `/api/v1/environments/${validatePathSegment(environmentID, "environmentID")}/jobs`,
-    query
+  const eid = validatePathSegment(params.environmentID, "environmentID");
+  return scanResourcesByID(
+    client,
+    `/api/v1/environments/${eid}/jobs`,
+    params.limit ? Number(params.limit) : undefined
   );
 }
 

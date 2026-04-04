@@ -20,79 +20,39 @@ describe("Job Tools", () => {
     expect(true).toBe(true);
   });
 
-  it("list-workspace-jobs calls GET /api/v1/workspaces/{workspaceID}/jobs", async () => {
+  it("list-environment-jobs scans sequential IDs and collects found jobs", async () => {
     const client = createMockClient();
-    client.get.mockResolvedValue({ data: [{ id: "job-1", name: "Nightly" }] });
-
-    const { listWorkspaceJobs } = await import("../../src/coalesce/api/jobs.js");
-    const result = await listWorkspaceJobs(client as any, { workspaceID: "ws-1" });
-
-    expect(client.get).toHaveBeenCalledWith("/api/v1/workspaces/ws-1/jobs", {});
-    expect(result).toEqual({ data: [{ id: "job-1", name: "Nightly" }] });
-  });
-
-  it("list-workspace-jobs passes pagination params", async () => {
-    const client = createMockClient();
-    client.get.mockResolvedValue({ data: [] });
-
-    const { listWorkspaceJobs } = await import("../../src/coalesce/api/jobs.js");
-    await listWorkspaceJobs(client as any, { workspaceID: "ws-1", limit: 5, orderBy: "name" });
-
-    expect(client.get).toHaveBeenCalledWith("/api/v1/workspaces/ws-1/jobs", {
-      limit: 5,
-      orderBy: "name",
+    // Job at ID 3 exists, all others 404
+    client.get.mockImplementation(async (path: string) => {
+      if (path === "/api/v1/environments/env-1/jobs/3") {
+        return { id: "3", name: "Nightly" };
+      }
+      throw new CoalesceApiError("Not found", 404);
     });
-  });
-
-  it("list-workspace-jobs rejects path traversal in workspaceID", async () => {
-    const client = createMockClient();
-
-    const { listWorkspaceJobs } = await import("../../src/coalesce/api/jobs.js");
-    await expect(
-      listWorkspaceJobs(client as any, { workspaceID: "../escape" })
-    ).rejects.toThrow("workspaceID");
-  });
-
-  it("list-workspace-jobs propagates CoalesceApiError", async () => {
-    const client = createMockClient();
-    client.get.mockRejectedValue(new CoalesceApiError("Forbidden", 403));
-
-    const { listWorkspaceJobs } = await import("../../src/coalesce/api/jobs.js");
-    await expect(
-      listWorkspaceJobs(client as any, { workspaceID: "ws-1" })
-    ).rejects.toThrow("Forbidden");
-  });
-
-  it("list-jobs calls GET /api/v1/environments/{environmentID}/jobs", async () => {
-    const client = createMockClient();
-    client.get.mockResolvedValue({ data: [{ id: "job-1", name: "Nightly" }] });
 
     const { listEnvironmentJobs } = await import("../../src/coalesce/api/jobs.js");
-    const result = await listEnvironmentJobs(client as any, { environmentID: "env-1" });
+    const result = await listEnvironmentJobs(client as any, { environmentID: "env-1" }) as { data: unknown[] };
 
-    expect(client.get).toHaveBeenCalledWith("/api/v1/environments/env-1/jobs", {});
-    expect(result).toEqual({ data: [{ id: "job-1", name: "Nightly" }] });
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toEqual({ id: "3", name: "Nightly" });
   });
 
-  it("list-jobs passes pagination params", async () => {
-    const client = createMockClient();
-    client.get.mockResolvedValue({ data: [] });
-
-    const { listEnvironmentJobs } = await import("../../src/coalesce/api/jobs.js");
-    await listEnvironmentJobs(client as any, { environmentID: "env-1", limit: 10, orderBy: "name" });
-
-    expect(client.get).toHaveBeenCalledWith("/api/v1/environments/env-1/jobs", {
-      limit: 10,
-      orderBy: "name",
-    });
-  });
-
-  it("list-jobs throws CoalesceApiError from data-access layer", async () => {
+  it("list-environment-jobs returns empty data when no jobs exist", async () => {
     const client = createMockClient();
     client.get.mockRejectedValue(new CoalesceApiError("Not found", 404));
 
     const { listEnvironmentJobs } = await import("../../src/coalesce/api/jobs.js");
-    await expect(listEnvironmentJobs(client as any, { environmentID: "bad" })).rejects.toThrow("Not found");
+    const result = await listEnvironmentJobs(client as any, { environmentID: "env-1" }) as { data: unknown[] };
+
+    expect(result.data).toHaveLength(0);
+  });
+
+  it("list-environment-jobs propagates non-404 errors", async () => {
+    const client = createMockClient();
+    client.get.mockRejectedValue(new CoalesceApiError("Forbidden", 403));
+
+    const { listEnvironmentJobs } = await import("../../src/coalesce/api/jobs.js");
+    await expect(listEnvironmentJobs(client as any, { environmentID: "env-1" })).rejects.toThrow("Forbidden");
   });
 
   it("get-job calls GET /api/v1/environments/{environmentID}/jobs/{jobID}", async () => {

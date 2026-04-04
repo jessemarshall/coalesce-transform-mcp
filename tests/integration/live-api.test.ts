@@ -192,13 +192,6 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
       }
     });
 
-    it("list_workspace_jobs", async () => {
-      const res = await callTool("list_workspace_jobs", {
-        workspaceID: WORKSPACE_ID,
-      });
-      assertToolSuccess(res, "list_workspace_jobs");
-    });
-
     it("list_runs", async () => {
       const res = await callTool("list_runs", { limit: 5 });
       assertToolSuccess(res, "list_runs");
@@ -471,6 +464,7 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
       const res = await callTool("select_pipeline_node_type", {
         workspaceID: WORKSPACE_ID,
         goal: "staging layer for raw data",
+        sourceCount: 1,
       });
       assertToolSuccess(res, "select_pipeline_node_type");
     });

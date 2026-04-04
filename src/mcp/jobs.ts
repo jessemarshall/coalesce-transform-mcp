@@ -2,7 +2,6 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
 import {
-  listWorkspaceJobs,
   listEnvironmentJobs,
   createWorkspaceJob,
   getEnvironmentJob,
@@ -10,7 +9,6 @@ import {
   deleteWorkspaceJob,
 } from "../coalesce/api/jobs.js";
 import {
-  PaginationParams,
   buildJsonToolResponse,
   handleToolError,
   getToolOutputSchema,
@@ -29,9 +27,10 @@ export function registerJobTools(
     {
       title: "List Environment Jobs",
       description:
-        "List all jobs in a Coalesce environment. Jobs define which nodes to run together.\n\nArgs:\n  - environmentID (string, required): The environment ID\n  - limit, startingFrom, orderBy, orderByDirection: Pagination\n\nReturns:\n  { data: Job[], next?: string, total?: number }",
-      inputSchema: PaginationParams.extend({
+        "List all jobs in a Coalesce environment. Jobs define which nodes to run together. Discovers jobs by scanning sequential IDs.\n\nArgs:\n  - environmentID (string, required): The environment ID\n  - limit (number, optional): Maximum number of jobs to return\n\nReturns:\n  { data: Job[] }",
+      inputSchema: z.object({
         environmentID: z.string().describe("The environment ID"),
+        limit: z.number().optional().describe("Maximum number of jobs to return"),
       }),
       outputSchema: getToolOutputSchema("list_environment_jobs"),
       annotations: READ_ONLY_ANNOTATIONS,
@@ -40,28 +39,6 @@ export function registerJobTools(
       try {
         const result = await listEnvironmentJobs(client, params);
         return buildJsonToolResponse("list_environment_jobs", result);
-      } catch (error) {
-        return handleToolError(error);
-      }
-    }
-  );
-
-  server.registerTool(
-    "list_workspace_jobs",
-    {
-      title: "List Workspace Jobs",
-      description:
-        "List all jobs in a Coalesce workspace.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - limit, startingFrom, orderBy, orderByDirection: Pagination\n\nReturns:\n  { data: Job[], next?: string, total?: number }",
-      inputSchema: PaginationParams.extend({
-        workspaceID: z.string().describe("The workspace ID"),
-      }),
-      outputSchema: getToolOutputSchema("list_workspace_jobs"),
-      annotations: READ_ONLY_ANNOTATIONS,
-    },
-    async (params) => {
-      try {
-        const result = await listWorkspaceJobs(client, params);
-        return buildJsonToolResponse("list_workspace_jobs", result);
       } catch (error) {
         return handleToolError(error);
       }

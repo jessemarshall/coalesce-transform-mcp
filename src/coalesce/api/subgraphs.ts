@@ -1,14 +1,16 @@
-import type { CoalesceClient, QueryParams } from "../../client.js";
+import type { CoalesceClient } from "../../client.js";
 import { validatePathSegment } from "../types.js";
+import { scanResourcesByID } from "./scan.js";
 
 export async function listWorkspaceSubgraphs(
   client: CoalesceClient,
-  params: { workspaceID: string } & QueryParams
+  params: { workspaceID: string; limit?: number | string }
 ): Promise<unknown> {
-  const { workspaceID, ...query } = params;
-  return client.get(
-    `/api/v1/workspaces/${validatePathSegment(workspaceID, "workspaceID")}/subgraphs`,
-    query
+  const wid = validatePathSegment(params.workspaceID, "workspaceID");
+  return scanResourcesByID(
+    client,
+    `/api/v1/workspaces/${wid}/subgraphs`,
+    params.limit ? Number(params.limit) : undefined
   );
 }
 
