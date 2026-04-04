@@ -248,7 +248,7 @@ export async function workshopInstruct(
   const session = loadSession(params.sessionID);
   if (!session) {
     throw new Error(
-      `Workshop session "${params.sessionID}" not found. Use pipeline-workshop-open to start a new session.`
+      `Workshop session "${params.sessionID}" not found. Use pipeline_workshop_open to start a new session.`
     );
   }
 
