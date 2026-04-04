@@ -16,6 +16,7 @@ import { registerWorkspaceTools } from "./mcp/workspaces.js";
 import { registerCacheTools } from "./mcp/cache.js";
 import { registerWorkshopTools } from "./mcp/workshop.js";
 import { registerLineageTools } from "./mcp/lineage.js";
+import { registerSkillTools } from "./mcp/skills.js";
 
 import { registerGetRunDetails } from "./workflows/get-run-details.js";
 import { registerGetEnvironmentOverview } from "./workflows/get-environment-overview.js";
@@ -31,12 +32,13 @@ import {
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json") as { version: string };
 
-// Cache snapshot tools fetch data and write to local disk only — safe in read-only mode.
-const CACHE_SNAPSHOT_TOOLS = new Set([
+// Tools that write to local disk only (not the Coalesce API) — safe in read-only mode.
+const LOCAL_ONLY_WRITE_TOOLS = new Set([
   "cache_workspace_nodes",
   "cache_environment_nodes",
   "cache_runs",
   "cache_org_users",
+  "personalize_skills",
 ]);
 
 export function isReadOnlyMode(): boolean {
@@ -48,7 +50,7 @@ function isWriteTool(
   metadata: { annotations?: { readOnlyHint?: boolean } }
 ): boolean {
   if (metadata.annotations?.readOnlyHint === true) return false;
-  if (CACHE_SNAPSHOT_TOOLS.has(name)) return false;
+  if (LOCAL_ONLY_WRITE_TOOLS.has(name)) return false;
   return true;
 }
 
@@ -128,6 +130,9 @@ Users and admin:
   list_org_users — user discovery
   list_git_accounts — git integration
 
+Customization:
+  personalize_skills — export bundled skill files to a local directory for customization
+
 TYPICAL WORKFLOWS:
 
 Explore a workspace: list_workspaces → list_workspace_nodes → get_workspace_node
@@ -160,6 +165,7 @@ export function registerServerSurface(server: McpServer, client: CoalesceClient)
   registerCacheTools(server, client);
   registerWorkshopTools(server, client);
   registerLineageTools(server, client);
+  registerSkillTools(server, client);
 
   registerGetRunDetails(server, client);
   registerGetEnvironmentOverview(server, client);
