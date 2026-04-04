@@ -333,6 +333,10 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 - `get_environment_overview` - Get environment details with full node list
 - `get_environment_health` - Get a comprehensive health dashboard: node counts by type, run statuses, failed runs in last 24h, stale nodes, dependency health, and overall health score. This walks all paginated environment runs before scoring, so it can take longer on busy environments.
 
+#### Skills
+
+- `personalize_skills` - Export bundled skill files to a local directory for customization; creates editable `coalesce_skills.{name}.md` and `user_skills.{name}.md` pairs (idempotent — never overwrites existing files)
+
 #### Lineage & Impact
 
 - `get_upstream_nodes` - Walk the full upstream dependency graph for a node and return every ancestor with depth level (no depth limit)
