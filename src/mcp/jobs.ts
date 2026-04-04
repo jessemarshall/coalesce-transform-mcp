@@ -2,7 +2,6 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
 import {
-  listWorkspaceJobs,
   listEnvironmentJobs,
   createWorkspaceJob,
   getEnvironmentJob,
@@ -30,16 +29,6 @@ export function registerJobTools(
     }),
     annotations: READ_ONLY_ANNOTATIONS,
   }, listEnvironmentJobs);
-
-  registerSimpleTool(server, client, "list_workspace_jobs", {
-    title: "List Workspace Jobs",
-    description:
-      "List all jobs in a Coalesce workspace.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - limit, startingFrom, orderBy, orderByDirection: Pagination\n\nReturns:\n  { data: Job[], next?: string, total?: number }",
-    inputSchema: PaginationParams.extend({
-      workspaceID: z.string().describe("The workspace ID"),
-    }),
-    annotations: READ_ONLY_ANNOTATIONS,
-  }, listWorkspaceJobs);
 
   registerSimpleTool(server, client, "create_workspace_job", {
     title: "Create Workspace Job",

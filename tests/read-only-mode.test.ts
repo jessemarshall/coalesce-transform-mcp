@@ -37,7 +37,6 @@ const READ_ONLY_TOOLS = [
   "analyze_workspace_patterns",
   "list_workspace_node_types",
   "list_environment_jobs",
-  "list_workspace_jobs",
   "get_environment_job",
   "list_workspace_subgraphs",
   "get_workspace_subgraph",
