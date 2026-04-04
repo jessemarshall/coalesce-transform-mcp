@@ -18,6 +18,14 @@ import {
   type WorkflowProgressReporter,
 } from "./progress.js";
 import { pollRunToCompletion } from "./poll-run.js";
+import {
+  POLL_INTERVAL_MIN_S,
+  POLL_INTERVAL_DEFAULT_S,
+  POLL_INTERVAL_MAX_S,
+  WORKFLOW_TIMEOUT_MIN_S,
+  WORKFLOW_TIMEOUT_DEFAULT_S,
+  WORKFLOW_TIMEOUT_MAX_S,
+} from "../constants.js";
 
 export async function runAndWait(
   client: CoalesceClient,
@@ -30,8 +38,10 @@ export async function runAndWait(
     reportProgress?: WorkflowProgressReporter;
   } = {}
 ): Promise<unknown> {
-  const pollIntervalMs = Math.max(5, Math.min(params.pollInterval ?? 10, 300)) * 1000;
-  const timeoutMs = Math.max(30, Math.min(params.timeout ?? 1800, 3600)) * 1000;
+  const pollIntervalMs =
+    Math.max(POLL_INTERVAL_MIN_S, Math.min(params.pollInterval ?? POLL_INTERVAL_DEFAULT_S, POLL_INTERVAL_MAX_S)) * 1000;
+  const timeoutMs =
+    Math.max(WORKFLOW_TIMEOUT_MIN_S, Math.min(params.timeout ?? WORKFLOW_TIMEOUT_DEFAULT_S, WORKFLOW_TIMEOUT_MAX_S)) * 1000;
   const startedAt = Date.now();
   const { signal, reportProgress } = options;
 

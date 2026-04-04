@@ -14,6 +14,7 @@ import {
   getToolOutputSchema,
 } from "../coalesce/types.js";
 import { isPlainObject } from "../utils.js";
+import { MS_PER_DAY } from "../constants.js";
 
 type NodeRecord = Record<string, unknown>;
 
@@ -202,7 +203,7 @@ function buildNodeRunStatuses(
 }
 
 function getFailedRunsLast24h(runs: RunRecord[]): FailedRunSummary[] {
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - MS_PER_DAY).toISOString();
   return runs
     .filter((run) => {
       if (run.runStatus !== "failed") return false;
@@ -222,7 +223,7 @@ function getStaleNodes(
   nodeRunStatuses: NodeRunStatus[],
   staleDays: number = 7
 ): StaleNode[] {
-  const cutoff = new Date(Date.now() - staleDays * 24 * 60 * 60 * 1000);
+  const cutoff = new Date(Date.now() - staleDays * MS_PER_DAY);
   const stale: StaleNode[] = [];
 
   for (let i = 0; i < nodes.length; i++) {
@@ -240,7 +241,7 @@ function getStaleNodes(
       const lastRunDate = new Date(status.lastRunTime);
       if (lastRunDate < cutoff) {
         const daysSince = Math.floor(
-          (Date.now() - lastRunDate.getTime()) / (24 * 60 * 60 * 1000)
+          (Date.now() - lastRunDate.getTime()) / MS_PER_DAY
         );
         stale.push({
           nodeID: getNodeID(node),

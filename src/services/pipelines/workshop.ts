@@ -3,12 +3,12 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSy
 import { join } from "node:path";
 import { z } from "zod";
 import type { CoalesceClient } from "../../client.js";
-import { isPlainObject } from "../../utils.js";
+import { isPlainObject, rethrowNonRecoverableApiError } from "../../utils.js";
 import { getCacheDir } from "../../cache-dir.js";
 import { listWorkspaceNodes } from "../../coalesce/api/nodes.js";
-import { CoalesceApiError } from "../../client.js";
 import { extractNodeArray } from "../shared/node-helpers.js";
 import { parseIntent, resolveIntentEntities } from "./intent.js";
+import { STALE_SESSION_MS } from "../../constants.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -160,8 +160,6 @@ export function deleteSession(sessionID: string): boolean {
 
 // ── Stale session cleanup ───────────────────────────────────────────────────
 
-const STALE_SESSION_MS = 24 * 60 * 60 * 1000; // 24 hours
-
 function cleanupStaleSessions(): void {
   const dir = getWorkshopDir();
   if (!existsSync(dir)) return;
@@ -219,9 +217,7 @@ export async function openWorkshop(
       }
     }
   } catch (error) {
-    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
-      throw error;
-    }
+    rethrowNonRecoverableApiError(error);
     const reason = error instanceof Error ? error.message : String(error);
     sessionWarnings.push(
       `Could not pre-load workspace nodes (${reason}). Entity resolution will require API calls per instruction.`
@@ -466,9 +462,7 @@ async function processInstruction(
         }
       }
     } catch (error) {
-      if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
-        throw error;
-      }
+      rethrowNonRecoverableApiError(error);
       const reason = error instanceof Error ? error.message : String(error);
       warnings.push(
         `Entity resolution API call failed (${reason}). Names could not be verified against the workspace.`

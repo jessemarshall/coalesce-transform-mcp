@@ -9,9 +9,7 @@ import { sanitizeResponse, validatePathSegment } from "../../coalesce/types.js";
 import type { NodeSummary } from "../workspace/analysis.js";
 import { isPlainObject } from "../../utils.js";
 import { CACHE_DIR_NAME } from "../../cache-dir.js";
-
-const DEFAULT_PAGE_SIZE = 250;
-const DETAIL_FETCH_TIMEOUT_MS = 120_000; // 2 minutes per page for detail=true fetches
+import { DEFAULT_PAGE_SIZE, DETAIL_FETCH_TIMEOUT_MS } from "../../constants.js";
 
 type PaginatedParams = {
   pageSize?: number;
