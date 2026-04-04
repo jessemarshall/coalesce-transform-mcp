@@ -1,10 +1,10 @@
-import { CoalesceApiError, type CoalesceClient } from "../../client.js";
+import { type CoalesceClient } from "../../client.js";
 import {
   getWorkspaceNode,
   listWorkspaceNodes,
 } from "../../coalesce/api/nodes.js";
 import { listWorkspaceNodeTypes } from "../workspace/mutations.js";
-import { isPlainObject, uniqueInOrder } from "../../utils.js";
+import { isPlainObject, uniqueInOrder, rethrowNonRecoverableOrServerError } from "../../utils.js";
 import { type WorkspaceNodeIndexEntry } from "../shared/node-helpers.js";
 import {
   type PipelineNodeTypeFamily,
@@ -503,9 +503,7 @@ export async function getWorkspaceNodeTypeInventory(
     };
   } catch (error) {
     // Auth and network errors indicate a broken session — let them propagate
-    if (error instanceof CoalesceApiError && [401, 403, 500, 503].includes(error.status)) {
-      throw error;
-    }
+    rethrowNonRecoverableOrServerError(error);
     const reason = error instanceof Error ? error.message : String(error);
     return {
       nodeTypes: [],

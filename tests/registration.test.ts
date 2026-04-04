@@ -54,6 +54,7 @@ describe("Tool Registration", () => {
     expect(toolNames).toContain("list_workspaces");
     expect(toolNames).toContain("get_workspace");
     expect(toolNames).toContain("list_environment_jobs");
+    expect(toolNames).toContain("list_environment_jobs");
     expect(toolNames).toContain("list_workspace_subgraphs");
     expect(toolNames).toContain("update_environment");
     expect(toolNames).toContain("get_environment_job");
