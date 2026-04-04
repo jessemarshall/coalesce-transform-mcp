@@ -8,7 +8,6 @@ export default defineConfig({
       "**/dist/**",
       "**/.worktrees/**",
       "**/.claude/**",
-      "**/intent-simulation.test.ts",
     ],
   },
 });

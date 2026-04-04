@@ -1,6 +1,6 @@
 import { CoalesceApiError, type CoalesceClient } from "../../client.js";
 import { getWorkspaceNode, listWorkspaceNodes } from "../../coalesce/api/nodes.js";
-import { isPlainObject, uniqueInOrder } from "../../utils.js";
+import { isPlainObject, uniqueInOrder, rethrowNonRecoverableApiError } from "../../utils.js";
 import {
   normalizeSqlIdentifier,
   getColumnNamesFromNode,
@@ -766,9 +766,7 @@ export async function buildPipelinePlanFromIntent(
               predecessorNodesByPlanID.set(entity.resolvedNodeID, node);
             }
           } catch (error) {
-            if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
-              throw error;
-            }
+            rethrowNonRecoverableApiError(error);
             const reason = error instanceof Error ? error.message : String(error);
             warnings.push(
               `Could not fetch predecessor node "${entity.resolvedNodeName}" (${entity.resolvedNodeID}) — ${reason}. ` +

@@ -7,12 +7,11 @@ import { validatePathSegment } from "../../coalesce/types.js";
 import { isPlainObject } from "../../utils.js";
 import { CACHE_DIR_NAME } from "../../cache-dir.js";
 import type { WorkflowProgressReporter } from "../../workflows/progress.js";
+import { DEFAULT_PAGE_SIZE, DETAIL_FETCH_TIMEOUT_MS } from "../../constants.js";
 
-const DEFAULT_PAGE_SIZE = 250;
 const DEFAULT_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const MAX_CACHE_ENTRIES = 50;
 const PROGRESS_INTERVAL = 500;
-const DETAIL_FETCH_TIMEOUT_MS = 120_000; // 2 minutes per page for detail=true fetches
 
 export type LineageNode = {
   id: string;

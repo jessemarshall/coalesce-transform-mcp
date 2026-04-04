@@ -1,7 +1,6 @@
 import type { CoalesceClient } from "../../client.js";
-import { isPlainObject } from "../../utils.js";
+import { isPlainObject, rethrowNonRecoverableApiError } from "../../utils.js";
 import { listWorkspaceNodes, getWorkspaceNode } from "../../coalesce/api/nodes.js";
-import { CoalesceApiError } from "../../client.js";
 import { extractNodeArray, isPassthroughTransform } from "../shared/node-helpers.js";
 import {
   getNodeColumnArray,
@@ -185,9 +184,7 @@ export async function reviewPipeline(
           sourceMapping: sm,
         });
       } catch (error) {
-        if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
-          throw error;
-        }
+        rethrowNonRecoverableApiError(error);
         fetchFailureCount += 1;
         warnings.push(
           `Could not fetch node ${nodeID}: ${error instanceof Error ? error.message : String(error)}`
@@ -198,9 +195,7 @@ export async function reviewPipeline(
     const batchResults = await Promise.allSettled(batchPromises);
     for (const result of batchResults) {
       if (result.status === "rejected") {
-        if (result.reason instanceof CoalesceApiError && [401, 403, 503].includes(result.reason.status)) {
-          throw result.reason;
-        }
+        rethrowNonRecoverableApiError(result.reason);
       }
     }
   }

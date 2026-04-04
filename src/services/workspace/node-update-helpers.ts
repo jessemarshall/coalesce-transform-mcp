@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { CoalesceApiError, type CoalesceClient } from "../../client.js";
+import { type CoalesceClient } from "../../client.js";
 import { completeNodeConfiguration, type ConfigCompletionResult } from "../config/intelligent.js";
-import { isPlainObject } from "../../utils.js";
+import { isPlainObject, rethrowNonRecoverableApiError } from "../../utils.js";
 import { selectPipelineNodeType } from "../pipelines/node-type-selection.js";
 import { detectSpecializedPatternPenalty } from "../pipelines/node-type-intent.js";
 import {
@@ -21,9 +21,7 @@ export async function tryCompleteNodeConfiguration(
     const configCompletion = await completeNodeConfiguration(client, params);
     return { configCompletion };
   } catch (error) {
-    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
-      throw error;
-    }
+    rethrowNonRecoverableApiError(error);
     const reason = error instanceof Error ? error.message : String(error);
     return { configCompletionSkipped: `Config completion failed (${reason}) — ${CONFIG_COMPLETION_SKIP_MSG}` };
   }
@@ -135,9 +133,7 @@ export async function validateNodeTypeChoice(
     return validation;
   } catch (error) {
     // Auth and network errors indicate a broken session — let them propagate
-    if (error instanceof CoalesceApiError && [401, 403, 503].includes(error.status)) {
-      throw error;
-    }
+    rethrowNonRecoverableApiError(error);
     // Re-throw hard block errors — exclusion and specialized pattern blocks
     if (error instanceof Error && (
       error.message.includes("is excluded") ||
