@@ -47,7 +47,7 @@ const RESOURCES = {
 } as const;
 
 // Map URIs to file paths
-const RESOURCE_FILES: Record<string, string> = {
+export const RESOURCE_FILES: Record<string, string> = {
   [RESOURCES.OVERVIEW]: "context/overview.md",
   [RESOURCES.SQL_PLATFORM_SELECTION]: "context/sql-platform-selection.md",
   [RESOURCES.SQL_SNOWFLAKE]: "context/sql-snowflake.md",
@@ -225,7 +225,7 @@ const RESOURCE_METADATA: Record<
   },
 };
 
-const OVERRIDE_MARKER = "<!-- OVERRIDE -->";
+export const OVERRIDE_MARKER = "<!-- OVERRIDE -->";
 const STUB_MARKER = "<!-- STUB -->";
 
 let skillsInitialized = false;
@@ -238,7 +238,7 @@ export function resetSkillsState(): void {
 /**
  * Extract the resource name from a relative path like "context/overview.md" → "overview"
  */
-function extractResourceName(relativePath: string): string {
+export function extractResourceName(relativePath: string): string {
   return basename(relativePath, ".md");
 }
 
@@ -253,7 +253,7 @@ function readBundledContent(relativePath: string): string {
  * Seed the skills directory with default coalesce_skills.* and user_skills.* files.
  * Idempotent — never overwrites existing files.
  */
-function initializeSkillsDir(skillsDir: string): void {
+export function initializeSkillsDir(skillsDir: string): void {
   try {
     mkdirSync(skillsDir, { recursive: true });
 
