@@ -120,6 +120,7 @@ Lineage:
   get_upstream_nodes, get_downstream_nodes — graph traversal
   analyze_impact — downstream impact counts for a node or column change
   propagate_column_change — apply column changes downstream (destructive, confirm first)
+  search_workspace_content — search across node SQL, columns, descriptions, config using the lineage cache
   NOTE: First lineage call per workspace is slow (builds full cache).
 
 Caching (for large datasets):

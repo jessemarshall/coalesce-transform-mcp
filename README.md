@@ -344,6 +344,7 @@ Custom logic built on top of the API: pipeline planning, config completion, join
 - `get_column_lineage` - Trace a column through the entire pipeline upstream and downstream via column-level references
 - `analyze_impact` - Analyze downstream impact of changing a node or specific column — returns impacted counts, grouped by depth, and critical path
 - `propagate_column_change` - Update all downstream columns after a column rename or data type change ⚠️
+- `search_workspace_content` - Search across node SQL, column names, descriptions, and config values using the lineage cache as a searchable index
 
 ## Snowflake Exploration via Cortex Code
 
