@@ -493,11 +493,11 @@ const WorkshopCloseOutputSchema = z.object({
 }).passthrough();
 
 const PersonalizeSkillsOutputSchema = z.object({
-  directory: z.string().optional(),
-  created: z.array(z.string()).optional(),
-  alreadyExisted: z.array(z.string()).optional(),
-  totalSkills: z.number().optional(),
-  configHint: z.string().nullable().optional(),
+  directory: z.string(),
+  created: z.array(z.string()),
+  alreadyExisted: z.array(z.string()),
+  totalSkills: z.number(),
+  configHint: z.string().nullable(),
 }).passthrough();
 
 const LIST_TOOL_NAMES = new Set([

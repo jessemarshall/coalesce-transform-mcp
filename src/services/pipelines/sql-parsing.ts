@@ -559,7 +559,6 @@ export function extractCtes(sql: string): ParsedCte[] {
     const rawName = stripIdentifierQuotes(headerMatch[1]!);
     const name = rawName.toUpperCase();
     const bodyStart = cursor + headerMatch[0].length;
-    const body = extractParenBody(trimmed, bodyStart);
 
     const closeIdx = findClosingParen(trimmed, bodyStart);
     if (closeIdx >= 0) {
@@ -931,9 +930,6 @@ export function buildCtePlan(
   };
 }
 
-/**
- * Extract information about the final SELECT after all CTEs.
- */
 /**
  * Escape a string for use in a RegExp constructor, ensuring special characters
  * like `$` in CTE names are treated as literals.

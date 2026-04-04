@@ -46,7 +46,8 @@ export function findMatchingBaseColumn(
   node: Record<string, unknown>,
   selectItem: PlannedSelectItem
 ): Record<string, unknown> | null {
-  const normalizedTargetName = normalizeSqlIdentifier(selectItem.sourceColumnName ?? "");
+  if (!selectItem.sourceColumnName) return null;
+  const normalizedTargetName = normalizeSqlIdentifier(selectItem.sourceColumnName);
   for (const column of getNodeColumnArray(node)) {
     if (
       typeof column.name !== "string" ||
