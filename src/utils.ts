@@ -52,3 +52,11 @@ export function uniqueInOrder<T>(values: T[]): T[] {
 
   return unique;
 }
+
+/**
+ * Replaces characters unsafe for filenames with underscores.
+ * Used to sanitize workspace IDs and similar values for use in file paths.
+ */
+export function sanitizeForFilename(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_\-]/g, "_");
+}

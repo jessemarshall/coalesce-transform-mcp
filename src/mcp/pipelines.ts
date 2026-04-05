@@ -31,7 +31,7 @@ import {
   WRITE_ANNOTATIONS,
   validatePathSegment,
 } from "../coalesce/types.js";
-import { isPlainObject } from "../utils.js";
+import { isPlainObject, sanitizeForFilename } from "../utils.js";
 import {
   buildPipelinePlanFromIntent,
 } from "../services/pipelines/intent.js";
@@ -131,7 +131,7 @@ function findCachedPlanSummary(
   const dir = getPlanSummaryDir();
   if (!existsSync(dir)) return null;
 
-  const safeID = workspaceID.replace(/[^a-zA-Z0-9_\-]/g, "_");
+  const safeID = sanitizeForFilename(workspaceID);
   const prefix = `plan-${safeID}-`;
   const files = readdirSync(dir)
     .filter((f) => f.startsWith(prefix) && f.endsWith(".md"))
@@ -152,8 +152,7 @@ function writePlanSummary(plan: unknown, fingerprint: string): string | null {
   if (!isPlainObject(plan)) return null;
 
   const rawWorkspaceID = typeof plan.workspaceID === "string" ? plan.workspaceID : "unknown";
-  // Sanitize workspaceID for safe use in filenames
-  const workspaceID = rawWorkspaceID.replace(/[^a-zA-Z0-9_\-]/g, "_");
+  const workspaceID = sanitizeForFilename(rawWorkspaceID);
   const selection = isPlainObject(plan.nodeTypeSelection) ? plan.nodeTypeSelection : null;
   const consideredNodeTypes = Array.isArray(selection?.consideredNodeTypes)
     ? selection.consideredNodeTypes.filter(isPlainObject)
@@ -227,7 +226,7 @@ function writePlanSummary(plan: unknown, fingerprint: string): string | null {
 
 function cleanupOldPlanFiles(dir: string, workspaceID: string, maxToKeep: number): void {
   try {
-    const safeID = workspaceID.replace(/[^a-zA-Z0-9_\-]/g, "_");
+    const safeID = sanitizeForFilename(workspaceID);
     const prefix = `plan-${safeID}-`;
     const files = readdirSync(dir)
       .filter((f) => f.startsWith(prefix) && f.endsWith(".md"))
