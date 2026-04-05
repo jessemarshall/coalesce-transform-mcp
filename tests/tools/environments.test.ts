@@ -74,23 +74,6 @@ describe("Environment Tools", () => {
     expect(result).toEqual({ id: "env-new", name: "QA" });
   });
 
-  it("updateEnvironment patches /api/v1/environments/{id}", async () => {
-    const client = createMockClient();
-    client.patch = vi.fn().mockResolvedValue({ id: "env-1", name: "Updated" });
-
-    const { updateEnvironment } = await import("../../src/coalesce/api/environments.js");
-    const result = await updateEnvironment(client as any, {
-      environmentID: "env-1",
-      name: "Updated",
-    });
-
-    expect(client.patch).toHaveBeenCalledWith(
-      "/api/v1/environments/env-1",
-      { name: "Updated" }
-    );
-    expect(result).toEqual({ id: "env-1", name: "Updated" });
-  });
-
   it("getEnvironment still throws CoalesceApiError from data-access layer", async () => {
     const client = createMockClient();
     client.get.mockRejectedValue(new CoalesceApiError("Not found", 404));

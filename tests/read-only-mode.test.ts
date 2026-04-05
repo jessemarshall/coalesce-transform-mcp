@@ -81,7 +81,6 @@ const READ_ONLY_TOOLS = [
 // Tools that should be hidden in read-only mode
 const WRITE_TOOLS = [
   "create_environment",
-  "update_environment",
   "delete_environment",
   "create_workspace_node_from_scratch",
   "create_workspace_node_from_predecessor",

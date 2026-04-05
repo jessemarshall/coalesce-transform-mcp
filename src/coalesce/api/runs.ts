@@ -42,7 +42,11 @@ export async function runStatus(
   client: CoalesceClient,
   params: { runCounter: number }
 ): Promise<unknown> {
-  return client.get("/scheduler/runStatus", { runCounter: params.runCounter });
+  const { runCounter } = params;
+  if (!Number.isFinite(runCounter) || !Number.isInteger(runCounter) || runCounter < 0) {
+    throw new Error(`runCounter must be a non-negative integer, got: ${runCounter}`);
+  }
+  return client.get("/scheduler/runStatus", { runCounter });
 }
 
 export async function retryRun(

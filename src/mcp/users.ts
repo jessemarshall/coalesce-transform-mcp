@@ -79,8 +79,8 @@ export function registerUserTools(
     }),
     annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
   }, (client, params) => {
-    const { userID, projectID, ...body } = params;
-    return setProjectRole(client, { userID, projectID, body });
+    const { userID, projectID, role } = params;
+    return setProjectRole(client, { userID, projectID, body: { projectRole: role } });
   });
 
   registerDestructiveTool(server, client, "delete_project_role", {
@@ -110,8 +110,8 @@ export function registerUserTools(
     }),
     annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
   }, (client, params) => {
-    const { userID, environmentID, ...body } = params;
-    return setEnvRole(client, { userID, environmentID, body });
+    const { userID, environmentID, role } = params;
+    return setEnvRole(client, { userID, environmentID, body: { environmentRole: role } });
   });
 
   registerDestructiveTool(server, client, "delete_env_role", {
