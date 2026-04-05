@@ -46,13 +46,14 @@ export function registerGitAccountTools(
   registerSimpleTool(server, client, "create_git_account", {
     title: "Create Git Account",
     description:
-      "Create a new Git account in Coalesce.\n\nArgs:\n  - name (string, required): Account name\n  - gitAuthorName (string, required): Author name for git commits\n  - gitAuthorEmail (string, required): Email address for git commits\n  - provider (enum, optional): 'github' | 'gitlab' | 'bitbucket' | 'azureDevOps'\n  - accessToken (string, optional): Personal access token for the git provider\n  - accountOwner (string, optional): User ID of the account owner\n\nReturns:\n  Created Git account with assigned ID.",
+      "Create a new Git account in Coalesce.\n\nArgs:\n  - name (string, required): Account name\n  - gitUsername (string, required): Git username for authentication\n  - gitAuthorName (string, required): Author name for git commits\n  - gitAuthorEmail (string, required): Email address for git commits\n  - gitToken (string, required): Personal access token for the git provider\n  - provider (enum, optional): 'github' | 'gitlab' | 'bitbucket' | 'azureDevOps'\n  - accountOwner (string, optional): User ID of the account owner\n\nReturns:\n  Created Git account with assigned ID.",
     inputSchema: z.object({
       name: z.string().describe("Name for the git account"),
+      gitUsername: z.string().describe("Git username for authentication"),
       gitAuthorName: z.string().describe("Author name used for git commits"),
       gitAuthorEmail: z.string().describe("Email address used for git commits"),
+      gitToken: z.string().describe("Personal access token or authentication token for the git provider"),
       provider: z.enum(["github", "gitlab", "bitbucket", "azureDevOps"]).optional().describe("Git provider type"),
-      accessToken: z.string().optional().describe("Personal access token for the git provider"),
       accountOwner: accountOwnerParam,
     }),
     annotations: WRITE_ANNOTATIONS,

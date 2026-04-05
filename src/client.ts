@@ -138,7 +138,7 @@ async function handleResponse(response: Response): Promise<unknown> {
         throw new CoalesceApiError(
           "Coalesce API rate limit exceeded",
           429,
-          { ...(retryAfterMs !== undefined ? { retryAfterMs } : {}), ...( detail && typeof detail === "object" ? detail : {}) }
+          { ...(detail && typeof detail === "object" ? detail : {}), ...(retryAfterMs !== undefined ? { retryAfterMs } : {}) }
         );
       }
       default:
