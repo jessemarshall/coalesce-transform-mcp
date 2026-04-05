@@ -5,14 +5,12 @@ import {
   listEnvironments,
   getEnvironment,
   createEnvironment,
-  updateEnvironment,
   deleteEnvironment,
 } from "../coalesce/api/environments.js";
 import {
   PaginationParams,
   READ_ONLY_ANNOTATIONS,
   WRITE_ANNOTATIONS,
-  IDEMPOTENT_WRITE_ANNOTATIONS,
   DESTRUCTIVE_ANNOTATIONS,
 } from "../coalesce/types.js";
 import { registerSimpleTool, registerDestructiveTool } from "./tool-helpers.js";
@@ -65,28 +63,6 @@ export function registerEnvironmentTools(
     const { projectID, ...rest } = params;
     return createEnvironment(client, { project: projectID, oauthEnabled: false, ...rest });
   });
-
-  registerSimpleTool(server, client, "update_environment", {
-    title: "Update Environment",
-    description:
-      "Update an existing Coalesce environment. Partial update — only provided fields are changed.\n\nArgs:\n  - environmentID (string, required): The environment ID to update\n  - name (string, optional): Updated environment name\n  - oauthEnabled (boolean, optional): Toggle OAuth\n  - connectionAccount (string, optional): Updated connection account\n  - runTimeParameters (object, optional): Updated runtime parameters\n  - tagColors (object, optional): Updated UI tag colors\n\nReturns:\n  Updated environment object.",
-    inputSchema: z.object({
-      environmentID: z.string().describe("The environment ID to update"),
-      name: z.string().optional().describe("Updated name for the environment"),
-      oauthEnabled: z.boolean().optional().describe("Whether OAuth is enabled"),
-      devEnv: z.boolean().optional().describe("Whether this is a dev environment"),
-      connectionAccount: z.string().optional().describe("Connection account identifier"),
-      runTimeParameters: z.record(z.unknown()).optional().describe("Runtime parameters"),
-      tagColors: z
-        .object({
-          backgroundColor: z.string().optional(),
-          textColor: z.string().optional(),
-        })
-        .optional()
-        .describe("Tag colors for the environment"),
-    }),
-    annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
-  }, updateEnvironment);
 
   registerDestructiveTool(server, client, "delete_environment", {
     title: "Delete Environment",

@@ -62,3 +62,4 @@ export async function deleteEnvRole(
   const { userID, environmentID } = params;
   return client.delete(`/api/v2/userRoles/${validatePathSegment(userID, "userID")}/environments/${validatePathSegment(environmentID, "environmentID")}`);
 }
+

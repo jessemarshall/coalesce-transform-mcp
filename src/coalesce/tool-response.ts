@@ -57,6 +57,10 @@ function getAutoCacheMaxBytes(): number {
   return parsed;
 }
 
+/** Maximum auto-cache files to keep regardless of timestamp — prevents unbounded growth if
+ *  timestamp-based cleanup keeps failing (e.g. persistent permission errors). */
+const AUTO_CACHE_MAX_FILES = 200;
+
 function cleanupStaleAutoCacheFiles(autoCacheDir: string): void {
   try {
     const sessionTimestamp = SESSION_START_TIME.toISOString().replace(/[:.]/g, "-");
@@ -64,6 +68,7 @@ function cleanupStaleAutoCacheFiles(autoCacheDir: string): void {
       .filter((f) => f.endsWith(".json"))
       .sort();
 
+    // Phase 1: delete files from previous sessions
     for (const file of files) {
       // Filenames are: {ISO_timestamp}-{tool-name}-{uuid}.json
       // Compare the timestamp prefix against session start
@@ -73,6 +78,21 @@ function cleanupStaleAutoCacheFiles(autoCacheDir: string): void {
         } catch (error) {
           const reason = error instanceof Error ? error.message : String(error);
           process.stderr.write(`[auto-cache] Failed to delete stale file ${file}: ${reason}\n`);
+        }
+      }
+    }
+
+    // Phase 2: hard cap — if the directory could still exceed the limit
+    // (original count was high enough), re-read and evict oldest beyond the cap.
+    if (files.length > AUTO_CACHE_MAX_FILES) {
+      const currentFiles = readdirSync(autoCacheDir)
+        .filter((f) => f.endsWith(".json"))
+        .sort();
+      for (const file of currentFiles.slice(0, currentFiles.length - AUTO_CACHE_MAX_FILES)) {
+        try {
+          unlinkSync(join(autoCacheDir, file));
+        } catch {
+          // Best-effort eviction — already logged stale failures above
         }
       }
     }

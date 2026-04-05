@@ -199,7 +199,6 @@ Coalesce Platform Tools: manage workspaces, environments, projects, runs, and ot
 - `list_environments` - List all available environments
 - `get_environment` - Get details of a specific environment
 - `create_environment` - Create a new environment within a project
-- `update_environment` - Update an existing environment
 - `delete_environment` - Delete an environment ⚠️
 
 #### Workspaces

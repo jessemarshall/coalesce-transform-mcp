@@ -236,8 +236,12 @@ function cleanupOldPlanFiles(dir: string, workspaceID: string, maxToKeep: number
     for (const file of files.slice(maxToKeep)) {
       try {
         unlinkSync(join(dir, file));
-      } catch {
-        // Ignore ENOENT — another process may have already deleted this file
+      } catch (err: unknown) {
+        // Ignore ENOENT — another process may have already deleted this file.
+        // Log anything else so permission/disk errors don't go unnoticed.
+        if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") continue;
+        const reason = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`[coalesce-transform-mcp] plan file delete failed for ${file}: ${reason}\n`);
       }
     }
   } catch (error) {

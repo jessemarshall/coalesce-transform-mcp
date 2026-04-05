@@ -18,6 +18,12 @@ export async function scanResourcesByID(
   basePath: string,
   limit?: number
 ): Promise<{ data: unknown[] }> {
+  if (!basePath || typeof basePath !== "string" || !/^\/[a-zA-Z0-9/._-]+$/.test(basePath)) {
+    throw new Error(`Invalid basePath for resource scan: "${basePath}". Must be an absolute API path with safe characters.`);
+  }
+  if (limit !== undefined && (!Number.isFinite(limit) || !Number.isInteger(limit) || limit < 1)) {
+    throw new Error(`Invalid scan limit: ${limit}. Must be a positive integer.`);
+  }
   const found: unknown[] = [];
   let batchStart = 1;
 

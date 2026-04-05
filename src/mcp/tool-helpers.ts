@@ -24,6 +24,12 @@ type ToolDef<S extends z.ZodType> = {
   sanitize?: boolean;
 };
 
+// The MCP SDK's ToolCallback type triggers deep TypeScript recursion when combined
+// with Zod generics.  This single cast helper isolates the type unsafety so the
+// rest of the file stays fully typed.  Track: https://github.com/modelcontextprotocol/typescript-sdk/issues — remove when SDK exports a generic-friendly callback type.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ToolCallback = any;
+
 /**
  * Register a simple passthrough tool: calls an API function with (client, params)
  * and wraps the result in buildJsonToolResponse / handleToolError.
@@ -44,15 +50,14 @@ export function registerSimpleTool<S extends z.ZodType>(
       outputSchema: getToolOutputSchema(name),
       annotations: def.annotations,
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK ToolCallback type causes deep recursion with Zod generics
-    (async (params: any) => {
+    (async (params: z.infer<S>) => {
       try {
         const result = await apiFunc(client, params);
         return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result);
       } catch (error) {
         return handleToolError(error);
       }
-    }) as any
+    }) as ToolCallback
   );
 }
 
@@ -76,15 +81,14 @@ export function registerLocalTool<S extends z.ZodType>(
       outputSchema: getToolOutputSchema(name),
       annotations: def.annotations,
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK ToolCallback type causes deep recursion with Zod generics
-    (async (params: any) => {
+    (async (params: z.infer<S>) => {
       try {
         const result = await handler(params);
         return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result);
       } catch (error) {
         return handleToolError(error);
       }
-    }) as any
+    }) as ToolCallback
   );
 }
 
@@ -107,8 +111,7 @@ export function registerDestructiveTool<S extends z.ZodType>(
       outputSchema: getToolOutputSchema(name),
       annotations: def.annotations,
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK ToolCallback type causes deep recursion with Zod generics
-    (async (params: any) => {
+    (async (params: z.infer<S>) => {
       try {
         const approvalResponse = await requireDestructiveConfirmation(
           server,
@@ -123,6 +126,6 @@ export function registerDestructiveTool<S extends z.ZodType>(
       } catch (error) {
         return handleToolError(error);
       }
-    }) as any
+    }) as ToolCallback
   );
 }

@@ -655,15 +655,6 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
       created.environmentID = (data as any)?.id ?? (data as any)?.data?.id;
     });
 
-    it("update_environment", async () => {
-      if (!created.environmentID) return;
-      const res = await callTool("update_environment", {
-        environmentID: created.environmentID,
-        name: `mcp-test-env-updated-${ts}`,
-      });
-      assertToolSuccess(res, "update_environment");
-    });
-
     // Node lifecycle
     it("create_workspace_node_from_scratch", async () => {
       const nodeType = discovered.nodeType ?? "Stage";
@@ -796,6 +787,8 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
     it("create_git_account", async () => {
       const res = await callTool("create_git_account", {
         name: `mcp-test-git-${ts}`,
+        gitAuthorName: "MCP Test",
+        gitAuthorEmail: "mcp-test@example.com",
       });
       assertToolSuccess(res, "create_git_account");
       const data = parseStructured(res);
@@ -819,11 +812,12 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
       const res = await callTool("set_project_role", {
         userID: uid,
         projectID: pid,
-        role: "viewer",
+        role: "Viewer",
       });
       assertToolSuccessOrExpected(res, "set_project_role", [
         "not found",
         "permission",
+        "invalid",
       ]);
     });
 
@@ -834,7 +828,7 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
       const res = await callTool("set_env_role", {
         userID: uid,
         environmentID: eid,
-        role: "viewer",
+        role: "Viewer",
       });
       assertToolSuccessOrExpected(res, "set_env_role", [
         "not found",

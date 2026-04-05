@@ -10,10 +10,14 @@ export const JsonToolErrorSchema = z.object({
 
 export type JsonToolError = z.infer<typeof JsonToolErrorSchema>;
 
+// coerceListPaginationFields() normalises the Coalesce API's polymorphic
+// pagination before responses reach the schema — `next` (number|string|null)
+// becomes string-only, and null `next`/`total` are stripped.  The schema
+// therefore only declares the post-coercion shapes.
 const ListToolOutputSchema = z.object({
   data: z.array(z.unknown()).optional(),
-  next: z.union([z.string(), z.number(), z.null()]).optional(),
-  total: z.union([z.number(), z.null()]).optional(),
+  next: z.string().optional(),
+  total: z.number().optional(),
 }).passthrough();
 
 const EntityToolOutputSchema = z.object({
@@ -538,7 +542,6 @@ const LIST_TOOL_NAMES = new Set([
 const ENTITY_TOOL_NAMES = new Set([
   "get_environment",
   "create_environment",
-  "update_environment",
   "delete_environment",
   "get_project",
   "create_project",
