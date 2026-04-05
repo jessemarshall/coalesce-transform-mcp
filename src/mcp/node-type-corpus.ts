@@ -3,7 +3,6 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
 import {
   loadNodeTypeCorpusSnapshot,
-  type NodeTypeCorpusSupportStatus,
 } from "../services/corpus/loader.js";
 import {
   summarizeNodeTypeCorpus,
@@ -29,6 +28,7 @@ import {
   READ_ONLY_LOCAL_ANNOTATIONS,
 } from "../coalesce/types.js";
 import { isPlainObject } from "../utils.js";
+import { registerLocalTool } from "./tool-helpers.js";
 
 function sanitizeVariantForResponse(variant: ReturnType<typeof getNodeTypeCorpusVariant>) {
   if (!variant.nodeDefinition) {
@@ -56,78 +56,59 @@ export function registerNodeTypeCorpusTools(
   server: McpServer,
   client: CoalesceClient
 ): void {
-  server.registerTool(
-    "search_node_type_variants",
-    {
-      title: "Search Node Type Variants",
-      description: "Search the generated node-type corpus snapshot by normalized family, package, primitive, or support status. This tool queries the committed snapshot and does not require access to the original external node source repo at runtime.",
-      inputSchema: z.object({
-        normalizedFamily: z
-          .string()
-          .optional()
-          .describe("Case-insensitive exact match against the normalized family name."),
-        packageName: z
-          .string()
-          .optional()
-          .describe("Case-insensitive exact match against one of the package names that carries the variant."),
-        primitive: z
-          .string()
-          .optional()
-          .describe("Case-insensitive match against a primitive used in the node definition, such as tabular or materializationSelector."),
-        supportStatus: z
-          .enum(["supported", "partial"])
-          .or(z.literal("parse_error"))
-          .optional()
-          .describe("Filter by current MCP support classification."),
-        limit: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe("Maximum number of matches to return. Defaults to 25, max 200."),
-      }),
-      outputSchema: getToolOutputSchema("search_node_type_variants"),
-      annotations: READ_ONLY_LOCAL_ANNOTATIONS,
-    },
-    async (params) => {
-      try {
-        const snapshot = loadNodeTypeCorpusSnapshot();
-        const result = {
-          summary: summarizeNodeTypeCorpus(snapshot),
-          ...searchNodeTypeCorpusVariants(snapshot, params),
-        };
-        return buildJsonToolResponse("search_node_type_variants", result);
-      } catch (error) {
-        return handleToolError(error);
-      }
-    }
-  );
+  registerLocalTool(server, "search_node_type_variants", {
+    title: "Search Node Type Variants",
+    description: "Search the generated node-type corpus snapshot by normalized family, package, primitive, or support status. This tool queries the committed snapshot and does not require access to the original external node source repo at runtime.",
+    inputSchema: z.object({
+      normalizedFamily: z
+        .string()
+        .optional()
+        .describe("Case-insensitive exact match against the normalized family name."),
+      packageName: z
+        .string()
+        .optional()
+        .describe("Case-insensitive exact match against one of the package names that carries the variant."),
+      primitive: z
+        .string()
+        .optional()
+        .describe("Case-insensitive match against a primitive used in the node definition, such as tabular or materializationSelector."),
+      supportStatus: z
+        .enum(["supported", "partial"])
+        .or(z.literal("parse_error"))
+        .optional()
+        .describe("Filter by current MCP support classification."),
+      limit: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Maximum number of matches to return. Defaults to 25, max 200."),
+    }),
+    annotations: READ_ONLY_LOCAL_ANNOTATIONS,
+  }, (params) => {
+    const snapshot = loadNodeTypeCorpusSnapshot();
+    return {
+      summary: summarizeNodeTypeCorpus(snapshot),
+      ...searchNodeTypeCorpusVariants(snapshot, params),
+    };
+  });
 
-  server.registerTool(
-    "get_node_type_variant",
-    {
-      title: "Get Node Type Variant",
-      description: "Get one node-type corpus variant from the committed snapshot by variantKey. Use search_node_type_variants first when you need discovery.",
-      inputSchema: z.object({
-        variantKey: z.string().describe("The exact node-type corpus variant key."),
-      }),
-      outputSchema: getToolOutputSchema("get_node_type_variant"),
-      annotations: READ_ONLY_LOCAL_ANNOTATIONS,
-    },
-    async (params) => {
-      try {
-        const snapshot = loadNodeTypeCorpusSnapshot();
-        const variant = getNodeTypeCorpusVariant(snapshot, params.variantKey);
-        return buildJsonToolResponse(
-          "get_node_type_variant",
-          sanitizeVariantForResponse(variant)
-        );
-      } catch (error) {
-        return handleToolError(error);
-      }
-    }
-  );
+  registerLocalTool(server, "get_node_type_variant", {
+    title: "Get Node Type Variant",
+    description: "Get one node-type corpus variant from the committed snapshot by variantKey. Use search_node_type_variants first when you need discovery.",
+    inputSchema: z.object({
+      variantKey: z.string().describe("The exact node-type corpus variant key."),
+    }),
+    annotations: READ_ONLY_LOCAL_ANNOTATIONS,
+  }, (params) => {
+    const snapshot = loadNodeTypeCorpusSnapshot();
+    const variant = getNodeTypeCorpusVariant(snapshot, params.variantKey);
+    return sanitizeVariantForResponse(variant);
+  });
 
+  // generate_set_workspace_node_template_from_variant has complex inline logic
+  // (variant validation, template generation, optional live comparison via client)
+  // that doesn't fit the simple helper pattern.
   server.registerTool(
     "generate_set_workspace_node_template_from_variant",
     {

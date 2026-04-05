@@ -158,15 +158,15 @@ describe("personalize_skills tool", () => {
     }
   });
 
-  it("includes customization instructions in text output", async () => {
+  it("includes customization instructions in structured output", async () => {
     const dir = createTempDir();
     const handler = getToolHandler();
     const result = await handler({ directory: dir });
 
-    const text = result.content[0].text;
-    expect(text).toContain("How to customize:");
-    expect(text).toContain("<!-- OVERRIDE -->");
-    expect(text).toContain("user_skills");
+    expect(result.structuredContent.instructions).toBeDefined();
+    const instructions = result.structuredContent.instructions as string[];
+    expect(instructions.some((s: string) => s.includes("user_skills"))).toBe(true);
+    expect(instructions.some((s: string) => s.includes("<!-- OVERRIDE -->"))).toBe(true);
   });
 
   it("returns error for unwritable directory", async () => {
@@ -174,6 +174,6 @@ describe("personalize_skills tool", () => {
     const result = await handler({ directory: "/proc/nonexistent/path" });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Failed to personalize skills");
+    expect(result.content[0].text).toContain("Directory was not created");
   });
 });
