@@ -44,10 +44,42 @@ export function registerSimpleTool<S extends z.ZodType>(
       outputSchema: getToolOutputSchema(name),
       annotations: def.annotations,
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- return shape matches at runtime
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK ToolCallback type causes deep recursion with Zod generics
     (async (params: any) => {
       try {
         const result = await apiFunc(client, params);
+        return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result);
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }) as any
+  );
+}
+
+/**
+ * Register a local-only tool that does not call the Coalesce API.
+ * Provides the same error handling and response formatting as registerSimpleTool
+ * without requiring a CoalesceClient dependency.
+ */
+export function registerLocalTool<S extends z.ZodType>(
+  server: McpServer,
+  name: string,
+  def: ToolDef<S>,
+  handler: (params: z.infer<S>) => unknown | Promise<unknown>
+): void {
+  server.registerTool(
+    name,
+    {
+      title: def.title,
+      description: def.description,
+      inputSchema: def.inputSchema,
+      outputSchema: getToolOutputSchema(name),
+      annotations: def.annotations,
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK ToolCallback type causes deep recursion with Zod generics
+    (async (params: any) => {
+      try {
+        const result = await handler(params);
         return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result);
       } catch (error) {
         return handleToolError(error);
@@ -75,7 +107,7 @@ export function registerDestructiveTool<S extends z.ZodType>(
       outputSchema: getToolOutputSchema(name),
       annotations: def.annotations,
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- return shape matches at runtime
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK ToolCallback type causes deep recursion with Zod generics
     (async (params: any) => {
       try {
         const approvalResponse = await requireDestructiveConfirmation(
