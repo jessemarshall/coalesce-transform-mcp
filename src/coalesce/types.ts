@@ -105,6 +105,8 @@ const SANITIZED_KEYS = new Set([
   "userCredentials",
   "snowflakeKeyPairKey",
   "snowflakeKeyPairPass",
+  "gitToken",
+  "accessToken",
 ]);
 
 export function sanitizeResponse(data: unknown): unknown {
