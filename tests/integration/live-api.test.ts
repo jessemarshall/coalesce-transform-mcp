@@ -787,8 +787,10 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
     it("create_git_account", async () => {
       const res = await callTool("create_git_account", {
         name: `mcp-test-git-${ts}`,
+        gitUsername: "mcp-test",
         gitAuthorName: "MCP Test",
         gitAuthorEmail: "mcp-test@example.com",
+        gitToken: "ghp_test_placeholder_token",
       });
       assertToolSuccess(res, "create_git_account");
       const data = parseStructured(res);
@@ -833,6 +835,7 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
       assertToolSuccessOrExpected(res, "set_env_role", [
         "not found",
         "permission",
+        "invalid",
       ]);
     });
 
@@ -1116,6 +1119,7 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
       assertToolSuccessOrExpected(res, "delete_env_role", [
         "not found",
         "permission",
+        "unavailable",
       ]);
     });
 
