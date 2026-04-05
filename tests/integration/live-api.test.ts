@@ -135,9 +135,11 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
     await closeHarness?.();
   });
 
-  async function callTool(name: string, args: Record<string, unknown> = {}) {
+  async function callTool(name: string, args: Record<string, unknown> = {}, requestTimeoutMs?: number) {
     testedTools.add(name);
-    return mcpClient.callTool({ name, arguments: args });
+    return mcpClient.callTool({ name, arguments: args }, undefined, {
+      timeout: requestTimeoutMs ?? 180_000,
+    });
   }
 
   // ── Phase 1: Discovery ────────────────────────────────────────────────
@@ -273,14 +275,14 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
       ]);
     });
 
-    it("get_environment_overview", async () => {
+    it("get_environment_overview", { timeout: 180_000 }, async () => {
       const res = await callTool("get_environment_overview", {
         environmentID: ENVIRONMENT_ID,
       });
       assertToolSuccess(res, "get_environment_overview");
     });
 
-    it("get_environment_health", { timeout: 120_000 }, async () => {
+    it("get_environment_health", { timeout: 240_000 }, async () => {
       const res = await callTool("get_environment_health", {
         environmentID: ENVIRONMENT_ID,
       });
@@ -523,7 +525,7 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
       assertToolSuccess(res, "cache_workspace_nodes");
     });
 
-    it("cache_environment_nodes", async () => {
+    it("cache_environment_nodes", { timeout: 240_000 }, async () => {
       const res = await callTool("cache_environment_nodes", {
         environmentID: ENVIRONMENT_ID,
       });
