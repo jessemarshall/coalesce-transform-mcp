@@ -2,6 +2,11 @@ import type { CoalesceClient, QueryParams } from "../../client.js";
 import type { StartRunInput, RerunInput } from "../types.js";
 import { validatePathSegment, buildStartRunBody, buildRerunBody } from "../types.js";
 
+// The Coalesce API uses two distinct run identifiers — this is intentional, not inconsistent naming:
+//   runID    (string)  — numeric ID passed as a path segment to REST endpoints (/api/v1/runs/{runID})
+//   runCounter (number) — numeric counter used as a query param by scheduler endpoints (/scheduler/runStatus)
+// Both refer to the same run but are consumed by different parts of the Coalesce API.
+
 export async function listRuns(
   client: CoalesceClient,
   params: QueryParams

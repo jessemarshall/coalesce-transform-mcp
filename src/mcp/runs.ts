@@ -21,6 +21,9 @@ import {
 } from "../coalesce/types.js";
 import { registerSimpleTool, registerDestructiveTool } from "./tool-helpers.js";
 
+// NOTE: runID (string) and runCounter (number) are both Coalesce API concepts, not a naming inconsistency.
+// The REST API (/api/v1/runs/{runID}) uses runID; the scheduler (/scheduler/runStatus) uses runCounter.
+// Both identify the same run — the Coalesce API simply exposes them differently per endpoint.
 export function registerRunTools(
   server: McpServer,
   client: CoalesceClient,
