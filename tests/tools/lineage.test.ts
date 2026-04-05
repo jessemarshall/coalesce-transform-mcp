@@ -10,6 +10,7 @@ vi.mock("../../src/services/lineage/lineage-cache.js", () => ({
   walkColumnLineage: vi.fn(),
   analyzeNodeImpact: vi.fn(),
   propagateColumnChange: vi.fn(),
+  searchWorkspaceContent: vi.fn(),
 }));
 
 import {
@@ -19,6 +20,7 @@ import {
   walkColumnLineage,
   analyzeNodeImpact,
   propagateColumnChange,
+  searchWorkspaceContent,
 } from "../../src/services/lineage/lineage-cache.js";
 
 function createMockClient() {
@@ -58,7 +60,7 @@ function extractHandler<T extends object>(
 }
 
 describe("Lineage Tool Handlers", () => {
-  it("registers all 5 lineage tools without throwing", () => {
+  it("registers all 6 lineage tools without throwing", () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
     const client = createMockClient();
     expect(() => registerLineageTools(server, client as never)).not.toThrow();
@@ -424,6 +426,118 @@ describe("Lineage Tool Handlers", () => {
       });
 
       expect(result.isError).toBe(true);
+    });
+  });
+
+  // --- search_workspace_content ---
+  describe("search_workspace_content", () => {
+    it("returns search results from cached workspace data", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const spy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+      registerLineageTools(server, client as never);
+
+      const fakeCache = buildFakeCache({
+        "n1": { name: "STG_ORDERS", nodeType: "Stage", columns: [{ id: "c1", name: "order_id" }] },
+      });
+      vi.mocked(buildLineageCache).mockResolvedValue(fakeCache as never);
+      vi.mocked(searchWorkspaceContent).mockReturnValue({
+        query: "order",
+        totalResults: 1,
+        results: [
+          {
+            nodeID: "n1",
+            nodeName: "STG_ORDERS",
+            nodeType: "Stage",
+            matches: [{ field: "name", snippet: "STG_ORDERS" }],
+          },
+        ],
+      });
+
+      const handler = extractHandler<{
+        workspaceID: string;
+        query: string;
+        fields?: string[];
+        nodeType?: string;
+        limit?: number;
+      }>(spy, "search_workspace_content");
+      const result = await handler({ workspaceID: "ws-1", query: "order" });
+
+      expect(result.isError).toBeUndefined();
+      const data = JSON.parse(result.content[0]!.text);
+      expect(data.query).toBe("order");
+      expect(data.totalResults).toBe(1);
+      expect(data.results[0].nodeID).toBe("n1");
+    });
+
+    it("returns isError when workspaceID is empty", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const spy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+      registerLineageTools(server, client as never);
+
+      const handler = extractHandler<{
+        workspaceID: string;
+        query: string;
+      }>(spy, "search_workspace_content");
+      const result = await handler({ workspaceID: "", query: "test" });
+
+      expect(result.isError).toBe(true);
+    });
+
+    it("returns isError when buildLineageCache throws", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const spy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+      registerLineageTools(server, client as never);
+
+      vi.mocked(buildLineageCache).mockRejectedValue(new Error("Cache build failed"));
+
+      const handler = extractHandler<{
+        workspaceID: string;
+        query: string;
+      }>(spy, "search_workspace_content");
+      const result = await handler({ workspaceID: "ws-1", query: "test" });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0]!.text).toContain("Cache build failed");
+    });
+
+    it("passes optional fields and limit to searchWorkspaceContent", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const spy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+      registerLineageTools(server, client as never);
+
+      const fakeCache = buildFakeCache({});
+      vi.mocked(buildLineageCache).mockResolvedValue(fakeCache as never);
+      vi.mocked(searchWorkspaceContent).mockReturnValue({
+        query: "test",
+        totalResults: 0,
+        results: [],
+      });
+
+      const handler = extractHandler<{
+        workspaceID: string;
+        query: string;
+        fields?: string[];
+        nodeType?: string;
+        limit?: number;
+      }>(spy, "search_workspace_content");
+      await handler({
+        workspaceID: "ws-1",
+        query: "test",
+        fields: ["name", "sql"],
+        nodeType: "Stage",
+        limit: 10,
+      });
+
+      expect(searchWorkspaceContent).toHaveBeenCalledWith(fakeCache, {
+        query: "test",
+        fields: ["name", "sql"],
+        nodeType: "Stage",
+        limit: 10,
+      });
     });
   });
 });

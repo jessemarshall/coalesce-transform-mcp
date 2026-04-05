@@ -30,6 +30,7 @@ export function registerGitAccountTools(
       accountOwner: accountOwnerParam,
     }),
     annotations: READ_ONLY_ANNOTATIONS,
+    sanitize: true,
   }, listGitAccounts);
 
   registerSimpleTool(server, client, "get_git_account", {
@@ -41,6 +42,7 @@ export function registerGitAccountTools(
       accountOwner: accountOwnerParam,
     }),
     annotations: READ_ONLY_ANNOTATIONS,
+    sanitize: true,
   }, getGitAccount);
 
   registerSimpleTool(server, client, "create_git_account", {
@@ -57,6 +59,7 @@ export function registerGitAccountTools(
       accountOwner: accountOwnerParam,
     }),
     annotations: WRITE_ANNOTATIONS,
+    sanitize: true,
   }, (client, params) => {
     const { accountOwner, name, ...rest } = params;
     return createGitAccount(client, { body: { gitAccountName: name, ...rest }, accountOwner });
@@ -65,18 +68,23 @@ export function registerGitAccountTools(
   registerSimpleTool(server, client, "update_git_account", {
     title: "Update Git Account",
     description:
-      "Update an existing Git account. Partial update — only provided fields are changed.\n\nArgs:\n  - gitAccountID (string, required): The account ID\n  - name (string, optional): Updated name\n  - provider (enum, optional): 'github' | 'gitlab' | 'bitbucket' | 'azureDevOps'\n  - accessToken (string, optional): Updated personal access token\n  - accountOwner (string, optional): User ID of the account owner\n\nReturns:\n  Updated Git account object.",
+      "Update an existing Git account. Partial update — only provided fields are changed.\n\nArgs:\n  - gitAccountID (string, required): The account ID\n  - name (string, optional): Updated name\n  - gitUsername (string, optional): Updated git username\n  - gitAuthorName (string, optional): Updated author name for git commits\n  - gitAuthorEmail (string, optional): Updated email for git commits\n  - gitToken (string, optional): Updated personal access token\n  - provider (enum, optional): 'github' | 'gitlab' | 'bitbucket' | 'azureDevOps'\n  - accountOwner (string, optional): User ID of the account owner\n\nReturns:\n  Updated Git account object.",
     inputSchema: z.object({
       gitAccountID: z.string().describe("The git account ID"),
       name: z.string().optional().describe("Updated name for the git account"),
+      gitUsername: z.string().optional().describe("Updated git username for authentication"),
+      gitAuthorName: z.string().optional().describe("Updated author name for git commits"),
+      gitAuthorEmail: z.string().optional().describe("Updated email for git commits"),
+      gitToken: z.string().optional().describe("Updated personal access token for the git provider"),
       provider: z.enum(["github", "gitlab", "bitbucket", "azureDevOps"]).optional().describe("Git provider type"),
-      accessToken: z.string().optional().describe("Updated personal access token"),
       accountOwner: accountOwnerParam,
     }),
     annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
+    sanitize: true,
   }, (client, params) => {
-    const { gitAccountID, accountOwner, ...body } = params;
-    return updateGitAccount(client, { gitAccountID, body, accountOwner });
+    const { gitAccountID, accountOwner, name, ...body } = params;
+    const patchBody = name ? { gitAccountName: name, ...body } : body;
+    return updateGitAccount(client, { gitAccountID, body: patchBody, accountOwner });
   });
 
   registerDestructiveTool(server, client, "delete_git_account", {
