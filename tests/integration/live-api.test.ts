@@ -626,6 +626,7 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
     it("create_project", async () => {
       const res = await callTool("create_project", {
         name: `mcp-live-test-${ts}`,
+        platformKind: "snowflake",
       });
       assertToolSuccess(res, "create_project");
       const data = parseStructured(res);

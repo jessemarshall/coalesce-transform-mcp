@@ -46,9 +46,10 @@ export function registerProjectTools(
   registerSimpleTool(server, client, "create_project", {
     title: "Create Project",
     description:
-      "Create a new Coalesce project.\n\nArgs:\n  - name (string, required): Project name\n  - description (string, optional): Project description\n  - gitAccountID (string, optional): Git account to link\n  - gitRepo (string, optional): Git repository URL\n  - gitBranch (string, optional): Default git branch\n\nReturns:\n  Created project object with assigned ID.",
+      "Create a new Coalesce project.\n\nArgs:\n  - name (string, required): Project name\n  - platformKind (enum, required): Target platform — 'snowflake', 'databricks', 'starburst', or 'spark'\n  - description (string, optional): Project description\n  - gitAccountID (string, optional): Git account to link\n  - gitRepo (string, optional): Git repository URL\n  - gitBranch (string, optional): Default git branch\n\nReturns:\n  Created project object with assigned ID.",
     inputSchema: z.object({
       name: z.string().describe("Name for the new project"),
+      platformKind: z.enum(["snowflake", "databricks", "starburst", "spark"]).describe("Target platform for the project"),
       description: z.string().optional().describe("Optional project description"),
       gitAccountID: z.string().optional().describe("Git account ID to link to the project"),
       gitRepo: z.string().optional().describe("Git repository URL"),

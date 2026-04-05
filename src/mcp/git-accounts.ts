@@ -55,8 +55,8 @@ export function registerGitAccountTools(
     }),
     annotations: WRITE_ANNOTATIONS,
   }, (client, params) => {
-    const { accountOwner, ...body } = params;
-    return createGitAccount(client, { body, accountOwner });
+    const { accountOwner, name, ...rest } = params;
+    return createGitAccount(client, { body: { gitAccountName: name, ...rest }, accountOwner });
   });
 
   registerSimpleTool(server, client, "update_git_account", {

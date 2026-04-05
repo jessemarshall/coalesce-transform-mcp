@@ -63,7 +63,7 @@ export function registerEnvironmentTools(
     annotations: WRITE_ANNOTATIONS,
   }, (client, params) => {
     const { projectID, ...rest } = params;
-    return createEnvironment(client, { project: projectID, ...rest });
+    return createEnvironment(client, { project: projectID, oauthEnabled: false, ...rest });
   });
 
   registerSimpleTool(server, client, "update_environment", {
