@@ -296,6 +296,9 @@ export function registerLineageTools(
         "The lineage cache is invalidated after propagation.",
         "",
         "Requires a lineage cache — will fetch all workspace nodes with detail=true on first call.",
+        "Note: Propagation targets are determined from the cached lineage graph (up to 30 min old).",
+        "Downstream nodes added after the cache was built will not be included. Refresh lineage first",
+        "if the workspace structure has changed recently.",
       ].join("\n"),
       inputSchema: z.object({
         workspaceID: z.string().describe("Workspace ID"),
