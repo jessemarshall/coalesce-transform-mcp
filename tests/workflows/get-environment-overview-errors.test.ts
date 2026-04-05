@@ -83,21 +83,20 @@ describe("get-environment-overview error paths", () => {
     ).rejects.toThrow("Connection reset");
   });
 
-  it("handles non-object response from nodes endpoint", async () => {
+  it("returns empty nodes when response has no data field", async () => {
     const client = createMockClient();
     client.get.mockImplementation((path: string) => {
       if (path === "/api/v1/environments/env-1") {
         return Promise.resolve({ id: "env-1", name: "Prod" });
       }
       if (path.includes("/nodes")) {
-        // Response is an object but data is missing — parseCollectionPage returns empty array
+        // Response object has 'items' instead of 'data' — parseCollectionPage defaults to empty array
         return Promise.resolve({ items: [{ id: "1" }] });
       }
       return Promise.resolve({});
     });
 
     const result = await getEnvironmentOverview(client as any, { environmentID: "env-1" });
-    // data field is missing, so parseCollectionPage returns empty array
     expect(result.nodes).toEqual([]);
   });
 

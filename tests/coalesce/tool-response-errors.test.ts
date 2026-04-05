@@ -1,4 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { handleToolError, buildJsonToolResponse } from "../../src/coalesce/tool-response.js";
 import { CoalesceApiError } from "../../src/client.js";
 
@@ -136,6 +139,20 @@ describe("handleToolError serialization", () => {
 });
 
 describe("buildJsonToolResponse edge cases", () => {
+  const tempDirs: string[] = [];
+
+  function createTempDir(): string {
+    const dir = mkdtempSync(join(tmpdir(), "coalesce-tool-response-test-"));
+    tempDirs.push(dir);
+    return dir;
+  }
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0, tempDirs.length)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("returns structured content for a simple object", () => {
     const result = buildJsonToolResponse("test_tool", { key: "value" }, {
       maxInlineBytes: 1024 * 1024, // Force inline
@@ -182,6 +199,9 @@ describe("buildJsonToolResponse edge cases", () => {
       data: [{ id: "1" }],
       next: "42",
     });
+    // Text content must be consistent with structuredContent
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.next).toBe("42");
   });
 
   it("removes null next cursor from response", () => {
@@ -191,6 +211,8 @@ describe("buildJsonToolResponse edge cases", () => {
     }, { maxInlineBytes: 1024 * 1024 });
 
     expect(result.structuredContent).not.toHaveProperty("next");
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed).not.toHaveProperty("next");
   });
 
   it("removes null total from response", () => {
@@ -200,6 +222,8 @@ describe("buildJsonToolResponse edge cases", () => {
     }, { maxInlineBytes: 1024 * 1024 });
 
     expect(result.structuredContent).not.toHaveProperty("total");
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed).not.toHaveProperty("total");
   });
 
   it("preserves valid string next cursor", () => {
@@ -211,15 +235,31 @@ describe("buildJsonToolResponse edge cases", () => {
     expect(result.structuredContent).toHaveProperty("next", "cursor-abc");
   });
 
+  it("coerces next: 0 to string '0' (preserves as valid cursor)", () => {
+    const result = buildJsonToolResponse("test_tool", {
+      data: [],
+      next: 0,
+    }, { maxInlineBytes: 1024 * 1024 });
+
+    expect(result.structuredContent).toHaveProperty("next", "0");
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.next).toBe("0");
+  });
+
   it("auto-caches response when it exceeds maxInlineBytes", () => {
+    const baseDir = createTempDir();
     const largeData = { items: Array.from({ length: 100 }, (_, i) => ({ id: `item-${i}`, data: "x".repeat(100) })) };
 
     const result = buildJsonToolResponse("test_tool", largeData, {
       maxInlineBytes: 100, // Very small threshold to force caching
+      baseDir,
     });
 
     expect(result.structuredContent).toHaveProperty("autoCached", true);
     expect(result.structuredContent).toHaveProperty("toolName", "test_tool");
     expect(result.structuredContent).toHaveProperty("message");
+    // Verify a resource link is included in content for the cached file
+    const resourceLinks = result.content.filter((c) => c.type === "resource_link");
+    expect(resourceLinks.length).toBeGreaterThanOrEqual(1);
   });
 });
