@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -193,11 +193,7 @@ describe("pagination edge cases — fetchAllPaginatedToMemory", () => {
 
   it("handles response with missing data field (defaults to empty array)", async () => {
     const client = createMockClient();
-    client.get.mockResolvedValue({ next: "cursor-2" });
-
-    // This will try to paginate but get 0 items per page; the next cursor triggers page 2
-    // which also has no data. Without a repeated cursor, it would loop forever, but
-    // the second call has no next cursor so it terminates.
+    // Page 1 has no data field but has a next cursor; page 2 has neither — terminates pagination
     client.get
       .mockResolvedValueOnce({ next: "cursor-2" })
       .mockResolvedValueOnce({});
@@ -269,8 +265,14 @@ describe("pagination edge cases — streamAllPaginatedToDisk", () => {
 
   it("cleans up temp files when repeated cursor is detected", async () => {
     const baseDir = createTempDir();
-    const ndjsonPath = join(baseDir, "data", "test.ndjson");
-    const metaPath = join(baseDir, "data", "test.meta.json");
+    const dataDir = join(baseDir, "data");
+    const ndjsonPath = join(dataDir, "test.ndjson");
+    const metaPath = join(dataDir, "test.meta.json");
+
+    // Pre-populate the final paths so we can verify they survive the error
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(ndjsonPath, '{"id":"existing"}\n', "utf8");
+    writeFileSync(metaPath, '{"totalItems":1}\n', "utf8");
 
     const fetchPage = vi.fn()
       .mockResolvedValueOnce({ data: [{ id: "a" }], next: "loop" })
@@ -280,10 +282,14 @@ describe("pagination edge cases — streamAllPaginatedToDisk", () => {
       streamAllPaginatedToDisk(fetchPage, {}, {}, { ndjsonPath, metaPath })
     ).rejects.toThrow("Pagination repeated cursor loop");
 
-    // Temp files should be cleaned up
-    const { existsSync } = await import("node:fs");
-    expect(existsSync(ndjsonPath)).toBe(false);
-    expect(existsSync(metaPath)).toBe(false);
+    // Previous snapshot pair must survive the failed stream
+    expect(readFileSync(ndjsonPath, "utf8")).toBe('{"id":"existing"}\n');
+    expect(readFileSync(metaPath, "utf8")).toBe('{"totalItems":1}\n');
+
+    // No temp files should remain in the directory
+    const remainingFiles = readdirSync(dataDir);
+    const tempFiles = remainingFiles.filter((f) => f.includes(".tmp-"));
+    expect(tempFiles).toHaveLength(0);
   });
 
   it("respects custom orderBy and orderByDirection", async () => {

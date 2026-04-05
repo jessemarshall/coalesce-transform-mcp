@@ -61,15 +61,14 @@ describe("get-environment-health error paths", () => {
 
   it("propagates API error when runs fetch fails but nodes succeeds", async () => {
     const client = createMockClient();
-    let callCount = 0;
-    client.get.mockImplementation(() => {
-      callCount++;
-      // fetchAllEnvironmentNodes and fetchAllRuns run in parallel via Promise.all,
-      // so we distinguish by call order: first call is nodes, second is runs
-      if (callCount === 1) {
+    client.get.mockImplementation((path: string) => {
+      if (path.includes("/nodes")) {
         return Promise.resolve({ data: [makeNode("n1", "NODE", "Stage")] });
       }
-      return Promise.reject(new Error("Runs API down"));
+      if (path.includes("/runs")) {
+        return Promise.reject(new Error("Runs API down"));
+      }
+      return Promise.resolve({});
     });
 
     await expect(
@@ -248,7 +247,11 @@ describe("get-environment-health error paths", () => {
 
     const result = await getEnvironmentHealth(client as any, { environmentID: "env-1" });
     expect(result.totalNodes).toBe(2);
+    // Node with missing id gets empty string as nodeID
+    expect(result.nodeRunStatus[0].nodeID).toBe("");
     expect(result.nodeRunStatus[0].nodeName).toBe("unnamed");
+    // Node with id but no name
+    expect(result.nodeRunStatus[1].nodeID).toBe("n2");
     expect(result.nodeRunStatus[1].nodeName).toBe("unnamed");
   });
 
