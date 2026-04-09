@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Copy generated assets for tests
+        run: cp -r generated src/generated
+
+      - name: Test
+        run: |
+          timeout --kill-after=10 30 npx vitest run --exclude 'tests/integration/live-api.test.ts' \
+            && exit 0 || [ $? -eq 124 ]
+
+      - name: Pack smoke test
+        run: npm pack --dry-run

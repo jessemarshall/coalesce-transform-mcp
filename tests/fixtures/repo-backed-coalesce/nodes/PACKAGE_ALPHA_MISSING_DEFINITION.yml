@@ -1,0 +1,9 @@
+fileVersion: 1
+id: node-missing-1
+name: PACKAGE_ALPHA_MISSING_DEFINITION
+operation:
+  name: PACKAGE_ALPHA_MISSING_DEFINITION
+  sqlType: package-alpha:::66
+  type: transform
+  version: 1
+type: Node

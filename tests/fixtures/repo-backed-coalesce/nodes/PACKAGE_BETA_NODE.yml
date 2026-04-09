@@ -1,0 +1,9 @@
+fileVersion: 1
+id: node-package-beta-1
+name: PACKAGE_BETA_NODE
+operation:
+  name: PACKAGE_BETA_NODE
+  sqlType: package-beta:::33
+  type: transform
+  version: 1
+type: Node

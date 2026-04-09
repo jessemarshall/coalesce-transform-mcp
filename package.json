@@ -1,0 +1,52 @@
+{
+  "name": "coalesce-transform-mcp",
+  "version": "0.4.5",
+  "mcpName": "io.github.jessemarshall/coalesce-transform",
+  "description": "MCP server for the Coalesce Transform API; run tools support Snowflake Key Pair and PAT auth",
+  "main": "dist/index.js",
+  "bin": {
+    "coalesce-transform-mcp": "./dist/index.js"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "tsc --watch",
+    "import:node-type-corpus": "node scripts/import-node-type-corpus.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "preversion": "npm run build && npm audit --omit=dev && node scripts/sync-version.mjs",
+    "postversion": "node scripts/sync-version.mjs && git add server.json && git commit --amend --no-edit",
+    "prepublishOnly": "npm run build",
+    "prepare": "husky"
+  },
+  "keywords": [
+    "mcp",
+    "coalesce",
+    "transform",
+    "model-context-protocol"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jessemarshall/coalesce-transform-mcp.git"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "yaml": "^2.8.3",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "husky": "^9.1.7",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0"
+  }
+}

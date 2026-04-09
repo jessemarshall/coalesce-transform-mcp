@@ -1,0 +1,21 @@
+fileVersion: 1
+id: "33"
+isDisabled: false
+metadata:
+  defaultStorageLocation: CORE
+  error: null
+  nodeMetadataSpec: |-
+    capitalized: Package Beta Type
+    short: PBT
+    plural: Package Beta Types
+    tagColor: "#008080"
+
+    config:
+      - groupName: Options
+        items:
+          - displayName: Business Key
+            attributeName: businessKey
+            type: textBox
+            default: CUSTOMER_ID
+name: Package Beta Type
+type: NodeType

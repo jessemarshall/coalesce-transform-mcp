@@ -1,0 +1,13 @@
+fileVersion: 1
+id: "500"
+isDisabled: false
+metadata:
+  defaultStorageLocation: null
+  error: null
+  nodeMetadataSpec: |-
+    capitalized: Duplicate B
+    short: DUPB
+    plural: Duplicate Bs
+    tagColor: "#555555"
+name: Duplicate B
+type: NodeType

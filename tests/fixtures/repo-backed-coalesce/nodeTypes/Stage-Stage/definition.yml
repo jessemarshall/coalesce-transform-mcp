@@ -1,0 +1,22 @@
+fileVersion: 1
+id: Stage
+isDisabled: false
+metadata:
+  defaultStorageLocation: ETL_STAGE
+  error: null
+  nodeMetadataSpec: |
+    capitalized: Stage
+    short: STG
+    plural: Stages
+    tagColor: '#2EB67D'
+
+    config:
+      - groupName: Options
+        items:
+          - type: materializationSelector
+            default: table
+            options:
+              - table
+              - view
+name: Stage
+type: NodeType

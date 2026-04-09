@@ -1,0 +1,24 @@
+fileVersion: 1
+id: "65"
+isDisabled: false
+metadata:
+  defaultStorageLocation: ETL_WORK
+  error: null
+  nodeMetadataSpec: |-
+    capitalized: Custom Work
+    short: CWRK
+    plural: Custom Works
+    tagColor: "#123456"
+
+    config:
+      - groupName: Options
+        items:
+          - displayName: Strategy
+            attributeName: strategy
+            type: dropdownSelector
+            default: APPEND
+            options:
+              - APPEND
+              - MERGE
+name: Custom Work
+type: NodeType

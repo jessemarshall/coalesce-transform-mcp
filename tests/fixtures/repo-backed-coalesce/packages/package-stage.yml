@@ -1,0 +1,13 @@
+config:
+  entities:
+    nodeTypes:
+      Stage:
+        defaultStorageLocation: null
+        isDisabled: false
+  packageVariables: ""
+fileVersion: 1
+id: "@example/package-stage"
+name: Stage
+packageID: "@example/package-stage"
+releaseID: release-package-stage-1
+type: Package

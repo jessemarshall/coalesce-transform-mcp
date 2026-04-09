@@ -1,0 +1,153 @@
+import { describe, it, expect, vi } from "vitest";
+import {
+  listWorkspaceSubgraphs,
+  getWorkspaceSubgraph,
+  createWorkspaceSubgraph,
+  updateWorkspaceSubgraph,
+  deleteWorkspaceSubgraph,
+} from "../../src/coalesce/api/subgraphs.js";
+import { CoalesceApiError } from "../../src/client.js";
+
+function createMockClient() {
+  return {
+    get: vi.fn().mockResolvedValue({}),
+    post: vi.fn().mockResolvedValue({}),
+    put: vi.fn().mockResolvedValue({}),
+    delete: vi.fn().mockResolvedValue({}),
+  };
+}
+
+describe("Subgraph API", () => {
+  it("listWorkspaceSubgraphs scans sequential IDs and collects found subgraphs", async () => {
+    const client = createMockClient();
+    // Subgraph at ID 5 exists, all others 404
+    client.get.mockImplementation(async (path: string) => {
+      if (path === "/api/v1/workspaces/ws-1/subgraphs/5") {
+        return { id: "5", name: "Staging" };
+      }
+      throw new CoalesceApiError("Not found", 404);
+    });
+
+    const result = await listWorkspaceSubgraphs(client as any, { workspaceID: "ws-1" }) as { data: unknown[] };
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toEqual({ id: "5", name: "Staging" });
+  });
+
+  it("listWorkspaceSubgraphs returns empty data when none exist", async () => {
+    const client = createMockClient();
+    client.get.mockRejectedValue(new CoalesceApiError("Not found", 404));
+
+    const result = await listWorkspaceSubgraphs(client as any, { workspaceID: "ws-1" }) as { data: unknown[] };
+
+    expect(result.data).toHaveLength(0);
+  });
+
+  it("listWorkspaceSubgraphs propagates non-404 errors", async () => {
+    const client = createMockClient();
+    client.get.mockRejectedValue(new CoalesceApiError("Forbidden", 403));
+
+    await expect(
+      listWorkspaceSubgraphs(client as any, { workspaceID: "ws-1" })
+    ).rejects.toThrow("Forbidden");
+  });
+
+  it("getWorkspaceSubgraph calls GET /api/v1/workspaces/{workspaceID}/subgraphs/{subgraphID}", async () => {
+    const client = createMockClient();
+    client.get.mockResolvedValue({ id: "sg-1", name: "Staging" });
+
+    const result = await getWorkspaceSubgraph(client as any, {
+      workspaceID: "ws-1",
+      subgraphID: "sg-1",
+    });
+
+    expect(client.get).toHaveBeenCalledWith(
+      "/api/v1/workspaces/ws-1/subgraphs/sg-1",
+      {}
+    );
+    expect(result).toEqual({ id: "sg-1", name: "Staging" });
+  });
+
+  it("createWorkspaceSubgraph calls POST /api/v1/workspaces/{workspaceID}/subgraphs", async () => {
+    const client = createMockClient();
+    client.post.mockResolvedValue({ id: "sg-2" });
+
+    const result = await createWorkspaceSubgraph(client as any, {
+      workspaceID: "ws-1",
+      name: "ETL Pipeline",
+      steps: ["node-1", "node-2"],
+    });
+
+    expect(client.post).toHaveBeenCalledWith(
+      "/api/v1/workspaces/ws-1/subgraphs",
+      { name: "ETL Pipeline", steps: ["node-1", "node-2"] }
+    );
+    expect(result).toEqual({ id: "sg-2" });
+  });
+
+  it("updateWorkspaceSubgraph calls PUT /api/v1/workspaces/{workspaceID}/subgraphs/{subgraphID}", async () => {
+    const client = createMockClient();
+    client.put.mockResolvedValue({ id: "sg-1", name: "ETL v2" });
+
+    const result = await updateWorkspaceSubgraph(client as any, {
+      workspaceID: "ws-1",
+      subgraphID: "sg-1",
+      name: "ETL v2",
+      steps: ["node-1", "node-3"],
+    });
+
+    expect(client.put).toHaveBeenCalledWith(
+      "/api/v1/workspaces/ws-1/subgraphs/sg-1",
+      { name: "ETL v2", steps: ["node-1", "node-3"] }
+    );
+    expect(result).toEqual({ id: "sg-1", name: "ETL v2" });
+  });
+
+  it("deleteWorkspaceSubgraph calls DELETE /api/v1/workspaces/{workspaceID}/subgraphs/{subgraphID}", async () => {
+    const client = createMockClient();
+    client.delete.mockResolvedValue({});
+
+    await deleteWorkspaceSubgraph(client as any, {
+      workspaceID: "ws-1",
+      subgraphID: "sg-1",
+    });
+
+    expect(client.delete).toHaveBeenCalledWith(
+      "/api/v1/workspaces/ws-1/subgraphs/sg-1"
+    );
+  });
+
+  it("rejects path traversal in workspaceID", async () => {
+    const client = createMockClient();
+
+    await expect(
+      getWorkspaceSubgraph(client as any, {
+        workspaceID: "../escape",
+        subgraphID: "sg-1",
+      })
+    ).rejects.toThrow("workspaceID");
+  });
+
+  it("rejects path traversal in subgraphID", async () => {
+    const client = createMockClient();
+
+    await expect(
+      getWorkspaceSubgraph(client as any, {
+        workspaceID: "ws-1",
+        subgraphID: "../escape",
+      })
+    ).rejects.toThrow("subgraphID");
+  });
+
+  it("propagates CoalesceApiError from client", async () => {
+    const client = createMockClient();
+    client.get.mockRejectedValue(new CoalesceApiError("Not found", 404));
+
+    await expect(
+      getWorkspaceSubgraph(client as any, {
+        workspaceID: "ws-1",
+        subgraphID: "bad",
+      })
+    ).rejects.toThrow("Not found");
+  });
+});

@@ -1,0 +1,9 @@
+fileVersion: 1
+id: node-direct-1
+name: CUSTOM_DIRECT
+operation:
+  name: CUSTOM_DIRECT
+  sqlType: 65
+  type: transform
+  version: 1
+type: Node

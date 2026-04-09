@@ -1,0 +1,13 @@
+config:
+  entities:
+    nodeTypes:
+      "33":
+        defaultStorageLocation: CORE
+        isDisabled: false
+  packageVariables: ""
+fileVersion: 1
+id: "@example/package-beta"
+name: package-beta
+packageID: "@example/package-beta"
+releaseID: release-package-beta-1
+type: Package

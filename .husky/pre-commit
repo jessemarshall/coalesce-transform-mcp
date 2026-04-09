@@ -1,0 +1,22 @@
+# Secret scanning - block commits with tokens/keys
+# Scans only newly added/changed lines (the staged diff), not entire file contents,
+# to avoid false positives on pre-existing patterns like credential sanitization strings.
+SECRETS_PATTERN='(-----BEGIN.*PRIVATE KEY|eyJhbG[A-Za-z0-9_-]+\.|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|npm_[A-Za-z0-9]{36})'
+DIFF_ADDED=$(git diff --cached --diff-filter=ACM -U0 -- ':!*.md' ':!.husky/' | grep -E '^\+[^+]' || true)
+
+if [ -n "$DIFF_ADDED" ]; then
+  MATCHES=$(echo "$DIFF_ADDED" | grep -E "$SECRETS_PATTERN" || true)
+  if [ -n "$MATCHES" ]; then
+    echo "ERROR: Potential secrets detected in staged changes:"
+    echo "$MATCHES"
+    echo ""
+    echo "If this is a false positive, use: git commit --no-verify"
+    exit 1
+  fi
+fi
+
+# Type check
+npx tsc --noEmit
+
+# Tests
+npm test
