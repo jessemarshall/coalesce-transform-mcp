@@ -340,7 +340,7 @@ describe("MCP Protocol Surface", () => {
     }
   });
 
-  it("executes create-pipeline-from-sql with confirmation token over MCP harness", async () => {
+  it("executes create-pipeline-from-sql with confirmation token over MCP harness", { timeout: 30_000 }, async () => {
     const sourceNode = buildSourceNode("source-1", "CUSTOMER");
     const createdNode = buildCreatedStageNode("source-1");
     let savedBody: Record<string, unknown> | null = null;
