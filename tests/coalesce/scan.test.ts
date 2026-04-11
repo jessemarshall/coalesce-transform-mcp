@@ -65,13 +65,13 @@ describe("scanResourcesByID", () => {
 
     const result = await scanResourcesByID(client as any, "/api/v1/items");
 
-    // Non-numeric ids should sort to position 0, so they come before numeric IDs
-    expect(result.data).toHaveLength(3);
-    // Numeric id=2 should appear after the non-numeric ones (which both sort as 0)
-    const numericItem = result.data.find(
-      (r: any) => typeof r === "object" && r !== null && r.id === 2
-    );
-    expect(numericItem).toBeDefined();
+    // Non-numeric ids sort as 0 (via NaN guard), so they come before numeric ID 2.
+    // Stable sort preserves push order among equal keys.
+    expect(result.data).toEqual([
+      { id: "abc", name: "Alpha" },
+      { id: "xyz", name: "Gamma" },
+      { id: 2, name: "Beta" },
+    ]);
   });
 
   it("returns empty data when no resources exist", async () => {
@@ -107,6 +107,25 @@ describe("scanResourcesByID", () => {
     const result = await scanResourcesByID(client as any, "/api/v1/items", 3);
 
     expect(result.data).toHaveLength(3);
+  });
+
+  it("returns sorted results even when limit triggers early exit", async () => {
+    const client = createMockClient();
+    // Simulate non-deterministic fetch ordering: higher IDs resolve first
+    client.get.mockImplementation((path: string) => {
+      const match = path.match(/\/(\d+)$/);
+      const id = match ? Number(match[1]) : 0;
+      return new Promise((resolve) => {
+        setTimeout(() => resolve({ id, name: `Item ${id}` }), 20 - id);
+      });
+    });
+
+    const result = await scanResourcesByID(client as any, "/api/v1/items", 5);
+
+    expect(result.data).toHaveLength(5);
+    const ids = result.data.map((r: any) => r.id);
+    const sortedIds = [...ids].sort((a, b) => a - b);
+    expect(ids).toEqual(sortedIds);
   });
 
   it("continues scanning when resources exist near the tail of a batch", async () => {
