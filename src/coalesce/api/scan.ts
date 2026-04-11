@@ -64,8 +64,10 @@ export async function scanResourcesByID(
   // Sort by ID for deterministic ordering (resources arrive in non-deterministic
   // order due to concurrent fetches).
   found.sort((a, b) => {
-    const aId = typeof a === "object" && a !== null && "id" in a ? Number((a as Record<string, unknown>).id) : 0;
-    const bId = typeof b === "object" && b !== null && "id" in b ? Number((b as Record<string, unknown>).id) : 0;
+    const aRaw = typeof a === "object" && a !== null && "id" in a ? Number((a as Record<string, unknown>).id) : 0;
+    const bRaw = typeof b === "object" && b !== null && "id" in b ? Number((b as Record<string, unknown>).id) : 0;
+    const aId = Number.isFinite(aRaw) ? aRaw : 0;
+    const bId = Number.isFinite(bRaw) ? bRaw : 0;
     return aId - bId;
   });
 
