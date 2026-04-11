@@ -6,6 +6,12 @@ const SCAN_CONCURRENCY = 20;
 const SCAN_TAIL_THRESHOLD = 10;
 const SCAN_MAX_ID = 10_000;
 
+function compareById(a: unknown, b: unknown): number {
+  const aRaw = typeof a === "object" && a !== null && "id" in a ? Number((a as Record<string, unknown>).id) : 0;
+  const bRaw = typeof b === "object" && b !== null && "id" in b ? Number((b as Record<string, unknown>).id) : 0;
+  return (Number.isFinite(aRaw) ? aRaw : 0) - (Number.isFinite(bRaw) ? bRaw : 0);
+}
+
 /**
  * Scans sequential numeric IDs to discover resources when the API lacks
  * a collection GET endpoint. Fetches `GET {basePath}/1`, `GET {basePath}/2`, ...
@@ -51,6 +57,7 @@ export async function scanResourcesByID(
 
       await Promise.all(promises);
       if (limit && found.length >= limit) {
+        found.sort(compareById);
         return { data: found.slice(0, limit) };
       }
     }
@@ -63,13 +70,7 @@ export async function scanResourcesByID(
 
   // Sort by ID for deterministic ordering (resources arrive in non-deterministic
   // order due to concurrent fetches).
-  found.sort((a, b) => {
-    const aRaw = typeof a === "object" && a !== null && "id" in a ? Number((a as Record<string, unknown>).id) : 0;
-    const bRaw = typeof b === "object" && b !== null && "id" in b ? Number((b as Record<string, unknown>).id) : 0;
-    const aId = Number.isFinite(aRaw) ? aRaw : 0;
-    const bId = Number.isFinite(bRaw) ? bRaw : 0;
-    return aId - bId;
-  });
+  found.sort(compareById);
 
   if (found.length === 0) {
     process.stderr.write(
