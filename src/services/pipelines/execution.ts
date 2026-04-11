@@ -248,7 +248,7 @@ async function rollbackCreatedPipelineNodes(
   const rollbackFailures: RollbackCleanupFailure[] = [];
   const uniqueNodeIDs = Array.from(new Set(nodeIDs));
 
-  for (const nodeID of uniqueNodeIDs.reverse()) {
+  for (const nodeID of [...uniqueNodeIDs].reverse()) {
     try {
       await deleteWorkspaceNode(client, workspaceID, nodeID);
     } catch (error) {
