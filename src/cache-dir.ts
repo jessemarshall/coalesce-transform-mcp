@@ -66,7 +66,8 @@ export function resolveCacheResourceUri(
   let parsedUri: URL;
   try {
     parsedUri = new URL(uri);
-  } catch {
+  } catch (err) {
+    console.error(`[cache-dir] Failed to parse URI "${uri}":`, err instanceof Error ? err.message : err);
     return null;
   }
 
@@ -82,7 +83,8 @@ export function resolveCacheResourceUri(
   let relativePath: string;
   try {
     relativePath = Buffer.from(cacheKey, "base64url").toString("utf8");
-  } catch {
+  } catch (err) {
+    console.error(`[cache-dir] Failed to decode base64url cache key "${cacheKey}":`, err instanceof Error ? err.message : err);
     return null;
   }
 
