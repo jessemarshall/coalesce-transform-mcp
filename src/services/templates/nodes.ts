@@ -1,6 +1,6 @@
 import { sanitizeNodeDefinitionSqlOverridePolicy } from "../policies/sql-override.js";
 import { isPlainObject } from "../../utils.js";
-import { cloneValue } from "../shared/node-helpers.js";
+import { deepClone } from "../shared/node-helpers.js";
 
 export type NodeDefinitionTemplateOptions = {
   nodeName?: string;
@@ -79,7 +79,7 @@ function getFirstOptionValue(value: unknown): unknown {
 
 function inferDefaultValue(item: Record<string, unknown>): unknown {
   if (Object.prototype.hasOwnProperty.call(item, "default")) {
-    return cloneValue(item.default);
+    return deepClone(item.default);
   }
 
   const type = getString(item.type);

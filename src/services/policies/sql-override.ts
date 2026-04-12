@@ -1,5 +1,5 @@
 import { isPlainObject } from "../../utils.js";
-import { cloneValue } from "../shared/node-helpers.js";
+import { deepClone } from "../shared/node-helpers.js";
 
 const SQL_OVERRIDE_CONTROL_TYPE = "overrideSQLToggle";
 
@@ -15,7 +15,7 @@ export function filterSqlOverrideControls(values: string[]): string[] {
 export function sanitizeNodeDefinitionSqlOverridePolicy(
   nodeDefinition: Record<string, unknown>
 ): SqlOverridePolicySanitizationResult {
-  const cloned = cloneValue(nodeDefinition);
+  const cloned = deepClone(nodeDefinition);
   let removedControlCount = 0;
   let rewrittenExpressionCount = 0;
 

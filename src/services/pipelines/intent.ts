@@ -9,6 +9,7 @@ import {
 import {
   selectPipelineNodeType,
   type PipelineNodeTypeFamily,
+  type PipelineNodeTypeSelection,
 } from "./node-type-selection.js";
 import { getWorkspaceNodeTypeInventory } from "./workspace-resolution.js";
 
@@ -367,7 +368,7 @@ export async function buildPipelinePlanFromIntent(
     openQuestions,
     warnings,
     supportedNodeTypes: [planNodes[0]?.nodeType ?? "Stage"],
-    nodeTypeSelection: undefined as Record<string, unknown> | undefined,
+    nodeTypeSelection: undefined as PipelineNodeTypeSelection | undefined,
   };
 
   // Get the last selection result for the plan summary
@@ -383,7 +384,7 @@ export async function buildPipelinePlanFromIntent(
   plan.supportedNodeTypes = finalSelection.selection.supportedNodeTypes.length > 0
     ? finalSelection.selection.supportedNodeTypes
     : [planNodes[0]?.nodeType ?? "Stage"];
-  plan.nodeTypeSelection = finalSelection.selection as unknown as Record<string, unknown>;
+  plan.nodeTypeSelection = finalSelection.selection;
 
   return {
     status: plan.status === "ready" ? "ready" : "needs_clarification",
