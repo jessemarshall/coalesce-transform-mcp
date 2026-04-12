@@ -90,6 +90,41 @@ describe("extractCtes", () => {
     const result = extractCtes(sql);
     expect(result.ctes).toHaveLength(0);
   });
+
+  it("handles CTE with UNION ALL body (returns first branch columns)", () => {
+    const sql = `
+      WITH STG AS (
+        SELECT ID, NAME FROM CUSTOMERS
+        UNION ALL
+        SELECT ID, NAME FROM PROSPECTS
+      )
+      SELECT * FROM STG
+    `;
+    const result = extractCtes(sql);
+    expect(result.ctes).toHaveLength(1);
+    expect(result.ctes[0]!.name).toBe("STG");
+    // parseCteColumns calls extractSelectClause which returns the first SELECT's columns
+    expect(result.ctes[0]!.columns.length).toBeGreaterThanOrEqual(2);
+    expect(result.ctes[0]!.columns[0]!.outputName).toBe("ID");
+    expect(result.ctes[0]!.columns[1]!.outputName).toBe("NAME");
+  });
+
+  it("handles nested CTE (WITH inside a CTE subquery body)", () => {
+    // Snowflake supports nested WITH in subqueries
+    const sql = `
+      WITH OUTER_CTE AS (
+        SELECT * FROM (
+          WITH INNER_CTE AS (SELECT ID FROM RAW.USERS)
+          SELECT * FROM INNER_CTE
+        ) SUB
+      )
+      SELECT * FROM OUTER_CTE
+    `;
+    const result = extractCtes(sql);
+    // The outer WITH should be found; the inner WITH is inside balanced parens
+    expect(result.ctes.length).toBeGreaterThanOrEqual(1);
+    expect(result.ctes[0]!.name).toBe("OUTER_CTE");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -212,6 +247,23 @@ describe("extractCtes — WHERE clause", () => {
     expect(result.ctes[0]!.whereClause).toContain("ACTIVE");
     expect(result.ctes[0]!.whereClause).not.toContain("ORDER");
   });
+
+  it("terminates WHERE at HAVING", () => {
+    const sql = `
+      WITH AGG AS (
+        SELECT CATEGORY, COUNT(*) AS CNT
+        FROM PRODUCTS
+        WHERE ACTIVE = TRUE
+        GROUP BY CATEGORY
+        HAVING COUNT(*) > 5
+      )
+      SELECT * FROM AGG
+    `;
+    const result = extractCtes(sql);
+    expect(result.ctes[0]!.whereClause).toContain("ACTIVE");
+    expect(result.ctes[0]!.whereClause).not.toContain("HAVING");
+    expect(result.ctes[0]!.whereClause).not.toContain("COUNT");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -299,6 +351,24 @@ describe("extractCtes — GROUP BY and JOIN detection", () => {
     expect(result.ctes[0]!.hasGroupBy).toBe(true);
     expect(result.ctes[0]!.hasJoin).toBe(true);
   });
+
+  it.each([
+    ["LEFT JOIN", "LEFT JOIN"],
+    ["LEFT OUTER JOIN", "LEFT OUTER JOIN"],
+    ["RIGHT JOIN", "RIGHT JOIN"],
+    ["FULL OUTER JOIN", "FULL OUTER JOIN"],
+    ["CROSS JOIN", "CROSS JOIN"],
+  ])("detects %s as hasJoin=true", (_label, joinKeyword) => {
+    const sql = `
+      WITH JOINED AS (
+        SELECT A.ID, B.NAME
+        FROM TABLE_A A ${joinKeyword} TABLE_B B ON A.ID = B.ID
+      )
+      SELECT * FROM JOINED
+    `;
+    const result = extractCtes(sql);
+    expect(result.ctes[0]!.hasJoin).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -335,9 +405,8 @@ describe("extractCtes — inline subqueries", () => {
       SELECT * FROM (SELECT ID FROM USERS)
     `;
     const result = extractCtes(sql);
-    if (result.ctes.length > 0) {
-      expect(result.ctes[0]!.name).toBe("SUBQUERY");
-    }
+    expect(result.ctes).toHaveLength(1);
+    expect(result.ctes[0]!.name).toBe("SUBQUERY");
   });
 
   it("does not extract when FROM is a simple table", () => {
@@ -430,6 +499,33 @@ describe("extractCtes — edge cases", () => {
     const result = extractCtes(sql);
     // $ is not matched by [A-Za-z_] in the CTE header regex
     expect(result.ctes).toHaveLength(0);
+  });
+
+  it("does not skip WITH inside single-line comments (known limitation)", () => {
+    // findWithCteIndex (line 41-42) documents that it does NOT skip matches
+    // inside string literals or comments. A commented-out CTE header that
+    // passes the header check will be matched as a real CTE.
+    const sql = `
+      -- WITH fake AS (SELECT 1)
+      WITH REAL_CTE AS (SELECT ID FROM USERS)
+      SELECT * FROM REAL_CTE
+    `;
+    const result = extractCtes(sql);
+    // The parser matches "fake" from the comment first — known limitation
+    const names = result.ctes.map((c) => c.name);
+    expect(names).toContain("FAKE");
+  });
+
+  it("does not skip WITH inside block comments (known limitation)", () => {
+    const sql = `
+      /* WITH fake AS (SELECT 1) */
+      WITH REAL_CTE AS (SELECT ID FROM USERS)
+      SELECT * FROM REAL_CTE
+    `;
+    const result = extractCtes(sql);
+    // Same limitation: block-commented CTE headers are matched
+    const names = result.ctes.map((c) => c.name);
+    expect(names).toContain("FAKE");
   });
 });
 
