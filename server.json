@@ -45,6 +45,13 @@
           "name": "COALESCE_REPO_PATH"
         },
         {
+          "description": "Base directory for the local data cache. When set, cache files are written here instead of the working directory.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_CACHE_DIR"
+        },
+        {
           "description": "JSON size threshold before auto-caching to disk. Defaults to 32768.",
           "isRequired": false,
           "format": "string",

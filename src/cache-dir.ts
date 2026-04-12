@@ -8,7 +8,7 @@ export const CACHE_DIR_NAME = "coalesce_transform_mcp_data_cache";
 export const CACHE_RESOURCE_URI_PREFIX = "coalesce://cache/";
 
 export function getCacheDir(baseDir?: string): string {
-  return join(baseDir ?? process.cwd(), CACHE_DIR_NAME);
+  return join(baseDir ?? process.env.COALESCE_CACHE_DIR ?? process.cwd(), CACHE_DIR_NAME);
 }
 
 export type CacheResourceLink = {

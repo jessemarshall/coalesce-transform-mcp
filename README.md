@@ -73,6 +73,7 @@ Only `COALESCE_ACCESS_TOKEN` is required. Everything else is optional.
 | `COALESCE_BASE_URL` | Region-specific base URL. | `https://app.coalescesoftware.io (US)` |
 | `COALESCE_ORG_ID` | Fallback org ID for cancel-run. | — |
 | `COALESCE_REPO_PATH` | Local repo root for repo-backed tools and pipeline planning. | — |
+| `COALESCE_CACHE_DIR` | Base directory for the local data cache. When set, cache files are written here instead of the working directory. | — |
 | `COALESCE_MCP_AUTO_CACHE_MAX_BYTES` | JSON size threshold before auto-caching to disk. | `32768` |
 | `COALESCE_MCP_LINEAGE_TTL_MS` | In-memory lineage cache TTL in milliseconds. | `1800000` |
 | `COALESCE_MCP_MAX_REQUEST_BODY_BYTES` | Max outbound API request body size. | `524288` |
