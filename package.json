@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "postbuild": "chmod +x dist/index.js",
     "dev": "tsc --watch",
     "import:node-type-corpus": "node scripts/import-node-type-corpus.mjs",
     "test": "vitest run",
