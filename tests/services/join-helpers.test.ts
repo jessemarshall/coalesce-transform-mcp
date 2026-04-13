@@ -54,6 +54,15 @@ function makePredRefInfo(overrides: Partial<PredecessorRefInfo> = {}): Predecess
   };
 }
 
+/** Read the joinCondition from a body's first sourceMapping entry. */
+function getJoinCondition(body: Record<string, unknown>): string {
+  const metadata = body.metadata as Record<string, unknown>;
+  const sourceMapping = metadata.sourceMapping as Record<string, unknown>[];
+  const first = sourceMapping[0] as Record<string, unknown>;
+  const join = first.join as Record<string, unknown>;
+  return join.joinCondition as string;
+}
+
 // ── buildPredecessorSummary ────────────────────────────────────────────────
 
 describe("buildPredecessorSummary", () => {
@@ -469,6 +478,60 @@ describe("generateJoinSQL", () => {
     expect(result.fromClause).toContain("LEFT_TABLE");
     expect(result.fullSQL).toContain("RIGHT_TABLE");
   });
+
+  it("uses each suggestion's own leftPredecessorName in ON conditions for 3+ predecessors", () => {
+    // buildJoinSuggestions produces all pairwise combos: (A,B), (A,C), (B,C)
+    const suggestions: JoinSuggestion[] = [
+      {
+        leftPredecessorNodeID: "n1",
+        leftPredecessorName: "ORDERS",
+        rightPredecessorNodeID: "n2",
+        rightPredecessorName: "CUSTOMERS",
+        commonColumns: [
+          { normalizedName: "CUSTOMER_ID", leftColumnName: "CUSTOMER_ID", rightColumnName: "CUSTOMER_ID" },
+        ],
+      },
+      {
+        leftPredecessorNodeID: "n1",
+        leftPredecessorName: "ORDERS",
+        rightPredecessorNodeID: "n3",
+        rightPredecessorName: "PRODUCTS",
+        commonColumns: [
+          { normalizedName: "PRODUCT_ID", leftColumnName: "PRODUCT_ID", rightColumnName: "PRODUCT_ID" },
+        ],
+      },
+      {
+        leftPredecessorNodeID: "n2",
+        leftPredecessorName: "CUSTOMERS",
+        rightPredecessorNodeID: "n3",
+        rightPredecessorName: "PRODUCTS",
+        commonColumns: [
+          { normalizedName: "REGION_ID", leftColumnName: "REGION_ID", rightColumnName: "REGION_ID" },
+        ],
+      },
+    ];
+
+    const result = generateJoinSQL(suggestions);
+
+    // FROM clause uses the first suggestion's left table
+    expect(result.fromClause).toBe('FROM "ORDERS"');
+    expect(result.joinClauses).toHaveLength(3);
+
+    // First join: ORDERS → CUSTOMERS — ON should reference ORDERS
+    expect(result.joinClauses[0].onConditions[0]).toBe(
+      '"ORDERS"."CUSTOMER_ID" = "CUSTOMERS"."CUSTOMER_ID"'
+    );
+
+    // Second join: ORDERS → PRODUCTS — ON should reference ORDERS
+    expect(result.joinClauses[1].onConditions[0]).toBe(
+      '"ORDERS"."PRODUCT_ID" = "PRODUCTS"."PRODUCT_ID"'
+    );
+
+    // Third join: CUSTOMERS → PRODUCTS — ON must reference CUSTOMERS, not ORDERS
+    expect(result.joinClauses[2].onConditions[0]).toBe(
+      '"CUSTOMERS"."REGION_ID" = "PRODUCTS"."REGION_ID"'
+    );
+  });
 });
 
 // ── generateRefJoinSQL ─────────────────────────────────────────────────────
@@ -777,17 +840,17 @@ describe("analyzeColumnsForGroupBy", () => {
     expect(result.groupByColumns).toEqual(["ID"]);
   });
 
-  it("flags invalid when aggregates exist but no GROUP BY columns with multiple columns", () => {
+  it("treats pure-aggregate queries as valid without GROUP BY", () => {
     const columns: ColumnTransform[] = [
       { name: "TOTAL", transform: "SUM(AMOUNT)" },
       { name: "AVG_PRICE", transform: "AVG(PRICE)" },
     ];
 
     const result = analyzeColumnsForGroupBy(columns);
-    // Code flags this as invalid (aggregates + no GROUP BY + >1 column)
-    // even though pure-aggregate queries are valid SQL
-    expect(result.validation.valid).toBe(false);
-    expect(result.validation.errors).toHaveLength(1);
+    // Pure-aggregate queries are valid SQL — the entire result set is one group
+    expect(result.validation.valid).toBe(true);
+    expect(result.validation.errors).toEqual([]);
+    expect(result.groupByClause).toBe("");
   });
 
   it("considers single aggregate column valid without GROUP BY", () => {
@@ -840,8 +903,7 @@ describe("ensureFromClauseInSourceMapping", () => {
 
     ensureFromClauseInSourceMapping(body);
 
-    const first = (body.metadata as any).sourceMapping[0];
-    expect(first.join.joinCondition).toBe(
+    expect(getJoinCondition(body)).toBe(
       `FROM {{ ref('STG', 'UPSTREAM') }} "UPSTREAM"`
     );
   });
@@ -862,8 +924,7 @@ describe("ensureFromClauseInSourceMapping", () => {
 
     ensureFromClauseInSourceMapping(body);
 
-    const first = (body.metadata as any).sourceMapping[0];
-    expect(first.join.joinCondition).toBe("FROM existing");
+    expect(getJoinCondition(body)).toBe("FROM existing");
   });
 
   it("does nothing when metadata is missing", () => {
@@ -876,7 +937,8 @@ describe("ensureFromClauseInSourceMapping", () => {
   it("does nothing when sourceMapping is empty", () => {
     const body: Record<string, unknown> = { metadata: { sourceMapping: [] } };
     ensureFromClauseInSourceMapping(body);
-    expect((body.metadata as any).sourceMapping).toEqual([]);
+    const metadata = body.metadata as Record<string, unknown>;
+    expect(metadata.sourceMapping).toEqual([]);
   });
 
   it("generates ref without locationName when it is missing", () => {
@@ -893,8 +955,7 @@ describe("ensureFromClauseInSourceMapping", () => {
 
     ensureFromClauseInSourceMapping(body);
 
-    const first = (body.metadata as any).sourceMapping[0];
-    expect(first.join.joinCondition).toBe(`FROM {{ ref('UPSTREAM') }} "UPSTREAM"`);
+    expect(getJoinCondition(body)).toBe(`FROM {{ ref('UPSTREAM') }} "UPSTREAM"`);
   });
 
   it("does nothing when dependencies are empty", () => {
@@ -911,8 +972,7 @@ describe("ensureFromClauseInSourceMapping", () => {
 
     ensureFromClauseInSourceMapping(body);
 
-    const first = (body.metadata as any).sourceMapping[0];
-    expect(first.join.joinCondition).toBe("");
+    expect(getJoinCondition(body)).toBe("");
   });
 
   it("treats whitespace-only joinCondition as empty", () => {
@@ -931,12 +991,8 @@ describe("ensureFromClauseInSourceMapping", () => {
 
     ensureFromClauseInSourceMapping(body);
 
-    // Whitespace trims to empty, so FROM clause should NOT be generated
-    // (the function checks `existing` which is trimmed — but the empty check uses truthiness)
-    // Actually, let me re-read: `existing` is trimmed, and `if (existing) return;` —
-    // "   ".trim() === "" which is falsy, so it should generate the FROM clause
-    const first = (body.metadata as any).sourceMapping[0];
-    expect(first.join.joinCondition).toContain("FROM");
+    // "   ".trim() === "" is falsy, so the function generates the FROM clause
+    expect(getJoinCondition(body)).toContain("FROM");
   });
 });
 
@@ -957,9 +1013,8 @@ describe("appendWhereToJoinCondition", () => {
 
     appendWhereToJoinCondition(body, "STATUS = 'ACTIVE'");
 
-    const first = (body.metadata as any).sourceMapping[0];
-    expect(first.join.joinCondition).toContain("WHERE STATUS = 'ACTIVE'");
-    expect(first.join.joinCondition).toContain("FROM");
+    expect(getJoinCondition(body)).toContain("WHERE STATUS = 'ACTIVE'");
+    expect(getJoinCondition(body)).toContain("FROM");
   });
 
   it("appends with AND when WHERE already exists", () => {
@@ -978,8 +1033,7 @@ describe("appendWhereToJoinCondition", () => {
 
     appendWhereToJoinCondition(body, "REGION = 'US'");
 
-    const first = (body.metadata as any).sourceMapping[0];
-    expect(first.join.joinCondition).toContain("AND REGION = 'US'");
+    expect(getJoinCondition(body)).toContain("AND REGION = 'US'");
   });
 
   it("strips leading WHERE keyword from the condition", () => {
@@ -996,7 +1050,7 @@ describe("appendWhereToJoinCondition", () => {
 
     appendWhereToJoinCondition(body, "WHERE STATUS = 'ACTIVE'");
 
-    const condition = (body.metadata as any).sourceMapping[0].join.joinCondition;
+    const condition = getJoinCondition(body);
     // Should not have "WHERE WHERE"
     expect(condition).not.toContain("WHERE WHERE");
     expect(condition).toContain("WHERE STATUS = 'ACTIVE'");
@@ -1016,7 +1070,7 @@ describe("appendWhereToJoinCondition", () => {
 
     appendWhereToJoinCondition(body, 'STATUS = \\"ACTIVE\\"');
 
-    const condition = (body.metadata as any).sourceMapping[0].join.joinCondition;
+    const condition = getJoinCondition(body);
     expect(condition).toContain('STATUS = "ACTIVE"');
     expect(condition).not.toContain("\\");
   });
@@ -1035,7 +1089,7 @@ describe("appendWhereToJoinCondition", () => {
 
     appendWhereToJoinCondition(body, "X = 1");
 
-    const condition = (body.metadata as any).sourceMapping[0].join.joinCondition;
+    const condition = getJoinCondition(body);
     expect(condition).toContain("FROM {{ ref('STG', 'UPSTREAM') }}");
     expect(condition).toContain("WHERE X = 1");
   });
@@ -1054,8 +1108,7 @@ describe("appendWhereToJoinCondition", () => {
 
     appendWhereToJoinCondition(body, "X = 1");
 
-    const condition = (body.metadata as any).sourceMapping[0].join.joinCondition;
-    expect(condition).toBe("WHERE X = 1");
+    expect(getJoinCondition(body)).toBe("WHERE X = 1");
   });
 
   it("does nothing for empty where condition", () => {
@@ -1072,8 +1125,7 @@ describe("appendWhereToJoinCondition", () => {
 
     appendWhereToJoinCondition(body, "   ");
 
-    const condition = (body.metadata as any).sourceMapping[0].join.joinCondition;
-    expect(condition).toBe(`FROM "T"`);
+    expect(getJoinCondition(body)).toBe(`FROM "T"`);
   });
 
   it("does nothing for WHERE-only input", () => {
@@ -1090,8 +1142,7 @@ describe("appendWhereToJoinCondition", () => {
 
     appendWhereToJoinCondition(body, "WHERE   ");
 
-    const condition = (body.metadata as any).sourceMapping[0].join.joinCondition;
-    expect(condition).toBe(`FROM "T"`);
+    expect(getJoinCondition(body)).toBe(`FROM "T"`);
   });
 
   it("does nothing when metadata is missing", () => {
@@ -1103,6 +1154,7 @@ describe("appendWhereToJoinCondition", () => {
   it("does nothing when sourceMapping is empty", () => {
     const body: Record<string, unknown> = { metadata: { sourceMapping: [] } };
     appendWhereToJoinCondition(body, "X = 1");
-    expect((body.metadata as any).sourceMapping).toEqual([]);
+    const metadata = body.metadata as Record<string, unknown>;
+    expect(metadata.sourceMapping).toEqual([]);
   });
 });
