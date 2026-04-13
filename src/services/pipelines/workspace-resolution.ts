@@ -26,6 +26,8 @@ export {
   buildPlanFromSql,
 } from "./plan-builder.js";
 
+const MAX_PAGES = 500;
+
 async function listAllWorkspaceNodes(
   client: CoalesceClient,
   workspaceID: string
@@ -34,8 +36,15 @@ async function listAllWorkspaceNodes(
   const seenCursors = new Set<string>();
   let next: string | undefined;
   let isFirstPage = true;
+  let pageCount = 0;
 
   while (isFirstPage || next) {
+    if (++pageCount > MAX_PAGES) {
+      throw new Error(
+        `Workspace node pagination exceeded ${MAX_PAGES} pages (${nodes.length} nodes fetched). ` +
+        `This likely indicates an API bug. The nodes fetched so far are not returned.`
+      );
+    }
     const response = await listWorkspaceNodes(client, {
       workspaceID,
       limit: WORKSPACE_NODE_PAGE_LIMIT,
