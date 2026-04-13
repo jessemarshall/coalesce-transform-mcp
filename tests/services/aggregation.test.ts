@@ -279,8 +279,8 @@ describe("Join to Aggregation Conversion", () => {
 
       // Pure-aggregate queries (all columns are aggregates) are valid SQL —
       // the entire result set is a single group, no GROUP BY needed
-      expect(result.groupByAnalysis.validation.valid).toBe(true);
-      expect(result.groupByAnalysis.validation.errors).toEqual([]);
+      expect(result.groupByAnalysis.groupByClause).toBe("");
+      expect(result.groupByAnalysis.hasAggregates).toBe(true);
     });
 
     it("generates correct JOIN SQL from predecessor common columns", async () => {

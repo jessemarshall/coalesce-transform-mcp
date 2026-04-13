@@ -45,10 +45,6 @@ export type GroupByAnalysis = {
   aggregateColumns: { name: string; transform: string }[];
   hasAggregates: boolean;
   groupByClause: string;
-  validation: {
-    valid: boolean;
-    errors: string[];
-  };
 };
 
 export type ColumnTransform = {
@@ -482,7 +478,6 @@ export function analyzeColumnsForGroupBy(
 
   const groupByColumns: string[] = [];
   const aggregateColumns: { name: string; transform: string }[] = [];
-  const errors: string[] = [];
 
   for (const col of columns) {
     const upperTransform = col.transform.toUpperCase();
@@ -502,11 +497,6 @@ export function analyzeColumnsForGroupBy(
 
   const hasAggregates = aggregateColumns.length > 0;
 
-  // Non-aggregate columns are always captured in groupByColumns, so a mix of aggregates
-  // and bare columns is automatically handled by the GROUP BY clause generation above.
-  // Pure-aggregate queries (all columns are aggregates, groupByColumns empty) are valid SQL.
-  const valid = errors.length === 0;
-
   const groupByClause =
     hasAggregates && groupByColumns.length > 0
       ? `GROUP BY ${groupByColumns.join(", ")}`
@@ -517,10 +507,6 @@ export function analyzeColumnsForGroupBy(
     aggregateColumns,
     hasAggregates,
     groupByClause,
-    validation: {
-      valid,
-      errors,
-    },
   };
 }
 
