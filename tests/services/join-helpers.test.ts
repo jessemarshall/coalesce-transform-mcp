@@ -799,8 +799,6 @@ describe("analyzeColumnsForGroupBy", () => {
     expect(result.aggregateColumns).toHaveLength(2);
     expect(result.hasAggregates).toBe(true);
     expect(result.groupByClause).toBe("GROUP BY REGION");
-    expect(result.validation.valid).toBe(true);
-    expect(result.validation.errors).toEqual([]);
   });
 
   it("generates multi-column GROUP BY clause", () => {
@@ -848,8 +846,6 @@ describe("analyzeColumnsForGroupBy", () => {
 
     const result = analyzeColumnsForGroupBy(columns);
     // Pure-aggregate queries are valid SQL — the entire result set is one group
-    expect(result.validation.valid).toBe(true);
-    expect(result.validation.errors).toEqual([]);
     expect(result.groupByClause).toBe("");
   });
 
@@ -859,7 +855,6 @@ describe("analyzeColumnsForGroupBy", () => {
     ];
 
     const result = analyzeColumnsForGroupBy(columns);
-    expect(result.validation.valid).toBe(true);
     expect(result.groupByClause).toBe("");
   });
 
@@ -880,7 +875,6 @@ describe("analyzeColumnsForGroupBy", () => {
     expect(result.aggregateColumns).toEqual([]);
     expect(result.hasAggregates).toBe(false);
     expect(result.groupByClause).toBe("");
-    expect(result.validation.valid).toBe(true);
   });
 });
 

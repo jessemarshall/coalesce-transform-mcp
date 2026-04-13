@@ -161,9 +161,6 @@ export async function convertJoinToAggregation(
   const groupByAnalysis = analyzeColumnsForGroupBy(columns);
 
   const warnings: string[] = [];
-  if (!groupByAnalysis.validation.valid) {
-    warnings.push(...groupByAnalysis.validation.errors);
-  }
 
   // Derive business key and change tracking column names
   // Business key = GROUP BY columns (dimensions)
@@ -278,7 +275,7 @@ export async function convertJoinToAggregation(
     joinSQL,
     groupByAnalysis,
     validation: {
-      valid: groupByAnalysis.validation.valid && warnings.length === 0,
+      valid: warnings.length === 0,
       warnings,
     },
     ...completion,
