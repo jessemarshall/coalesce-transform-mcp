@@ -253,12 +253,14 @@ export function generateJoinSQL(
   const sqlParts: string[] = [fromClause];
 
   for (const suggestion of joinSuggestions) {
+    const suggestionLeftName = suggestion.leftPredecessorName || "LEFT_TABLE";
+    const suggestionLeftAlias = `"${suggestionLeftName}"`;
     const rightTableName = suggestion.rightPredecessorName || "RIGHT_TABLE";
     const rightAlias = `"${rightTableName}"`;
 
     const onConditions = suggestion.commonColumns.map(
       (col) =>
-        `${leftAlias}."${col.leftColumnName}" = ${rightAlias}."${col.rightColumnName}"`
+        `${suggestionLeftAlias}."${col.leftColumnName}" = ${rightAlias}."${col.rightColumnName}"`
     );
 
     const joinClause: JoinClause = {
@@ -500,14 +502,10 @@ export function analyzeColumnsForGroupBy(
 
   const hasAggregates = aggregateColumns.length > 0;
 
-  // Validation: if we have aggregates, we need GROUP BY for non-aggregate columns
-  let valid = true;
-  if (hasAggregates && groupByColumns.length === 0 && columns.length > 1) {
-    errors.push(
-      "Query has aggregate functions but no GROUP BY columns. All non-aggregate columns must be in GROUP BY."
-    );
-    valid = false;
-  }
+  // Non-aggregate columns are always captured in groupByColumns, so a mix of aggregates
+  // and bare columns is automatically handled by the GROUP BY clause generation above.
+  // Pure-aggregate queries (all columns are aggregates, groupByColumns empty) are valid SQL.
+  const valid = errors.length === 0;
 
   const groupByClause =
     hasAggregates && groupByColumns.length > 0
