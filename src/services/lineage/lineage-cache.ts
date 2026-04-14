@@ -10,6 +10,7 @@ import { DEFAULT_PAGE_SIZE, DETAIL_FETCH_TIMEOUT_MS } from "../../constants.js";
 
 const DEFAULT_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const MAX_CACHE_ENTRIES = 50;
+const MAX_PAGES = 500;
 const PROGRESS_INTERVAL = 500;
 
 export type LineageNode = {
@@ -273,8 +274,15 @@ async function fetchAllNodes(
   const seenCursors = new Set<string>();
   let next: string | undefined;
   let isFirstPage = true;
+  let pageCount = 0;
 
   while (isFirstPage || next) {
+    if (++pageCount > MAX_PAGES) {
+      throw new Error(
+        `Workspace node pagination exceeded ${MAX_PAGES} pages (${items.length} nodes fetched). ` +
+        `This likely indicates an API bug. The nodes fetched so far are not returned.`
+      );
+    }
     const response = await listWorkspaceNodes(client, {
       workspaceID: safeID,
       detail: true,
