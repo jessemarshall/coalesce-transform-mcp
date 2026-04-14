@@ -32,6 +32,19 @@ type ToolDef<S extends z.ZodType> = {
 type ToolCallback = any;
 
 /**
+ * Extract a workspaceID from an arbitrary tool input object so the auto-cache
+ * writer can partition cached responses by workspace. Returns undefined for
+ * tools whose inputs are not workspace-scoped (e.g. list_workspaces).
+ */
+function extractWorkspaceID(params: unknown): string | undefined {
+  if (params && typeof params === "object" && !Array.isArray(params)) {
+    const value = (params as Record<string, unknown>).workspaceID;
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return undefined;
+}
+
+/**
  * Define a simple passthrough tool: calls an API function with (client, params)
  * and wraps the result in buildJsonToolResponse / handleToolError.
  */
@@ -53,7 +66,9 @@ export function defineSimpleTool<S extends z.ZodType>(
     (async (params: z.infer<S>) => {
       try {
         const result = await apiFunc(client, params);
-        return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result);
+        return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result, {
+          workspaceID: extractWorkspaceID(params),
+        });
       } catch (error) {
         return handleToolError(error);
       }
@@ -83,7 +98,9 @@ export function defineLocalTool<S extends z.ZodType>(
     (async (params: z.infer<S>) => {
       try {
         const result = await handler(params);
-        return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result);
+        return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result, {
+          workspaceID: extractWorkspaceID(params),
+        });
       } catch (error) {
         return handleToolError(error);
       }
@@ -122,7 +139,9 @@ export function defineDestructiveTool<S extends z.ZodType>(
         if (approvalResponse) return approvalResponse;
 
         const result = await apiFunc(client, params);
-        return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result);
+        return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result, {
+          workspaceID: extractWorkspaceID(params),
+        });
       } catch (error) {
         return handleToolError(error);
       }

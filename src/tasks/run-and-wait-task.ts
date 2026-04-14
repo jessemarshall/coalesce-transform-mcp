@@ -52,7 +52,9 @@ export function registerRunAndWaitTask(
               signal: extra.signal,
             });
             const sanitized = sanitizeResponse(result);
-            const response = buildJsonToolResponse("run_and_wait", sanitized);
+            const response = buildJsonToolResponse("run_and_wait", sanitized, {
+              workspaceID: params.runDetails?.environmentID,
+            });
             await extra.taskStore.storeTaskResult(
               task.taskId,
               "completed",

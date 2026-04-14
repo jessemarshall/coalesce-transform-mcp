@@ -238,7 +238,8 @@ export function defineNodeTypeCorpusTools(
         };
         return buildJsonToolResponse(
           "generate_set_workspace_node_template_from_variant",
-          result
+          result,
+          { workspaceID: params.workspaceID }
         );
       } catch (error) {
         return handleToolError(error);

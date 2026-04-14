@@ -84,7 +84,7 @@ export function defineLineageTools(
           nodeType: node.nodeType,
           totalAncestors: ancestors.length,
           ancestors,
-        });
+        }, { workspaceID: params.workspaceID });
       } catch (error) {
         return handleToolError(error);
       }
@@ -143,7 +143,7 @@ export function defineLineageTools(
           nodeType: node.nodeType,
           totalDependents: dependents.length,
           dependents,
-        });
+        }, { workspaceID: params.workspaceID });
       } catch (error) {
         return handleToolError(error);
       }
@@ -217,7 +217,7 @@ export function defineLineageTools(
           totalDownstream: downstream.length,
           upstream,
           downstream,
-        });
+        }, { workspaceID: params.workspaceID });
       } catch (error) {
         return handleToolError(error);
       }
@@ -272,7 +272,9 @@ export function defineLineageTools(
 
         const result = analyzeNodeImpact(cache, params.nodeID, params.columnID);
 
-        return buildJsonToolResponse("analyze_impact", result);
+        return buildJsonToolResponse("analyze_impact", result, {
+          workspaceID: params.workspaceID,
+        });
       } catch (error) {
         return handleToolError(error);
       }
@@ -374,7 +376,9 @@ export function defineLineageTools(
           process.env.COALESCE_CACHE_DIR ?? process.cwd(),
         );
 
-        const response = buildJsonToolResponse("propagate_column_change", result);
+        const response = buildJsonToolResponse("propagate_column_change", result, {
+          workspaceID: params.workspaceID,
+        });
         if (result.partialFailure) {
           return {
             ...response,
@@ -456,7 +460,9 @@ export function defineLineageTools(
           limit: params.limit,
         });
 
-        return buildJsonToolResponse("search_workspace_content", result);
+        return buildJsonToolResponse("search_workspace_content", result, {
+          workspaceID: params.workspaceID,
+        });
       } catch (error) {
         return handleToolError(error);
       }
@@ -502,7 +508,9 @@ export function defineLineageTools(
 
         const result = auditDocumentationCoverage(cache);
 
-        return buildJsonToolResponse("audit_documentation_coverage", result);
+        return buildJsonToolResponse("audit_documentation_coverage", result, {
+          workspaceID: params.workspaceID,
+        });
       } catch (error) {
         return handleToolError(error);
       }

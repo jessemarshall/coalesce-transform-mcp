@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   buildCacheResourceLink,
@@ -32,7 +32,26 @@ type JsonToolErrorResponse = {
 type JsonToolResponseOptions = {
   baseDir?: string;
   maxInlineBytes?: number;
+  /**
+   * Workspace identifier used to partition the on-disk auto-cache.
+   * When present, responses are written under `<cache>/<workspaceID>/auto-cache/`.
+   * When absent, they are written under `<cache>/_global/auto-cache/`.
+   */
+  workspaceID?: string;
 };
+
+const GLOBAL_AUTO_CACHE_BUCKET = "_global";
+
+function sanitizeWorkspaceBucket(workspaceID: string | undefined): string {
+  if (!workspaceID) return GLOBAL_AUTO_CACHE_BUCKET;
+  // Mirror the segment validation used elsewhere: strip anything that isn't a
+  // safe filesystem segment. Fall back to _global on empty/invalid input.
+  const cleaned = workspaceID.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/^[-.]+|[-.]+$/g, "");
+  if (!cleaned || cleaned === "." || cleaned === ".." || cleaned === GLOBAL_AUTO_CACHE_BUCKET) {
+    return GLOBAL_AUTO_CACHE_BUCKET;
+  }
+  return cleaned;
+}
 
 function slugifyFileComponent(value: string): string {
   return value
@@ -61,7 +80,7 @@ function getAutoCacheMaxBytes(): number {
  *  timestamp-based cleanup keeps failing (e.g. persistent permission errors). */
 const AUTO_CACHE_MAX_FILES = 200;
 
-function cleanupStaleAutoCacheFiles(autoCacheDir: string): void {
+function cleanupStaleAutoCacheFilesInBucket(autoCacheDir: string): void {
   try {
     const sessionTimestamp = SESSION_START_TIME.toISOString().replace(/[:.]/g, "-");
     const files = readdirSync(autoCacheDir)
@@ -103,12 +122,52 @@ function cleanupStaleAutoCacheFiles(autoCacheDir: string): void {
   }
 }
 
+/**
+ * Clean up stale auto-cache files across every workspace bucket (and _global)
+ * beneath the cache root. Each bucket's per-session + max-file-count limits
+ * are enforced independently so one busy workspace cannot starve another.
+ */
+function cleanupStaleAutoCacheFiles(writtenBucketDir: string, baseDir: string): void {
+  const cacheRoot = join(baseDir, CACHE_DIR_NAME);
+  let entries: string[];
+  try {
+    entries = readdirSync(cacheRoot);
+  } catch (error) {
+    // Cache root may not exist yet — clean the bucket we just wrote to and stop.
+    cleanupStaleAutoCacheFilesInBucket(writtenBucketDir);
+    const reason = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`[auto-cache] Unable to enumerate cache root ${cacheRoot}: ${reason}\n`);
+    return;
+  }
+
+  const visited = new Set<string>();
+  for (const entry of entries) {
+    const bucketAutoCache = join(cacheRoot, entry, "auto-cache");
+    try {
+      if (!existsSync(bucketAutoCache)) continue;
+      if (!statSync(bucketAutoCache).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    visited.add(bucketAutoCache);
+    cleanupStaleAutoCacheFilesInBucket(bucketAutoCache);
+  }
+
+  // Ensure the bucket we just wrote to is cleaned even if the readdir missed it
+  // (e.g. race condition with concurrent writes).
+  if (!visited.has(writtenBucketDir)) {
+    cleanupStaleAutoCacheFilesInBucket(writtenBucketDir);
+  }
+}
+
 function buildAutoCacheFilePath(
   toolName: string,
   cachedAt: string,
-  baseDir: string
+  baseDir: string,
+  workspaceID: string | undefined
 ): string {
-  const directory = join(baseDir, CACHE_DIR_NAME, "auto-cache");
+  const bucket = sanitizeWorkspaceBucket(workspaceID);
+  const directory = join(baseDir, CACHE_DIR_NAME, bucket, "auto-cache");
   mkdirSync(directory, { recursive: true });
   const timestamp = cachedAt.replace(/[:.]/g, "-");
   const safeToolName = slugifyFileComponent(toolName) || "tool-response";
@@ -235,9 +294,9 @@ export function buildJsonToolResponse(
   const cachedAt = new Date().toISOString();
   let filePath: string;
   try {
-    filePath = buildAutoCacheFilePath(toolName, cachedAt, baseDir);
+    filePath = buildAutoCacheFilePath(toolName, cachedAt, baseDir, options.workspaceID);
     writeFileSync(filePath, `${text}\n`, "utf8");
-    cleanupStaleAutoCacheFiles(dirname(filePath));
+    cleanupStaleAutoCacheFiles(dirname(filePath), baseDir);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     process.stderr.write(`[coalesce-transform-mcp] auto-cache write failed for ${toolName}: ${reason}\n`);

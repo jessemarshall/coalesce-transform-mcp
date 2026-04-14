@@ -176,10 +176,11 @@ describe("MCP Protocol Surface", () => {
     const cacheFilePath = join(
       tempDir,
       "coalesce_transform_mcp_data_cache",
+      "_global",
       "auto-cache",
       "cached-response.json"
     );
-    mkdirSync(join(tempDir, "coalesce_transform_mcp_data_cache", "auto-cache"), {
+    mkdirSync(join(tempDir, "coalesce_transform_mcp_data_cache", "_global", "auto-cache"), {
       recursive: true,
     });
     writeFileSync(cacheFilePath, JSON.stringify({ ok: true }, null, 2), "utf8");

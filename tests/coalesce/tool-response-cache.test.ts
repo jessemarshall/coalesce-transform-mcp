@@ -16,8 +16,8 @@ function createTempDir(): string {
   return mkdtempSync(join(tmpdir(), "coalesce-tool-response-cache-test-"));
 }
 
-function getAutoCacheDir(baseDir: string): string {
-  return join(baseDir, CACHE_DIR_NAME, "auto-cache");
+function getAutoCacheDir(baseDir: string, workspaceID?: string): string {
+  return join(baseDir, CACHE_DIR_NAME, workspaceID ?? "_global", "auto-cache");
 }
 
 /** Generate a payload that exceeds the given byte threshold when JSON-serialised. */
@@ -53,6 +53,48 @@ describe("buildJsonToolResponse auto-cache behaviour", () => {
 
     expect(result.structuredContent).toEqual({ small: true });
     expect(result.structuredContent).not.toHaveProperty("autoCached");
+  });
+
+  // ─── Workspace partitioning ──────────────────────────────────────────────
+
+  it("writes auto-cache under the workspace bucket when workspaceID is provided", () => {
+    const baseDir = makeTempDir();
+    buildJsonToolResponse("test_tool", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+      workspaceID: "ws-42",
+    });
+
+    const files = readdirSync(getAutoCacheDir(baseDir, "ws-42")).filter((f) => f.endsWith(".json"));
+    expect(files.length).toBe(1);
+  });
+
+  it("writes auto-cache under _global when no workspaceID is provided", () => {
+    const baseDir = makeTempDir();
+    buildJsonToolResponse("list_workspaces", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+    });
+
+    const files = readdirSync(getAutoCacheDir(baseDir)).filter((f) => f.endsWith(".json"));
+    expect(files.length).toBe(1);
+  });
+
+  it("partitions auto-cache between workspaces without cross-contamination", () => {
+    const baseDir = makeTempDir();
+    buildJsonToolResponse("tool_a", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+      workspaceID: "ws-a",
+    });
+    buildJsonToolResponse("tool_b", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+      workspaceID: "ws-b",
+    });
+
+    expect(readdirSync(getAutoCacheDir(baseDir, "ws-a")).filter((f) => f.endsWith(".json"))).toHaveLength(1);
+    expect(readdirSync(getAutoCacheDir(baseDir, "ws-b")).filter((f) => f.endsWith(".json"))).toHaveLength(1);
   });
 
   it("auto-caches when payload exceeds maxInlineBytes", () => {

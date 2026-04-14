@@ -118,7 +118,9 @@ export function registerRunAndWait(server: McpServer, client: CoalesceClient): v
           signal: extra?.signal,
           reportProgress: progressReporter,
         });
-        return buildJsonToolResponse("run_and_wait", sanitizeResponse(result));
+        return buildJsonToolResponse("run_and_wait", sanitizeResponse(result), {
+          workspaceID: params.runDetails?.environmentID,
+        });
       } catch (error) {
         return handleToolError(error);
       }
