@@ -296,7 +296,8 @@ async function requirePipelineCreationApproval(
   plan: unknown,
   confirmed?: boolean,
   confirmationToken?: string,
-  payload: Record<string, unknown> = {}
+  payload: Record<string, unknown> = {},
+  workspaceID?: string,
 ): Promise<JsonToolResponse | null> {
   if (confirmed === true) {
     // Verify the agent has the exact plan by comparing confirmation tokens.
@@ -312,7 +313,7 @@ async function requirePipelineCreationApproval(
           `Ask for explicit approval BEFORE creating any nodes. Once the user approves, call ${toolName} again with confirmed=true and the confirmationToken from this response.`,
         confirmationToken: expected,
         ...payload,
-      });
+      }, { workspaceID });
     }
     return null;
   }
@@ -328,7 +329,7 @@ async function requirePipelineCreationApproval(
         `STOP. Present the pipeline plan to the user in a table showing each node name and nodeType. ` +
         `Ask for explicit approval BEFORE creating any nodes. Once the user approves, call ${toolName} again with confirmed=true and confirmationToken="${token}".`,
       ...payload,
-    });
+    }, { workspaceID });
   }
 
   const planSummary = buildPlanSummaryForElicitation(plan);
@@ -360,7 +361,7 @@ async function requirePipelineCreationApproval(
           ? "User declined pipeline creation."
           : `Pipeline creation ${ACTION_LABELS[elicitation.action] ?? elicitation.action} by user.`,
       ...payload,
-    });
+    }, { workspaceID });
   }
 
   return null;
@@ -460,7 +461,9 @@ export function definePipelineTools(
               } : {}),
               ...result,
             };
-        return buildJsonToolResponse("plan_pipeline", response);
+        return buildJsonToolResponse("plan_pipeline", response, {
+          workspaceID: params.workspaceID,
+        });
       } catch (error) {
         return handleToolError(error);
       }
@@ -500,7 +503,8 @@ export function definePipelineTools(
             params.plan,
             params.confirmed,
             params.confirmationToken,
-            { plan: params.plan }
+            { plan: params.plan },
+            params.workspaceID,
           );
           if (approvalResponse) {
             return approvalResponse;
@@ -508,7 +512,9 @@ export function definePipelineTools(
         }
 
         const result = await createPipelineFromPlan(client, params);
-        const response = buildJsonToolResponse("create_pipeline_from_plan", result);
+        const response = buildJsonToolResponse("create_pipeline_from_plan", result, {
+          workspaceID: params.workspaceID,
+        });
         if (isPlainObject(result) && result.isError) {
           return { ...response, isError: true };
         }
@@ -575,7 +581,7 @@ export function definePipelineTools(
                     "SQL was planned but still needs clarification before creation. Review openQuestions and warnings. Present the plan to the user and wait for approval.",
                 }
               : {}),
-          });
+          }, { workspaceID: params.workspaceID });
         }
 
         const approvalResponse = await requirePipelineCreationApproval(
@@ -584,7 +590,8 @@ export function definePipelineTools(
           plan,
           params.confirmed,
           params.confirmationToken,
-          { plan }
+          { plan },
+          params.workspaceID,
         );
         if (approvalResponse) {
           return approvalResponse;
@@ -598,7 +605,9 @@ export function definePipelineTools(
           plan,
           ...((isPlainObject(execution) ? execution : { execution }) as Record<string, unknown>),
         };
-        const response = buildJsonToolResponse("create_pipeline_from_sql", result);
+        const response = buildJsonToolResponse("create_pipeline_from_sql", result, {
+          workspaceID: params.workspaceID,
+        });
         if (isPlainObject(execution) && execution.isError) {
           return { ...response, isError: true };
         }
@@ -679,7 +688,7 @@ export function definePipelineTools(
             created: false,
             ...(params.dryRun ? { dryRun: true } : {}),
             ...result,
-          });
+          }, { workspaceID: params.workspaceID });
         }
 
         // Plan is ready — require confirmation before creating
@@ -689,7 +698,8 @@ export function definePipelineTools(
           result.plan,
           params.confirmed,
           params.confirmationToken,
-          { ...result }
+          { ...result },
+          params.workspaceID,
         );
         if (approvalResponse) {
           return approvalResponse;
@@ -704,7 +714,9 @@ export function definePipelineTools(
           ...result,
           ...((isPlainObject(execution) ? execution : { execution }) as Record<string, unknown>),
         };
-        const toolResponse = buildJsonToolResponse("build_pipeline_from_intent", response);
+        const toolResponse = buildJsonToolResponse("build_pipeline_from_intent", response, {
+          workspaceID: params.workspaceID,
+        });
         if (isPlainObject(execution) && execution.isError) {
           return { ...toolResponse, isError: true };
         }
@@ -753,7 +765,9 @@ export function definePipelineTools(
           workspaceID: validatePathSegment(params.workspaceID, "workspaceID"),
           nodeIDs: params.nodeIDs,
         });
-        return buildJsonToolResponse("review_pipeline", result);
+        return buildJsonToolResponse("review_pipeline", result, {
+          workspaceID: params.workspaceID,
+        });
       } catch (error) {
         return handleToolError(error);
       }
@@ -1000,7 +1014,9 @@ export function definePipelineTools(
           warnings: [...result.warnings, ...inventory.warnings],
         };
 
-        return buildJsonToolResponse("select_pipeline_node_type", response);
+        return buildJsonToolResponse("select_pipeline_node_type", response, {
+          workspaceID: params.workspaceID,
+        });
       } catch (error) {
         return handleToolError(error);
       }
