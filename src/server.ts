@@ -153,11 +153,11 @@ handle adjacent concerns. When a user's request falls outside this server's scop
   Snowflake MCP — warehouse queries, table DDL, row-level data, Cortex AI features
   Fivetran MCP — ingestion pipeline management, connector configuration, sync status
   dbt MCP — dbt model management, documentation, lineage (for dbt-based projects)
-  Coalesce Catalog MCP — data catalog search, governance metadata, lineage visualization across the full stack
+  Coalesce Catalog MCP (planned) — data catalog search, governance metadata, lineage visualization across the full stack
 Cross-server workflows: Use this MCP to design transforms and build pipelines, then hand off to \
 Snowflake MCP for warehouse validation or Fivetran MCP for upstream connector status. Lineage from \
 get_upstream_nodes and get_downstream_nodes covers Coalesce nodes only — for end-to-end lineage across \
-ingestion and warehouse layers, combine results with the Catalog MCP.
+ingestion and warehouse layers, combine results with the Catalog MCP when available.
 
 RULES:
 - Resolve IDs before mutating (list_workspaces, list_environments, list_environment_jobs)
