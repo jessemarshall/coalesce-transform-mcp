@@ -263,16 +263,14 @@ function ensureDirectory(...parts: string[]): string {
   return directory;
 }
 
-function buildNodeCacheFileName(
+function buildNodeCacheRelativePath(
   scope: "workspace" | "environment",
   id: string,
   detail: boolean
-): string {
+): { safeID: string; fileName: string } {
   const safeID = validatePathSegment(id, `${scope}ID`);
-  if (detail) {
-    return `${scope}-${safeID}-nodes.ndjson`;
-  }
-  return `${scope}-${safeID}-nodes-summary.ndjson`;
+  const fileName = detail ? "nodes.ndjson" : "nodes-summary.ndjson";
+  return { safeID, fileName };
 }
 
 function buildRunsCacheFileName(params: {
@@ -391,10 +389,10 @@ export async function cacheWorkspaceNodes(
 }> {
   const detail = params.detail ?? true;
   const baseDir = options?.baseDir ?? process.cwd();
-  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, "nodes");
-  const baseName = buildNodeCacheFileName("workspace", params.workspaceID, detail);
-  const ndjsonPath = join(directory, baseName);
-  const metaPath = join(directory, baseName.replace(/\.ndjson$/, ".meta.json"));
+  const { safeID, fileName } = buildNodeCacheRelativePath("workspace", params.workspaceID, detail);
+  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, safeID, "nodes");
+  const ndjsonPath = join(directory, fileName);
+  const metaPath = join(directory, fileName.replace(/\.ndjson$/, ".meta.json"));
 
   const requestOptions = detail ? { timeoutMs: DETAIL_FETCH_TIMEOUT_MS } : undefined;
   const result = await streamAllPaginatedToDisk(
@@ -440,10 +438,10 @@ export async function cacheEnvironmentNodes(
 }> {
   const detail = params.detail ?? true;
   const baseDir = options?.baseDir ?? process.cwd();
-  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, "nodes");
-  const baseName = buildNodeCacheFileName("environment", params.environmentID, detail);
-  const ndjsonPath = join(directory, baseName);
-  const metaPath = join(directory, baseName.replace(/\.ndjson$/, ".meta.json"));
+  const { safeID, fileName } = buildNodeCacheRelativePath("environment", params.environmentID, detail);
+  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, safeID, "nodes");
+  const ndjsonPath = join(directory, fileName);
+  const metaPath = join(directory, fileName.replace(/\.ndjson$/, ".meta.json"));
 
   const requestOptions = detail ? { timeoutMs: DETAIL_FETCH_TIMEOUT_MS } : undefined;
   const result = await streamAllPaginatedToDisk(

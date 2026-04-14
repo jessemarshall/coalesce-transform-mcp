@@ -58,8 +58,8 @@ describe("cache snapshot tools", () => {
 
     const result = await cacheWorkspaceNodes(client as any, { workspaceID: "ws-1" }, { baseDir });
 
-    expect(result.filePath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "workspace-ws-1-nodes.ndjson"));
-    expect(result.metaPath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "workspace-ws-1-nodes.meta.json"));
+    expect(result.filePath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "ws-1", "nodes", "nodes.ndjson"));
+    expect(result.metaPath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "ws-1", "nodes", "nodes.meta.json"));
     expect(result.totalNodes).toBe(2);
     expect(client.get).toHaveBeenNthCalledWith(
       1,
@@ -100,10 +100,10 @@ describe("cache snapshot tools", () => {
     );
 
     expect(result.filePath).toBe(
-      join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "environment-env-1-nodes-summary.ndjson")
+      join(baseDir, "coalesce_transform_mcp_data_cache", "env-1", "nodes", "nodes-summary.ndjson")
     );
     expect(result.metaPath).toBe(
-      join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "environment-env-1-nodes-summary.meta.json")
+      join(baseDir, "coalesce_transform_mcp_data_cache", "env-1", "nodes", "nodes-summary.meta.json")
     );
     expect(result.detail).toBe(false);
     expect(client.get).toHaveBeenCalledWith("/api/v1/environments/env-1/nodes", {
