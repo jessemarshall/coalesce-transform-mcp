@@ -171,6 +171,33 @@ export function registerPrompts(server: McpServer): void {
   );
 
   server.registerPrompt(
+    "cross-server-workflow",
+    {
+      title: "Cross-Server Workflow",
+      description:
+        "Patterns for combining this MCP with Snowflake, Fivetran, dbt, or Catalog MCPs for end-to-end data workflows.",
+    },
+    async () => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              "This MCP manages Coalesce transform definitions — not warehouse data, ingestion, or catalog metadata. " +
+              "For cross-server workflows:\n" +
+              "- Pre-run validation: Fivetran MCP (check sync status) → this MCP (run_and_wait) → Snowflake MCP (validate output)\n" +
+              "- Impact analysis: this MCP (analyze_impact) → Catalog MCP (check downstream consumers beyond Coalesce)\n" +
+              "- Debugging: Snowflake MCP (find bad data) → this MCP (trace upstream lineage) → Fivetran MCP (check source sync)\n" +
+              "Lineage tools here cover Coalesce nodes only. For end-to-end lineage across ingestion, transform, and consumption, combine with the Catalog MCP.\n" +
+              "Read coalesce://context/ecosystem-boundaries for full details on scope boundaries and handoff patterns.",
+          },
+        },
+      ],
+    })
+  );
+
+  server.registerPrompt(
     "column-change-workflow",
     {
       title: "Column Change Workflow",

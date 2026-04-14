@@ -146,6 +146,19 @@ Diagnose a failure: list_runs or get_run_details → diagnose_run_failure
 Audit a workspace: (use the audit-workspace prompt for a guided workflow)
 Prepare for deployment: (use the prepare-for-deployment prompt for a guided workflow)
 
+ECOSYSTEM BOUNDARIES:
+
+This MCP manages Coalesce transform definitions and workspace configuration. Other data engineering MCPs \
+handle adjacent concerns. When a user's request falls outside this server's scope, point them to the appropriate tool:
+  Snowflake MCP — warehouse queries, table DDL, row-level data, Cortex AI features
+  Fivetran MCP — ingestion pipeline management, connector configuration, sync status
+  dbt MCP — dbt model management, documentation, lineage (for dbt-based projects)
+  Coalesce Catalog MCP — data catalog search, governance metadata, lineage visualization across the full stack
+Cross-server workflows: Use this MCP to design transforms and build pipelines, then hand off to \
+Snowflake MCP for warehouse validation or Fivetran MCP for upstream connector status. Lineage from \
+get_upstream_nodes and get_downstream_nodes covers Coalesce nodes only — for end-to-end lineage across \
+ingestion and warehouse layers, combine results with the Catalog MCP.
+
 RULES:
 - Resolve IDs before mutating (list_workspaces, list_environments, list_environment_jobs)
 - Always plan_pipeline before creating pipeline nodes; wait for explicit user approval

@@ -26,7 +26,7 @@ describe("Resources", () => {
   it("registers fixed context resources plus the cache resource template", () => {
     registerResources(server);
 
-    expect(resourceSpy).toHaveBeenCalledTimes(24);
+    expect(resourceSpy).toHaveBeenCalledTimes(25);
     const fixedResourceCalls = resourceSpy.mock.calls
       .filter((call) => typeof call[1] === "string")
       .map((call) => ({
@@ -125,6 +125,10 @@ describe("Resources", () => {
       {
         name: "Pipeline Workshop Guide",
         uri: "coalesce://context/pipeline-workshop-guide",
+      },
+      {
+        name: "Ecosystem Boundaries",
+        uri: "coalesce://context/ecosystem-boundaries",
       },
     ]);
 
