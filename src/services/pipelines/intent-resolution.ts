@@ -3,6 +3,7 @@ import { listWorkspaceNodes } from "../../coalesce/api/nodes.js";
 import { isPlainObject } from "../../utils.js";
 import { normalizeSqlIdentifier } from "./sql-parsing.js";
 import { type WorkspaceNodeIndexEntry } from "../shared/node-helpers.js";
+import { WORKSPACE_NODE_PAGE_LIMIT } from "./planning-types.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,7 +33,6 @@ export type ResolvedEntity =
 // Workspace node listing
 // ---------------------------------------------------------------------------
 
-const WORKSPACE_NODE_PAGE_LIMIT = 200;
 const MAX_PAGES = 500;
 
 async function listAllWorkspaceNodes(
