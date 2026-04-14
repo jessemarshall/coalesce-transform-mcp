@@ -267,13 +267,13 @@ describe("lineage-cache", () => {
       const baseDir = createTempDir();
 
       // Write a snapshot to disk
-      const nodesDir = join(baseDir, "coalesce_transform_mcp_data_cache", "nodes");
+      const nodesDir = join(baseDir, "coalesce_transform_mcp_data_cache", "ws-snap", "nodes");
       mkdirSync(nodesDir, { recursive: true });
 
       const ndjson = ALL_NODES.map((n) => JSON.stringify(n)).join("\n") + "\n";
-      writeFileSync(join(nodesDir, "workspace-ws-snap-nodes.ndjson"), ndjson);
+      writeFileSync(join(nodesDir, "nodes.ndjson"), ndjson);
       writeFileSync(
-        join(nodesDir, "workspace-ws-snap-nodes.meta.json"),
+        join(nodesDir, "nodes.meta.json"),
         JSON.stringify({ cachedAt: new Date().toISOString(), totalItems: 5 })
       );
 

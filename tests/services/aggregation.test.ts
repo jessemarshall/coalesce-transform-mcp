@@ -240,7 +240,7 @@ describe("Join to Aggregation Conversion", () => {
       expect(columns[6].dataType).toBe("NUMBER"); // DATEDIFF
     });
 
-    it("validates GROUP BY requirements and returns errors for invalid queries", async () => {
+    it("treats pure-aggregate queries as valid without GROUP BY", async () => {
       const client = createMockClient();
 
       client.get.mockImplementation((path: string) => {
@@ -261,7 +261,7 @@ describe("Join to Aggregation Conversion", () => {
       const result = await convertJoinToAggregation(client as any, {
         workspaceID: "ws-1",
         nodeID: "fact-node",
-        groupByColumns: [], // No GROUP BY columns, but has aggregates - should warn
+        groupByColumns: [],
         aggregates: [
           {
             name: "TOTAL_ORDERS",
@@ -269,7 +269,7 @@ describe("Join to Aggregation Conversion", () => {
             expression: 'DISTINCT "TABLE"."ORDER_ID"',
           },
           {
-            name: "CUSTOMER_NAME", // Non-aggregate column but not in GROUP BY
+            name: "CUSTOMER_NAME",
             function: "FIRST_VALUE",
             expression: '"TABLE"."CUSTOMER_NAME" OVER (ORDER BY ORDER_DATE)',
           },
@@ -277,9 +277,10 @@ describe("Join to Aggregation Conversion", () => {
         maintainJoins: false,
       });
 
-      // Should have warnings about missing GROUP BY
-      expect(result.validation.warnings.length).toBeGreaterThan(0);
-      expect(result.groupByAnalysis.validation.valid).toBe(false);
+      // Pure-aggregate queries (all columns are aggregates) are valid SQL —
+      // the entire result set is a single group, no GROUP BY needed
+      expect(result.groupByAnalysis.groupByClause).toBe("");
+      expect(result.groupByAnalysis.hasAggregates).toBe(true);
     });
 
     it("generates correct JOIN SQL from predecessor common columns", async () => {

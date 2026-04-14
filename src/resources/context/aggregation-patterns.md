@@ -50,7 +50,7 @@ Simple references (`"TABLE"."COLUMN"`), expressions without aggregation (`UPPER(
 
 ### Validation
 
-The `validation.valid` flag indicates whether GROUP BY is correct. When `valid: false`, the query has aggregate functions but missing GROUP BY columns — all non-aggregate columns must be included.
+Non-aggregate columns are automatically included in GROUP BY, and pure-aggregate queries (all columns use aggregate/window functions) are valid without GROUP BY — the entire result set is a single group.
 
 ## Common Patterns
 
@@ -132,7 +132,7 @@ See `coalesce://context/intelligent-node-configuration` for complete details.
 ## Tips
 
 1. Always use fully-qualified column names: `"TABLE"."COLUMN"`
-2. Check `validation.valid` for GROUP BY correctness
+2. Check `groupByClause` in the response for the generated GROUP BY
 3. Use `maintainJoins: true` for automatic JOIN ON generation
 4. Let datatype inference work — don't manually specify unless needed
 5. Review `joinSQL.fullSQL` for the generated SQL

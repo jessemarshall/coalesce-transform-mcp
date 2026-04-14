@@ -187,7 +187,9 @@ export function defineNodeTools(
           nodeID: params.nodeID,
           body,
         });
-        return buildJsonToolResponse("set_workspace_node", result);
+        return buildJsonToolResponse("set_workspace_node", result, {
+          workspaceID: params.workspaceID,
+        });
       } catch (error) {
         return handleToolError(error);
       }
@@ -409,7 +411,9 @@ export function defineNodeTools(
         const nodes = toNodeSummaries(nodesResponse.items);
 
         const profile = buildWorkspaceProfile(params.workspaceID, nodes);
-        return buildJsonToolResponse("analyze_workspace_patterns", profile);
+        return buildJsonToolResponse("analyze_workspace_patterns", profile, {
+          workspaceID: params.workspaceID,
+        });
       } catch (error) {
         return handleToolError(error);
       }

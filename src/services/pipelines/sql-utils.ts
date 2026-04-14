@@ -1,11 +1,8 @@
 import { stripIdentifierQuotes } from "./sql-tokenizer.js";
+export { deepClone } from "../shared/node-helpers.js";
 
 export function normalizeSqlIdentifier(identifier: string): string {
   return stripIdentifierQuotes(identifier).toUpperCase();
-}
-
-export function deepClone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 export function normalizeWhitespace(value: string): string {

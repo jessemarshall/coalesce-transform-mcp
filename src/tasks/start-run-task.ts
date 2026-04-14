@@ -36,7 +36,9 @@ export function registerStartRunTask(
           try {
             const result = await startRun(client, params);
             const sanitized = sanitizeResponse(result);
-            const response = buildJsonToolResponse("start_run", sanitized);
+            const response = buildJsonToolResponse("start_run", sanitized, {
+              workspaceID: params.runDetails?.environmentID,
+            });
             await extra.taskStore.storeTaskResult(
               task.taskId,
               "completed",

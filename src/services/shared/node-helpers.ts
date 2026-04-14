@@ -62,6 +62,6 @@ export function isPassthroughTransform(transform: string, columnName: string): b
 /**
  * Deep-clones a JSON-serializable value via JSON round-trip.
  */
-export function cloneValue<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value));
+export function deepClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }

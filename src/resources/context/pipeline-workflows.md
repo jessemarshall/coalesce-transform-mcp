@@ -324,7 +324,7 @@ After creating each node, verify before moving to the next:
 2. **Check `validation.allPredecessorsRepresented`** — if false, predecessors are missing from column sources
 3. **Check `configCompletion`** — verify applied config and column attributes make sense
 4. **For multi-predecessor nodes:** Confirm the join condition was set (call `get_workspace_node` to verify `metadata.sourceMapping[].join.joinCondition` is not empty)
-5. **For aggregation nodes:** Verify GROUP BY is valid (`validation.valid: true` from `convert_join_to_aggregation`)
+5. **For aggregation nodes:** Review `groupByAnalysis.groupByClause` from `convert_join_to_aggregation` to confirm GROUP BY columns
 
 ### Materialization Strategy
 

@@ -204,8 +204,8 @@ function buildIndexes(nodes: Map<string, LineageNode>): Pick<
 
 function tryLoadFromSnapshot(workspaceID: string, baseDir: string): Record<string, unknown>[] | null {
   const safeID = validatePathSegment(workspaceID, "workspaceID");
-  const ndjsonPath = join(baseDir, CACHE_DIR_NAME, "nodes", `workspace-${safeID}-nodes.ndjson`);
-  const metaPath = join(baseDir, CACHE_DIR_NAME, "nodes", `workspace-${safeID}-nodes.meta.json`);
+  const ndjsonPath = join(baseDir, CACHE_DIR_NAME, safeID, "nodes", "nodes.ndjson");
+  const metaPath = join(baseDir, CACHE_DIR_NAME, safeID, "nodes", "nodes.meta.json");
 
   if (!existsSync(ndjsonPath) || !existsSync(metaPath)) return null;
 

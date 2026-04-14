@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   extractNodeArray,
   isPassthroughTransform,
-  cloneValue,
+  deepClone,
 } from "../../src/services/shared/node-helpers.js";
 
 describe("extractNodeArray", () => {
@@ -74,10 +74,10 @@ describe("isPassthroughTransform", () => {
   });
 });
 
-describe("cloneValue", () => {
+describe("deepClone", () => {
   it("deep-clones an object", () => {
     const original = { a: { b: [1, 2, 3] } };
-    const cloned = cloneValue(original);
+    const cloned = deepClone(original);
     expect(cloned).toEqual(original);
     expect(cloned).not.toBe(original);
     expect(cloned.a).not.toBe(original.a);
@@ -85,15 +85,15 @@ describe("cloneValue", () => {
 
   it("deep-clones an array", () => {
     const original = [{ id: 1 }, { id: 2 }];
-    const cloned = cloneValue(original);
+    const cloned = deepClone(original);
     expect(cloned).toEqual(original);
     expect(cloned[0]).not.toBe(original[0]);
   });
 
   it("handles primitives", () => {
-    expect(cloneValue(42)).toBe(42);
-    expect(cloneValue("hello")).toBe("hello");
-    expect(cloneValue(null)).toBe(null);
-    expect(cloneValue(true)).toBe(true);
+    expect(deepClone(42)).toBe(42);
+    expect(deepClone("hello")).toBe("hello");
+    expect(deepClone(null)).toBe(null);
+    expect(deepClone(true)).toBe(true);
   });
 });

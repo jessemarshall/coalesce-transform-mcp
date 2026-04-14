@@ -165,7 +165,7 @@ export function defineCacheTools(
         }
         countFiles(cacheDir);
 
-        rmSync(cacheDir, { recursive: true, force: true });
+        rmSync(cacheDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 
         const sizeMB = (totalBytes / (1024 * 1024)).toFixed(2);
         return buildJsonToolResponse("clear_data_cache", {

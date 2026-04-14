@@ -45,10 +45,6 @@ export type GroupByAnalysis = {
   aggregateColumns: { name: string; transform: string }[];
   hasAggregates: boolean;
   groupByClause: string;
-  validation: {
-    valid: boolean;
-    errors: string[];
-  };
 };
 
 export type ColumnTransform = {
@@ -253,12 +249,14 @@ export function generateJoinSQL(
   const sqlParts: string[] = [fromClause];
 
   for (const suggestion of joinSuggestions) {
+    const suggestionLeftName = suggestion.leftPredecessorName || "LEFT_TABLE";
+    const suggestionLeftAlias = `"${suggestionLeftName}"`;
     const rightTableName = suggestion.rightPredecessorName || "RIGHT_TABLE";
     const rightAlias = `"${rightTableName}"`;
 
     const onConditions = suggestion.commonColumns.map(
       (col) =>
-        `${leftAlias}."${col.leftColumnName}" = ${rightAlias}."${col.rightColumnName}"`
+        `${suggestionLeftAlias}."${col.leftColumnName}" = ${rightAlias}."${col.rightColumnName}"`
     );
 
     const joinClause: JoinClause = {
@@ -480,7 +478,6 @@ export function analyzeColumnsForGroupBy(
 
   const groupByColumns: string[] = [];
   const aggregateColumns: { name: string; transform: string }[] = [];
-  const errors: string[] = [];
 
   for (const col of columns) {
     const upperTransform = col.transform.toUpperCase();
@@ -500,15 +497,6 @@ export function analyzeColumnsForGroupBy(
 
   const hasAggregates = aggregateColumns.length > 0;
 
-  // Validation: if we have aggregates, we need GROUP BY for non-aggregate columns
-  let valid = true;
-  if (hasAggregates && groupByColumns.length === 0 && columns.length > 1) {
-    errors.push(
-      "Query has aggregate functions but no GROUP BY columns. All non-aggregate columns must be in GROUP BY."
-    );
-    valid = false;
-  }
-
   const groupByClause =
     hasAggregates && groupByColumns.length > 0
       ? `GROUP BY ${groupByColumns.join(", ")}`
@@ -519,10 +507,6 @@ export function analyzeColumnsForGroupBy(
     aggregateColumns,
     hasAggregates,
     groupByClause,
-    validation: {
-      valid,
-      errors,
-    },
   };
 }
 
