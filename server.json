@@ -6,12 +6,12 @@
     "url": "https://github.com/jessemarshall/coalesce-transform-mcp",
     "source": "github"
   },
-  "version": "0.4.6",
+  "version": "0.4.7",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "coalesce-transform-mcp",
-      "version": "0.4.6",
+      "version": "0.4.7",
       "transport": {
         "type": "stdio"
       },
@@ -43,6 +43,13 @@
           "format": "string",
           "isSecret": false,
           "name": "COALESCE_REPO_PATH"
+        },
+        {
+          "description": "Base directory for the local data cache. When set, cache files are written here instead of the working directory.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_CACHE_DIR"
         },
         {
           "description": "JSON size threshold before auto-caching to disk. Defaults to 32768.",

@@ -371,7 +371,7 @@ export function defineLineageTools(
           params.columnID,
           params.changes,
           progressReporter,
-          process.cwd(),
+          process.env.COALESCE_CACHE_DIR ?? process.cwd(),
         );
 
         const response = buildJsonToolResponse("propagate_column_change", result);

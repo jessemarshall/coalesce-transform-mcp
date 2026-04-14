@@ -123,7 +123,7 @@ function buildPlanFingerprint(
 }
 
 function getPlanSummaryDir(): string {
-  return join(process.cwd(), CACHE_DIR_NAME, "plans");
+  return join(process.env.COALESCE_CACHE_DIR ?? process.cwd(), CACHE_DIR_NAME, "plans");
 }
 
 function findCachedPlanSummary(

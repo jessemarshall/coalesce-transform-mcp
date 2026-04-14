@@ -36,6 +36,15 @@ export const ENV_METADATA = [
     isSecret: false,
   },
   {
+    name: "COALESCE_CACHE_DIR",
+    group: "core",
+    description: "Base directory for the local data cache. When set, cache files are written here instead of the working directory.",
+    defaultValue: null,
+    requiredForServer: false,
+    requiredForRunTools: false,
+    isSecret: false,
+  },
+  {
     name: "COALESCE_MCP_AUTO_CACHE_MAX_BYTES",
     group: "core",
     description: "JSON size threshold before auto-caching to disk.",
