@@ -267,7 +267,7 @@ describe("lineage-cache", () => {
       const baseDir = createTempDir();
 
       // Write a snapshot to disk
-      const nodesDir = join(baseDir, "coalesce_transform_mcp_data_cache", "ws-snap", "nodes");
+      const nodesDir = join(baseDir, "coalesce_transform_mcp_data_cache", "workspace-ws-snap", "nodes");
       mkdirSync(nodesDir, { recursive: true });
 
       const ndjson = ALL_NODES.map((n) => JSON.stringify(n)).join("\n") + "\n";
@@ -690,7 +690,7 @@ describe("lineage-cache", () => {
       );
     });
 
-    it("stops on first write failure and reports partial failure with skipped nodes", async () => {
+    it("rolls back earlier writes when a later propagation write fails", async () => {
       const nodeMap = new Map(ALL_NODES.map((n) => [n.id, n]));
       client.get.mockImplementation((path: string) => {
         for (const [id, node] of nodeMap) {
@@ -700,10 +700,11 @@ describe("lineage-cache", () => {
         }
         return Promise.resolve({ data: [] });
       });
-      // First PUT (n2) succeeds, second PUT (n3) fails
+      // First PUT (n2) succeeds, second PUT (n3) fails, rollback of n2 succeeds
       client.put
         .mockResolvedValueOnce({ ok: true })
-        .mockRejectedValueOnce(new Error("Write failed on n3"));
+        .mockRejectedValueOnce(new Error("Write failed on n3"))
+        .mockResolvedValueOnce({ ok: true });
 
       const result = await propagateColumnChange(
         client as any,
@@ -714,16 +715,17 @@ describe("lineage-cache", () => {
         { columnName: "renamed" }
       );
 
-      // n2 written, n3 failed, n4+n5 skipped
-      expect(result.totalUpdated).toBe(1);
-      expect(result.updatedNodes[0].nodeID).toBe("n2");
-      expect(result.partialFailure).toBe(true);
+      // The successful write is rolled back, so no downstream updates remain applied
+      expect(result.totalUpdated).toBe(0);
+      expect(result.updatedNodes).toEqual([]);
+      expect(result.partialFailure).toBeUndefined();
+      expect(result.rolledBack).toBe(true);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0].message).toContain("Write failed on n3");
       expect(result.skippedNodes).toBeDefined();
-      expect(result.skippedNodes!.map((s) => s.nodeID)).toEqual(["n4", "n5"]);
-      // Only 2 PUTs attempted (1 success + 1 failure), not 4
-      expect(client.put).toHaveBeenCalledTimes(2);
+      expect(result.skippedNodes!.map((s) => s.nodeID)).toEqual(["n2", "n3", "n4", "n5"]);
+      // 3 PUTs attempted: apply n2, fail n3, rollback n2
+      expect(client.put).toHaveBeenCalledTimes(3);
     });
 
     it("does not attempt writes when all fetches fail in prepare phase", async () => {

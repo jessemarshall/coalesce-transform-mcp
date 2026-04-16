@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import {
   buildCacheResourceLink,
   CACHE_DIR_NAME,
+  getCacheBaseDir,
   type CacheResourceLink,
 } from "../cache-dir.js";
 import { z } from "zod";
@@ -276,7 +277,7 @@ export function buildJsonToolResponse(
   result: unknown,
   options: JsonToolResponseOptions = {}
 ): JsonToolResponse {
-  const baseDir = options.baseDir ?? process.cwd();
+  const baseDir = getCacheBaseDir(options.baseDir);
   const coerced = coerceListPaginationFields(result);
   const resourceLinks = new Map<string, CacheResourceLink>();
   const externalizedResult = externalizeCachePaths(coerced, baseDir, resourceLinks);

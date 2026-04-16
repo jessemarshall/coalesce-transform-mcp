@@ -109,6 +109,47 @@ export function defineLocalTool<S extends z.ZodType>(
 }
 
 /**
+ * Define a destructive tool that does not talk to the Coalesce REST API
+ * (e.g., shells out to the coa CLI). Same confirmation gate as
+ * defineDestructiveTool, but no CoalesceClient dependency.
+ */
+export function defineDestructiveLocalTool<S extends z.ZodType>(
+  server: McpServer,
+  name: string,
+  def: ToolDef<S> & { confirmMessage: (params: z.infer<S>) => string },
+  handler: (params: z.infer<S>) => unknown | Promise<unknown>
+): ToolDefinition {
+  return [
+    name,
+    {
+      title: def.title,
+      description: def.description,
+      inputSchema: def.inputSchema,
+      outputSchema: getToolOutputSchema(name),
+      annotations: def.annotations,
+    },
+    (async (params: z.infer<S>) => {
+      try {
+        const approvalResponse = await requireDestructiveConfirmation(
+          server,
+          name,
+          def.confirmMessage(params),
+          params.confirmed,
+        );
+        if (approvalResponse) return approvalResponse;
+
+        const result = await handler(params);
+        return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result, {
+          workspaceID: extractWorkspaceID(params),
+        });
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }) as ToolCallback,
+  ];
+}
+
+/**
  * Define a destructive tool that requires user confirmation before executing.
  * The `server` parameter is still needed for elicitation.
  */

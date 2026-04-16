@@ -34,6 +34,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Verify bundled coa CLI matches pinned version
+        run: node scripts/verify-coa-pin.mjs
+
+      - name: coa CLI smoke test
+        run: node scripts/smoke-coa.mjs
+
       - name: Copy generated assets for tests
         run: cp -r generated src/generated
 

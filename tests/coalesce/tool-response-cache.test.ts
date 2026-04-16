@@ -28,6 +28,7 @@ function largePayload(minBytes: number): unknown {
 describe("buildJsonToolResponse auto-cache behaviour", () => {
   const tempDirs: string[] = [];
   const originalEnv = process.env.COALESCE_MCP_AUTO_CACHE_MAX_BYTES;
+  const originalCacheDir = process.env.COALESCE_CACHE_DIR;
 
   function makeTempDir(): string {
     const dir = createTempDir();
@@ -37,6 +38,7 @@ describe("buildJsonToolResponse auto-cache behaviour", () => {
 
   afterEach(() => {
     process.env.COALESCE_MCP_AUTO_CACHE_MAX_BYTES = originalEnv;
+    process.env.COALESCE_CACHE_DIR = originalCacheDir;
     for (const dir of tempDirs.splice(0, tempDirs.length)) {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -78,6 +80,18 @@ describe("buildJsonToolResponse auto-cache behaviour", () => {
 
     const files = readdirSync(getAutoCacheDir(baseDir)).filter((f) => f.endsWith(".json"));
     expect(files.length).toBe(1);
+  });
+
+  it("uses COALESCE_CACHE_DIR when no baseDir is provided", () => {
+    const cacheBaseDir = makeTempDir();
+    process.env.COALESCE_CACHE_DIR = cacheBaseDir;
+
+    buildJsonToolResponse("list_workspaces", largePayload(200), {
+      maxInlineBytes: 50,
+    });
+
+    const files = readdirSync(getAutoCacheDir(cacheBaseDir)).filter((f) => f.endsWith(".json"));
+    expect(files).toHaveLength(1);
   });
 
   it("partitions auto-cache between workspaces without cross-contamination", () => {

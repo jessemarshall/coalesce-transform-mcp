@@ -2,11 +2,20 @@ export const ENV_METADATA = [
   {
     name: "COALESCE_ACCESS_TOKEN",
     group: "core",
-    description: "Bearer token from the Coalesce Deploy tab.",
+    description: "Bearer token from the Coalesce Deploy tab. Optional when `~/.coa/config` provides a `token`.",
     defaultValue: null,
-    requiredForServer: true,
+    requiredForServer: false,
     requiredForRunTools: false,
     isSecret: true,
+  },
+  {
+    name: "COALESCE_PROFILE",
+    group: "core",
+    description: "Selects which `~/.coa/config` profile to load.",
+    defaultValue: "default",
+    requiredForServer: false,
+    requiredForRunTools: false,
+    isSecret: false,
   },
   {
     name: "COALESCE_BASE_URL",

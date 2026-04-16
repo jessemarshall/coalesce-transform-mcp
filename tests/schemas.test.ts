@@ -371,8 +371,8 @@ describe("buildJsonToolResponse", () => {
     tempDirs.push(baseDir);
 
     const payload = {
-      filePath: join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "workspace-ws-1-nodes.ndjson"),
-      metaPath: join(baseDir, "coalesce_transform_mcp_data_cache", "nodes", "workspace-ws-1-nodes.meta.json"),
+      filePath: join(baseDir, "coalesce_transform_mcp_data_cache", "workspace-ws-1", "nodes", "nodes.ndjson"),
+      metaPath: join(baseDir, "coalesce_transform_mcp_data_cache", "workspace-ws-1", "nodes", "nodes.meta.json"),
       totalNodes: 2,
     };
 

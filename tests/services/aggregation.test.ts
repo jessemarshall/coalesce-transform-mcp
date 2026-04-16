@@ -240,7 +240,7 @@ describe("Join to Aggregation Conversion", () => {
       expect(columns[6].dataType).toBe("NUMBER"); // DATEDIFF
     });
 
-    it("treats pure-aggregate queries as valid without GROUP BY", async () => {
+    it("rejects window functions because they are not GROUP BY-safe", async () => {
       const client = createMockClient();
 
       client.get.mockImplementation((path: string) => {
@@ -277,10 +277,11 @@ describe("Join to Aggregation Conversion", () => {
         maintainJoins: false,
       });
 
-      // Pure-aggregate queries (all columns are aggregates) are valid SQL —
-      // the entire result set is a single group, no GROUP BY needed
+      expect(result.validation.valid).toBe(false);
+      expect(result.validation.warnings.join(" ")).toContain("Window functions are not GROUP BY-safe");
       expect(result.groupByAnalysis.groupByClause).toBe("");
-      expect(result.groupByAnalysis.hasAggregates).toBe(true);
+      expect(result.groupByAnalysis.hasWindowFunctions).toBe(true);
+      expect(client.put).not.toHaveBeenCalled();
     });
 
     it("generates correct JOIN SQL from predecessor common columns", async () => {

@@ -8,6 +8,7 @@ import {
   getCacheResourceMimeType,
   resolveCacheResourceUri,
 } from "../cache-dir.js";
+import { registerCoaDescribeResources } from "./coa-describe.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -44,6 +45,8 @@ const RESOURCES = {
     "coalesce://context/pipeline-review-guide",
   PIPELINE_WORKSHOP_GUIDE:
     "coalesce://context/pipeline-workshop-guide",
+  ECOSYSTEM_BOUNDARIES:
+    "coalesce://context/ecosystem-boundaries",
 } as const;
 
 // Map URIs to file paths
@@ -78,6 +81,8 @@ export const RESOURCE_FILES: Record<string, string> = {
     "context/pipeline-review-guide.md",
   [RESOURCES.PIPELINE_WORKSHOP_GUIDE]:
     "context/pipeline-workshop-guide.md",
+  [RESOURCES.ECOSYSTEM_BOUNDARIES]:
+    "context/ecosystem-boundaries.md",
 };
 
 // Resource metadata
@@ -221,6 +226,12 @@ const RESOURCE_METADATA: Record<
     name: "Pipeline Workshop Guide",
     description:
       "How to use the pipeline workshop tools for iterative, conversational pipeline building with session state",
+    mimeType: "text/markdown",
+  },
+  [RESOURCES.ECOSYSTEM_BOUNDARIES]: {
+    name: "Ecosystem Boundaries",
+    description:
+      "Scope of this MCP vs adjacent data engineering MCPs (Snowflake, Fivetran, dbt, Catalog) with cross-server workflow patterns",
     mimeType: "text/markdown",
   },
 };
@@ -451,6 +462,8 @@ export function registerResources(server: McpServer): void {
       }
     );
   }
+
+  registerCoaDescribeResources(server);
 
   server.resource(
     "Coalesce Cache Artifact",
