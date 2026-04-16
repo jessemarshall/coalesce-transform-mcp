@@ -1,6 +1,6 @@
 {
   "name": "coalesce-transform-mcp",
-  "version": "0.4.8",
+  "version": "0.5.0-alpha.0",
   "mcpName": "io.github.jessemarshall/coalesce-transform",
   "description": "MCP server for the Coalesce Transform API; run tools support Snowflake Key Pair and PAT auth",
   "main": "dist/index.js",
