@@ -5,6 +5,7 @@ import {
   listEnvironmentJobs,
   createWorkspaceJob,
   getEnvironmentJob,
+  getWorkspaceJob,
   updateWorkspaceJob,
   deleteWorkspaceJob,
 } from "../coalesce/api/jobs.js";
@@ -15,7 +16,7 @@ import {
   DESTRUCTIVE_ANNOTATIONS,
   type ToolDefinition,
 } from "../coalesce/types.js";
-import { defineSimpleTool, defineDestructiveTool } from "./tool-helpers.js";
+import { defineSimpleTool, defineDestructiveTool, extractEntityName } from "./tool-helpers.js";
 
 export function defineJobTools(
   server: McpServer,
@@ -91,7 +92,26 @@ export function defineJobTools(
         .describe("Set to true after the user explicitly confirms the deletion."),
     }),
     annotations: DESTRUCTIVE_ANNOTATIONS,
-    confirmMessage: (params) => `This will permanently delete job "${params.jobID}" from workspace "${params.workspaceID}". This cannot be undone.`,
+    resolve: async (client, params) => {
+      const job = await getWorkspaceJob(client, {
+        workspaceID: params.workspaceID,
+        jobID: params.jobID,
+      });
+      return {
+        primary: {
+          type: "workspace_job",
+          id: params.jobID,
+          name: extractEntityName(job),
+        },
+        context: { workspaceID: params.workspaceID },
+      };
+    },
+    confirmMessage: (params, preview) => {
+      const label = preview?.primary.name
+        ? `"${preview.primary.name}" (${params.jobID})`
+        : `"${params.jobID}"`;
+      return `This will permanently delete job ${label} from workspace "${params.workspaceID}". This cannot be undone.`;
+    },
   }, deleteWorkspaceJob),
   ];
 }

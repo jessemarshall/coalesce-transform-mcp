@@ -15,7 +15,7 @@ import {
   DESTRUCTIVE_ANNOTATIONS,
   type ToolDefinition,
 } from "../coalesce/types.js";
-import { defineSimpleTool, defineDestructiveTool } from "./tool-helpers.js";
+import { defineSimpleTool, defineDestructiveTool, extractEntityName } from "./tool-helpers.js";
 
 export function defineSubgraphTools(
   server: McpServer,
@@ -85,7 +85,33 @@ export function defineSubgraphTools(
         .describe("Set to true after the user explicitly confirms the deletion."),
     }),
     annotations: DESTRUCTIVE_ANNOTATIONS,
-    confirmMessage: (params) => `This will permanently delete subgraph "${params.subgraphID}" from workspace "${params.workspaceID}". Member nodes will NOT be deleted.`,
+    resolve: async (client, params) => {
+      const subgraph = await getWorkspaceSubgraph(client, {
+        workspaceID: params.workspaceID,
+        subgraphID: params.subgraphID,
+      });
+      const steps = (subgraph as { steps?: unknown })?.steps;
+      const memberIDs = Array.isArray(steps) ? steps.filter((s) => typeof s === "string") : [];
+      return {
+        primary: {
+          type: "workspace_subgraph",
+          id: params.subgraphID,
+          name: extractEntityName(subgraph),
+        },
+        affected: memberIDs.map((id) => ({
+          type: "member_node",
+          id: String(id),
+          note: "reference removed; node itself is not deleted",
+        })),
+        context: { workspaceID: params.workspaceID, memberCount: memberIDs.length },
+      };
+    },
+    confirmMessage: (params, preview) => {
+      const label = preview?.primary.name
+        ? `"${preview.primary.name}" (${params.subgraphID})`
+        : `"${params.subgraphID}"`;
+      return `This will permanently delete subgraph ${label} from workspace "${params.workspaceID}". Member nodes will NOT be deleted.`;
+    },
   }, deleteWorkspaceSubgraph),
   ];
 }

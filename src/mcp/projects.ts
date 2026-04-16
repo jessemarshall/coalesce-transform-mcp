@@ -15,7 +15,7 @@ import {
   DESTRUCTIVE_ANNOTATIONS,
   type ToolDefinition,
 } from "../coalesce/types.js";
-import { defineSimpleTool, defineDestructiveTool } from "./tool-helpers.js";
+import { defineSimpleTool, defineDestructiveTool, extractEntityName } from "./tool-helpers.js";
 
 export function defineProjectTools(
   server: McpServer,
@@ -92,7 +92,39 @@ export function defineProjectTools(
         .describe("Set to true after the user explicitly confirms the deletion."),
     }),
     annotations: DESTRUCTIVE_ANNOTATIONS,
-    confirmMessage: (params) => `This will permanently delete project "${params.projectID}" and all its workspaces. This cannot be undone.`,
+    resolve: async (client, params) => {
+      const project = await getProject(client, {
+        projectID: params.projectID,
+        includeWorkspaces: true,
+      });
+      const workspaces = (project as { workspaces?: unknown })?.workspaces;
+      const workspaceList = Array.isArray(workspaces) ? workspaces : [];
+      return {
+        primary: {
+          type: "project",
+          id: params.projectID,
+          name: extractEntityName(project),
+        },
+        affected: workspaceList.map((ws) => {
+          const w = ws as { id?: unknown; name?: unknown };
+          return {
+            type: "workspace",
+            id: String(w.id ?? ""),
+            name: typeof w.name === "string" ? w.name : undefined,
+            note: "will be deleted with the project",
+          };
+        }),
+        context: { workspaceCount: workspaceList.length },
+      };
+    },
+    confirmMessage: (params, preview) => {
+      const label = preview?.primary.name
+        ? `"${preview.primary.name}" (${params.projectID})`
+        : `"${params.projectID}"`;
+      const wsCount = preview?.affected?.length ?? 0;
+      const wsNote = wsCount > 0 ? ` and its ${wsCount} workspace${wsCount === 1 ? "" : "s"}` : "";
+      return `This will permanently delete project ${label}${wsNote}. This cannot be undone.`;
+    },
   }, deleteProject),
   ];
 }

@@ -20,7 +20,7 @@ import {
   DESTRUCTIVE_ANNOTATIONS,
   type ToolDefinition,
 } from "../coalesce/types.js";
-import { defineSimpleTool, defineDestructiveTool } from "./tool-helpers.js";
+import { defineSimpleTool, defineDestructiveTool, extractEntityName } from "./tool-helpers.js";
 import { RUN_STATUS_VALUES } from "../constants.js";
 
 // NOTE: runID (string) and runCounter (number) are both Coalesce API concepts, not a naming inconsistency.
@@ -132,8 +132,33 @@ export function defineRunTools(
         .describe("Set to true after the user explicitly confirms the cancellation."),
     }),
     annotations: DESTRUCTIVE_ANNOTATIONS,
+    resolve: async (client, params) => {
+      const run = await getRun(client, { runID: params.runID });
+      const runObj = run as Record<string, unknown> | null;
+      const status = typeof runObj?.runStatus === "string" ? runObj.runStatus : undefined;
+      if (status && !["running", "waitingToRun"].includes(status)) {
+        throw new Error(
+          `run ${params.runID} is in terminal state "${status}" — there is nothing to cancel`
+        );
+      }
+      return {
+        primary: {
+          type: "run",
+          id: params.runID,
+          name: extractEntityName(run) ?? (status ? `status=${status}` : undefined),
+        },
+        context: {
+          environmentID: params.environmentID,
+          runStatus: status,
+        },
+      };
+    },
     sanitize: true,
-    confirmMessage: (params) => `This will cancel run "${params.runID}" in environment "${params.environmentID}". The run will be terminated immediately and cannot be resumed — data may be left in an inconsistent state.`,
+    confirmMessage: (params, preview) => {
+      const status = (preview?.context as { runStatus?: string } | undefined)?.runStatus;
+      const suffix = status ? ` (current status: ${status})` : "";
+      return `This will cancel run "${params.runID}" in environment "${params.environmentID}"${suffix}. The run will be terminated immediately and cannot be resumed — data may be left in an inconsistent state.`;
+    },
   }, cancelRun),
   ];
 }

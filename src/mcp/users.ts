@@ -20,6 +20,17 @@ import {
 } from "../coalesce/types.js";
 import { defineSimpleTool, defineDestructiveTool } from "./tool-helpers.js";
 
+function summarizeRole(roles: unknown): string | undefined {
+  if (!roles || typeof roles !== "object") return undefined;
+  const r = roles as Record<string, unknown>;
+  const labelKeys = ["projectRole", "environmentRole", "orgRole", "role"];
+  for (const key of labelKeys) {
+    const value = r[key];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return undefined;
+}
+
 export function defineUserTools(
   server: McpServer,
   client: CoalesceClient
@@ -98,7 +109,29 @@ export function defineUserTools(
         .describe("Set to true after the user explicitly confirms the role removal."),
     }),
     annotations: DESTRUCTIVE_ANNOTATIONS,
-    confirmMessage: (params) => `This will remove the project role for user "${params.userID}" on project "${params.projectID}". The user will lose project access immediately.`,
+    resolve: async (client, params) => {
+      const roles = await getUserRoles(client, {
+        userID: params.userID,
+        projectID: params.projectID,
+      });
+      const roleLabel = summarizeRole(roles);
+      if (!roleLabel) {
+        throw new Error(
+          `no project role found for user "${params.userID}" on project "${params.projectID}" — nothing to remove`
+        );
+      }
+      return {
+        primary: {
+          type: "project_role",
+          id: `${params.userID}@${params.projectID}`,
+          name: `${roleLabel} (user=${params.userID}, project=${params.projectID})`,
+        },
+      };
+    },
+    confirmMessage: (params, preview) => {
+      const label = preview?.primary.name ?? `user "${params.userID}" on project "${params.projectID}"`;
+      return `This will remove the project role for ${label}. The user will lose project access immediately.`;
+    },
   }, deleteProjectRole),
 
   defineSimpleTool(client, "set_env_role", {
@@ -129,7 +162,29 @@ export function defineUserTools(
         .describe("Set to true after the user explicitly confirms the role removal."),
     }),
     annotations: DESTRUCTIVE_ANNOTATIONS,
-    confirmMessage: (params) => `This will remove the environment role for user "${params.userID}" on environment "${params.environmentID}". The user will lose environment access immediately.`,
+    resolve: async (client, params) => {
+      const roles = await getUserRoles(client, {
+        userID: params.userID,
+        environmentID: params.environmentID,
+      });
+      const roleLabel = summarizeRole(roles);
+      if (!roleLabel) {
+        throw new Error(
+          `no environment role found for user "${params.userID}" on environment "${params.environmentID}" — nothing to remove`
+        );
+      }
+      return {
+        primary: {
+          type: "environment_role",
+          id: `${params.userID}@${params.environmentID}`,
+          name: `${roleLabel} (user=${params.userID}, environment=${params.environmentID})`,
+        },
+      };
+    },
+    confirmMessage: (params, preview) => {
+      const label = preview?.primary.name ?? `user "${params.userID}" on environment "${params.environmentID}"`;
+      return `This will remove the environment role for ${label}. The user will lose environment access immediately.`;
+    },
   }, deleteEnvRole),
   ];
 }

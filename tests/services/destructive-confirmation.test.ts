@@ -107,6 +107,7 @@ describe("Destructive tool confirmation gating", () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
     const spy = vi.spyOn(server, "registerTool");
     const client = createMockClient();
+    client.get.mockResolvedValue({ projectRole: "developer" });
     defineUserTools(server, client as any).forEach(t => server.registerTool(...t));
 
     const handler = extractHandler<{ userID: string; projectID: string; confirmed?: boolean }>(spy, "delete_project_role");
@@ -123,6 +124,7 @@ describe("Destructive tool confirmation gating", () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
     const spy = vi.spyOn(server, "registerTool");
     const client = createMockClient();
+    client.get.mockResolvedValue({ environmentRole: "developer" });
     defineUserTools(server, client as any).forEach(t => server.registerTool(...t));
 
     const handler = extractHandler<{ userID: string; environmentID: string; confirmed?: boolean }>(spy, "delete_env_role");
@@ -222,6 +224,7 @@ describe("Destructive tool confirmation gating", () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
     const spy = vi.spyOn(server, "registerTool");
     const client = createMockClient();
+    client.get.mockResolvedValue({ projectRole: "developer" });
     defineUserTools(server, client as any).forEach(t => server.registerTool(...t));
 
     const handler = extractHandler<{ userID: string; projectID: string; confirmed?: boolean }>(spy, "delete_project_role");
@@ -236,6 +239,7 @@ describe("Destructive tool confirmation gating", () => {
     const server = new McpServer({ name: "test", version: "0.0.1" });
     const spy = vi.spyOn(server, "registerTool");
     const client = createMockClient();
+    client.get.mockResolvedValue({ environmentRole: "developer" });
     defineUserTools(server, client as any).forEach(t => server.registerTool(...t));
 
     const handler = extractHandler<{ userID: string; environmentID: string; confirmed?: boolean }>(spy, "delete_env_role");
@@ -291,6 +295,60 @@ describe("Destructive tool confirmation gating", () => {
     const data = JSON.parse(result.content[0]!.text);
     expect(data.STOP_AND_CONFIRM).toBeUndefined();
     expect(client.delete).toHaveBeenCalled();
+  });
+
+  // Safety guardrail: resolve-before-destructive
+
+  it("delete_workspace_node blocks the delete when get_workspace_node 404s even with confirmed=true", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const spy = vi.spyOn(server, "registerTool");
+    const client = createMockClient();
+    // Simulate the target not existing. The resolve hook should catch this BEFORE delete.
+    client.get.mockRejectedValue(new Error("Resource not found"));
+    defineNodeTools(server, client as any).forEach(t => server.registerTool(...t));
+
+    const handler = extractHandler<{ workspaceID: string; nodeID: string; confirmed?: boolean }>(spy, "delete_workspace_node");
+    const result = await handler({ workspaceID: "ws-1", nodeID: "phantom-node", confirmed: true });
+
+    // Error response — delete must NOT have been called.
+    expect(client.delete).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+    const text = result.content[0]!.text;
+    expect(text).toContain("Refusing to run delete_workspace_node");
+    expect(text).toContain("Resource not found");
+  });
+
+  it("delete_workspace_node surfaces the resolved name in the confirmation message", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const spy = vi.spyOn(server, "registerTool");
+    const client = createMockClient();
+    client.get.mockResolvedValue({ id: "node-1", name: "EMPLOYEE_DIM" });
+    defineNodeTools(server, client as any).forEach(t => server.registerTool(...t));
+
+    const handler = extractHandler<{ workspaceID: string; nodeID: string; confirmed?: boolean }>(spy, "delete_workspace_node");
+    const result = await handler({ workspaceID: "ws-1", nodeID: "node-1" });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(data.STOP_AND_CONFIRM).toBeDefined();
+    expect(data.STOP_AND_CONFIRM).toContain('"EMPLOYEE_DIM"');
+    expect(data.preview?.primary?.name).toBe("EMPLOYEE_DIM");
+    expect(client.delete).not.toHaveBeenCalled();
+  });
+
+  it("delete_workspace_node includes the resolved preview in the success response", async () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const spy = vi.spyOn(server, "registerTool");
+    const client = createMockClient();
+    client.get.mockResolvedValue({ id: "node-1", name: "EMPLOYEE_DIM" });
+    defineNodeTools(server, client as any).forEach(t => server.registerTool(...t));
+
+    const handler = extractHandler<{ workspaceID: string; nodeID: string; confirmed?: boolean }>(spy, "delete_workspace_node");
+    const result = await handler({ workspaceID: "ws-1", nodeID: "node-1", confirmed: true });
+
+    const data = JSON.parse(result.content[0]!.text);
+    expect(client.delete).toHaveBeenCalled();
+    expect(data.resolvedTargets?.primary?.name).toBe("EMPLOYEE_DIM");
+    expect(data.resolvedTargets?.primary?.id).toBe("node-1");
   });
 
   it("delete_project returns STOP_AND_CONFIRM when not confirmed", async () => {
