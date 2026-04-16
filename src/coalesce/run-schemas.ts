@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { existsSync, readFileSync, statSync } from "node:fs";
+
+import { resolveSnowflakeAuth } from "../services/config/credentials.js";
 
 // --- startRun / run-and-wait schemas ---
 
@@ -105,103 +106,11 @@ export function buildRerunBody(params: RerunInput) {
   };
 }
 
-// Build PEM headers dynamically to avoid tripping secret-scanning pre-commit hooks.
-const PEM_BOUNDARY = "-----";
-const ALLOWED_PEM_HEADERS = [
-  `${PEM_BOUNDARY}BEGIN PRIVATE KEY${PEM_BOUNDARY}`,
-  `${PEM_BOUNDARY}BEGIN RSA PRIVATE KEY${PEM_BOUNDARY}`,
-  `${PEM_BOUNDARY}BEGIN ENCRYPTED PRIVATE KEY${PEM_BOUNDARY}`,
-] as const;
-
-const MAX_KEY_FILE_BYTES = 64 * 1024; // 64 KB — generous limit for PEM keys
-
-function readKeyPairFile(filePath: string): string {
-  if (!existsSync(filePath)) {
-    throw new Error(
-      "SNOWFLAKE_KEY_PAIR_KEY file not found at the configured path. " +
-      "Check that the environment variable points to an existing PEM private key file."
-    );
-  }
-  const fileSize = statSync(filePath).size;
-  if (fileSize > MAX_KEY_FILE_BYTES) {
-    const sizeKB = Math.round(fileSize / 1024);
-    throw new Error(
-      `SNOWFLAKE_KEY_PAIR_KEY file is ${sizeKB} KB, which exceeds the ${MAX_KEY_FILE_BYTES / 1024} KB limit for PEM key files. ` +
-      "Check that the path points to a private key file, not a different file."
-    );
-  }
-  const content = readFileSync(filePath, "utf-8").trim();
-  const hasValidHeader = ALLOWED_PEM_HEADERS.some((header) =>
-    content.includes(header)
-  );
-  if (!hasValidHeader) {
-    throw new Error(
-      "SNOWFLAKE_KEY_PAIR_KEY file is not a valid PEM private key. " +
-      "Expected a file containing one of: PRIVATE KEY, RSA PRIVATE KEY, or ENCRYPTED PRIVATE KEY."
-    );
-  }
-  return content;
-}
-
 export function getSnowflakeCredentials() {
-  const snowflakeUsername = process.env.SNOWFLAKE_USERNAME?.trim();
-  const snowflakeKeyPairKeyRaw = process.env.SNOWFLAKE_KEY_PAIR_KEY?.trim();
-  const snowflakeKeyPairPass = process.env.SNOWFLAKE_KEY_PAIR_PASS?.trim();
-  const snowflakePat = process.env.SNOWFLAKE_PAT?.trim();
-  const snowflakeWarehouse = process.env.SNOWFLAKE_WAREHOUSE?.trim();
-  const snowflakeRole = process.env.SNOWFLAKE_ROLE?.trim();
-
-  // Key Pair takes priority when both are set
-  const useKeyPair = !!snowflakeKeyPairKeyRaw;
-  const usePat = !useKeyPair && !!snowflakePat;
-
-  // Validate shared required env vars
-  const missing: string[] = [];
-  if (!snowflakeUsername) missing.push("SNOWFLAKE_USERNAME");
-  if (!useKeyPair && !usePat) {
-    missing.push("SNOWFLAKE_KEY_PAIR_KEY or SNOWFLAKE_PAT");
-  }
-  if (!snowflakeWarehouse) missing.push("SNOWFLAKE_WAREHOUSE");
-  if (!snowflakeRole) missing.push("SNOWFLAKE_ROLE");
-
-  if (missing.length > 0) {
-    throw new Error(
-      `Missing required Snowflake environment variable${missing.length > 1 ? "s" : ""} for run tools: ${missing.join(", ")}. ` +
-      "Set these in your shell profile and pass them through in your MCP client config."
-    );
-  }
-
-  if (usePat) {
-    if (
-      snowflakePat!.startsWith("/") ||
-      snowflakePat!.startsWith("~") ||
-      snowflakePat!.endsWith(".pem")
-    ) {
-      throw new Error(
-        "SNOWFLAKE_PAT appears to be a file path, not a token. " +
-        "SNOWFLAKE_PAT should contain the token string itself. " +
-        "If you meant to use Key Pair auth, set SNOWFLAKE_KEY_PAIR_KEY instead."
-      );
-    }
-    return {
-      snowflakeUsername: snowflakeUsername!,
-      snowflakePassword: snowflakePat!,
-      snowflakeWarehouse: snowflakeWarehouse!,
-      snowflakeRole: snowflakeRole!,
-      snowflakeAuthType: "Basic" as const,
-    };
-  }
-
-  const snowflakeKeyPairKey = readKeyPairFile(snowflakeKeyPairKeyRaw!);
-
-  return {
-    snowflakeUsername: snowflakeUsername!,
-    snowflakeKeyPairKey,
-    ...(snowflakeKeyPairPass ? { snowflakeKeyPairPass } : {}),
-    snowflakeWarehouse: snowflakeWarehouse!,
-    snowflakeRole: snowflakeRole!,
-    snowflakeAuthType: "KeyPair" as const,
-  };
+  const auth = resolveSnowflakeAuth();
+  // Strip the `sources` metadata — the API body only wants the credential fields.
+  const { sources: _sources, ...body } = auth;
+  return body;
 }
 
 export function buildStartRunBody(params: StartRunInput) {

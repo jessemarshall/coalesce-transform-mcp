@@ -41,6 +41,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@coalescesoftware/coa": "7.33.0-alpha.73.h7b449dd800e9",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "yaml": "^2.8.3",
     "zod": "^3.24.0"

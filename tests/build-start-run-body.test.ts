@@ -1,20 +1,25 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { writeFileSync, unlinkSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildStartRunBody } from "../src/coalesce/types.js";
+import { setupTempHome, type TempHomeHandle } from "./helpers/coa-config-fixture.js";
 
 describe("buildStartRunBody", () => {
   const originalEnv = process.env;
   const tempDir = join(tmpdir(), "coalesce-test-" + process.pid);
   const keyFilePath = join(tempDir, "test-key.pem");
   const pemContent = "-----BEGIN PRIVATE KEY-----\nxxx\n-----END PRIVATE KEY-----";
+  let tempHome: TempHomeHandle;
 
   beforeEach(() => {
+    tempHome = setupTempHome();
     mkdirSync(tempDir, { recursive: true });
     writeFileSync(keyFilePath, pemContent);
     process.env = {
       ...originalEnv,
+      HOME: tempHome.home,
+      USERPROFILE: tempHome.home,
       SNOWFLAKE_USERNAME: "user",
       SNOWFLAKE_KEY_PAIR_KEY: keyFilePath,
       SNOWFLAKE_WAREHOUSE: "WH",
@@ -25,6 +30,8 @@ describe("buildStartRunBody", () => {
   afterEach(() => {
     process.env = originalEnv;
     try { unlinkSync(keyFilePath); } catch { /* ignore */ }
+    vi.unstubAllEnvs();
+    tempHome.cleanup();
   });
 
   // Params with a jobID (scoped — no confirmation needed)

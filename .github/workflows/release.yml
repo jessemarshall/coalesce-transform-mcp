@@ -26,11 +26,51 @@ jobs:
           node-version: "lts/*"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Determine release channel
+        id: channel
+        # Routes each tag push to either the alpha or stable lane based on the
+        # package.json version string. Alpha releases (e.g. 0.5.0-alpha.2) get
+        # published to the `alpha` npm dist-tag, marked prerelease on GitHub,
+        # and skip the MCP Registry. Stable releases (e.g. 0.5.0) use the default
+        # `latest` dist-tag and publish everywhere.
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$VERSION" != "$TAG_VERSION" ]; then
+            echo "::error ::Git tag v$TAG_VERSION does not match package.json version $VERSION. Re-tag or re-run npm version."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Whitelist exact shapes so unrecognized prerelease identifiers
+          # (e.g. -beta.1, -rc.0, typos like -alph.1) never silently ship to
+          # the stable dist-tag. Stable is MAJOR.MINOR.PATCH with no suffix;
+          # alpha is MAJOR.MINOR.PATCH-alpha.N; anything else fails the build.
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "channel=stable" >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "npm_tag=latest" >> "$GITHUB_OUTPUT"
+          elif [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$ ]]; then
+            echo "channel=alpha" >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "npm_tag=alpha" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error ::Unrecognized version shape '$VERSION'. Expected X.Y.Z (stable) or X.Y.Z-alpha.N (alpha)."
+            exit 1
+          fi
+          echo "Version: $VERSION"
+          cat "$GITHUB_OUTPUT"
+
       - name: Install dependencies
         run: npm ci
 
       - name: Build
         run: npm run build
+
+      - name: Verify bundled coa CLI matches pinned version
+        run: node scripts/verify-coa-pin.mjs
+
+      - name: coa CLI smoke test
+        run: node scripts/smoke-coa.mjs
 
       - name: Copy generated assets for tests
         run: cp -r generated src/generated
@@ -41,7 +81,7 @@ jobs:
             && exit 0 || [ $? -eq 124 ]
 
       - name: Publish to npm
-        run: npm publish --provenance
+        run: npm publish --tag ${{ steps.channel.outputs.npm_tag }} --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -49,19 +89,29 @@ jobs:
         run: |
           echo "Waiting 30s for npm registry to propagate..."
           sleep 30
-          npm view coalesce-transform-mcp version
+          npm view coalesce-transform-mcp@${{ steps.channel.outputs.version }} version
 
+      # --- stable-only: MCP Registry publish ---
       - name: Install mcp-publisher
+        if: steps.channel.outputs.channel == 'stable'
         run: |
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
 
       - name: Authenticate to MCP Registry
+        if: steps.channel.outputs.channel == 'stable'
         run: ./mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
+        if: steps.channel.outputs.channel == 'stable'
         run: ./mcp-publisher publish
 
+      # --- both channels: GitHub Release (marked prerelease for alphas) ---
       - name: Create GitHub Release
-        run: gh release create ${{ github.ref_name }} --title "${{ github.ref_name }}" --generate-notes
+        run: |
+          ARGS=(--title "${{ github.ref_name }}" --generate-notes)
+          if [ "${{ steps.channel.outputs.is_prerelease }}" = "true" ]; then
+            ARGS+=(--prerelease)
+          fi
+          gh release create "${{ github.ref_name }}" "${ARGS[@]}"
         env:
           GH_TOKEN: ${{ github.token }}

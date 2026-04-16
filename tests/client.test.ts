@@ -1,12 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { validateConfig, createClient } from "../src/client.js";
 import { validatePathSegment } from "../src/coalesce/types.js";
+import { setupTempHome, type TempHomeHandle } from "./helpers/coa-config-fixture.js";
 
 describe("CoalesceClient", () => {
   const originalEnv = process.env;
+  let tempHome: TempHomeHandle;
 
   beforeEach(() => {
+    tempHome = setupTempHome();
     process.env = { ...originalEnv };
+    process.env.HOME = tempHome.home;
+    process.env.USERPROFILE = tempHome.home;
     process.env.COALESCE_ACCESS_TOKEN = "test-token";
     process.env.COALESCE_BASE_URL = "https://app.coalescesoftware.io";
   });
@@ -14,12 +19,14 @@ describe("CoalesceClient", () => {
   afterEach(() => {
     process.env = originalEnv;
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    tempHome.cleanup();
   });
 
   describe("validateConfig", () => {
     it("throws if COALESCE_ACCESS_TOKEN is missing", () => {
       delete process.env.COALESCE_ACCESS_TOKEN;
-      expect(() => validateConfig()).toThrow("COALESCE_ACCESS_TOKEN");
+      expect(() => validateConfig()).toThrow(/access token/i);
     });
 
     it("defaults COALESCE_BASE_URL to US region when missing", () => {

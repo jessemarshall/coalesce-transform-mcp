@@ -8,6 +8,7 @@ import {
   getCacheResourceMimeType,
   resolveCacheResourceUri,
 } from "../cache-dir.js";
+import { registerCoaDescribeResources } from "./coa-describe.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -461,6 +462,8 @@ export function registerResources(server: McpServer): void {
       }
     );
   }
+
+  registerCoaDescribeResources(server);
 
   server.resource(
     "Coalesce Cache Artifact",

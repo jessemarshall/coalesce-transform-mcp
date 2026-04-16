@@ -18,6 +18,8 @@ import { defineCacheTools } from "./mcp/cache.js";
 import { defineWorkshopTools } from "./mcp/workshop.js";
 import { defineLineageTools } from "./mcp/lineage.js";
 import { defineSkillTools } from "./mcp/skills.js";
+import { defineCoaTools } from "./mcp/coa.js";
+import { defineSetupTools } from "./mcp/setup.js";
 
 import { defineGetRunDetails } from "./workflows/get-run-details.js";
 import { defineGetEnvironmentOverview } from "./workflows/get-environment-overview.js";
@@ -184,6 +186,8 @@ function collectToolDefinitions(server: McpServer, client: CoalesceClient): Tool
     ...defineWorkshopTools(server, client),
     ...defineLineageTools(server, client),
     ...defineSkillTools(server, client),
+    ...defineCoaTools(server),
+    ...defineSetupTools(client),
     ...defineGetRunDetails(server, client),
     ...defineGetEnvironmentOverview(server, client),
     ...defineGetEnvironmentHealth(server, client),

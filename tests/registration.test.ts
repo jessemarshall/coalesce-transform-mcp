@@ -13,8 +13,10 @@ function createMockClient() {
   };
 }
 
-// 91 via registerTool + 3 via registerToolTask (start_run, run_and_wait, retry_and_wait)
-const REGISTER_TOOL_COUNT = 91;
+// 106 via registerTool + 3 via registerToolTask (start_run, run_and_wait, retry_and_wait).
+// 106 = 91 pre-COA + 8 read-only coa_* (Phase 2) + 1 coa_describe (Phase 3)
+//       + 5 write/destructive coa_* (Phase 4) + 1 diagnose_setup (setup helper).
+const REGISTER_TOOL_COUNT = 106;
 const TASK_TOOL_NAMES = ["start_run", "run_and_wait", "retry_and_wait"];
 
 describe("Tool Registration", () => {
@@ -99,6 +101,27 @@ describe("Tool Registration", () => {
     expect(toolNames).toContain("analyze_impact");
     expect(toolNames).toContain("propagate_column_change");
     expect(toolNames).toContain("audit_documentation_coverage");
+
+    // COA CLI tools (Phase 2 of COA integration)
+    expect(toolNames).toContain("coa_doctor");
+    expect(toolNames).toContain("coa_validate");
+    expect(toolNames).toContain("coa_list_project_nodes");
+    expect(toolNames).toContain("coa_dry_run_create");
+    expect(toolNames).toContain("coa_dry_run_run");
+    expect(toolNames).toContain("coa_list_environments");
+    expect(toolNames).toContain("coa_list_environment_nodes");
+    expect(toolNames).toContain("coa_list_runs");
+    expect(toolNames).toContain("coa_describe");
+
+    // COA CLI write + destructive tools (Phase 4)
+    expect(toolNames).toContain("coa_create");
+    expect(toolNames).toContain("coa_run");
+    expect(toolNames).toContain("coa_plan");
+    expect(toolNames).toContain("coa_deploy");
+    expect(toolNames).toContain("coa_refresh");
+
+    // Setup helper (paired with the coalesce-setup prompt)
+    expect(toolNames).toContain("diagnose_setup");
 
     // Cortex tools NOT registered (removed — use cortex CLI directly)
     expect(toolNames).not.toContain("explore_data_source");

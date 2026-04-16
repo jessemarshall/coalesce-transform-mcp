@@ -17,11 +17,18 @@
       },
       "environmentVariables": [
         {
-          "description": "Bearer token from the Coalesce Deploy tab.",
-          "isRequired": true,
+          "description": "Bearer token from the Coalesce Deploy tab. Optional when `~/.coa/config` provides a `token`.",
+          "isRequired": false,
           "format": "string",
           "isSecret": true,
           "name": "COALESCE_ACCESS_TOKEN"
+        },
+        {
+          "description": "Selects which `~/.coa/config` profile to load. Defaults to default.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_PROFILE"
         },
         {
           "description": "Region-specific base URL. Defaults to https://app.coalescesoftware.io (US).",
