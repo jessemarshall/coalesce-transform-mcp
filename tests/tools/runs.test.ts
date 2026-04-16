@@ -12,6 +12,7 @@ import {
   retryRun,
   cancelRun,
 } from "../../src/coalesce/api/runs.js";
+import * as coaConfig from "../../src/services/config/coa-config.js";
 import { defineRunTools } from "../../src/mcp/runs.js";
 import { CoalesceApiError } from "../../src/client.js";
 import {
@@ -282,6 +283,34 @@ describe("Run Tools", () => {
         environmentID: "env-1",
       })
     ).rejects.toThrow("COALESCE_ORG_ID");
+  });
+
+  it("cancelRun falls back to orgID from the active ~/.coa/config profile", async () => {
+    const client = createMockClient();
+    client.post.mockResolvedValue({ message: "Run cancelled" });
+
+    delete process.env.COALESCE_ORG_ID;
+    const spy = vi.spyOn(coaConfig, "loadCoaProfile").mockReturnValue({
+      profileName: "default",
+      orgID: "org-from-profile",
+      extras: {},
+    });
+
+    try {
+      const result = await cancelRun(client as any, {
+        runID: "42",
+        environmentID: "env-1",
+      });
+
+      expect(client.post).toHaveBeenCalledWith("/scheduler/cancelRun", {
+        runID: "42",
+        orgID: "org-from-profile",
+        environmentID: "env-1",
+      });
+      expect(result).toEqual({ message: "Run cancelled" });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("tracks the documented cancelRun body shape from the Postman example", () => {

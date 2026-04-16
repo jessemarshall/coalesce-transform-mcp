@@ -118,13 +118,13 @@ export function defineRunTools(
   defineDestructiveTool(server, client, "cancel_run", {
     title: "Cancel Run",
     description:
-      "Cancel an in-progress Coalesce run. Destructive — the run will be terminated immediately. Canceling a running pipeline mid-execution can leave data in an inconsistent state (partial loads, half-transformed tables). There is no 'undo cancel'.\n\nArgs:\n  - runID (string, required): Numeric run ID to cancel\n  - environmentID (string, required): Environment the run belongs to\n  - orgID (string, optional): Organization ID. Falls back to COALESCE_ORG_ID env var.\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms cancellation\n\nReturns:\n  Confirmation with updated run status.",
+      "Cancel an in-progress Coalesce run. Destructive — the run will be terminated immediately. Canceling a running pipeline mid-execution can leave data in an inconsistent state (partial loads, half-transformed tables). There is no 'undo cancel'.\n\nArgs:\n  - runID (string, required): Numeric run ID to cancel\n  - environmentID (string, required): Environment the run belongs to\n  - orgID (string, optional): Organization ID. Falls back to COALESCE_ORG_ID env var or `orgID` in the active ~/.coa/config profile.\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms cancellation\n\nReturns:\n  Confirmation with updated run status.",
     inputSchema: z.object({
       runID: z.string().describe("The numeric run ID (integer) of the run to cancel"),
       orgID: z
         .string()
         .optional()
-        .describe("The organization ID. Optional if COALESCE_ORG_ID is set."),
+        .describe("The organization ID. Optional if COALESCE_ORG_ID is set, or if `orgID` is present in the active ~/.coa/config profile."),
       environmentID: z.string().describe("The environment ID the run belongs to"),
       confirmed: z
         .boolean()

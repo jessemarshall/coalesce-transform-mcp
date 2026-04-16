@@ -68,6 +68,9 @@ function collectPresentKeys(profile: CoaProfile): string[] {
   if (profile.snowflakeKeyPairPass) keys.push("snowflakeKeyPairPass");
   if (profile.snowflakeAuthType) keys.push("snowflakeAuthType");
   if (profile.environmentID) keys.push("environmentID");
+  if (profile.orgID) keys.push("orgID");
+  if (profile.repoPath) keys.push("repoPath");
+  if (profile.cacheDir) keys.push("cacheDir");
   return keys;
 }
 
@@ -224,19 +227,23 @@ export type RepoPathStatus =
   | { status: "invalid"; reason: string; path: string };
 
 /**
- * Verify COALESCE_REPO_PATH points somewhere usable. "isCoaProject" means the
- * path has a data.yml — which makes it a valid COA project root. That's not
- * required for the existing repo-backed tools (which want nodeTypes/, etc.),
- * but it tells the setup prompt whether coa_* tools will work against it.
+ * Verify the configured repo path points somewhere usable. Reads COALESCE_REPO_PATH
+ * first, then falls back to `repoPath` from the active ~/.coa/config profile.
+ * "isCoaProject" means the path has a data.yml — which makes it a valid COA project
+ * root. That's not required for the existing repo-backed tools (which want
+ * nodeTypes/, etc.), but it tells the setup prompt whether coa_* tools will work
+ * against it.
  */
 export function diagnoseRepoPath(): RepoPathStatus {
-  const raw = process.env.COALESCE_REPO_PATH?.trim();
+  const envRaw = process.env.COALESCE_REPO_PATH?.trim();
+  const raw = envRaw || loadCoaProfile()?.repoPath?.trim();
+  const sourceLabel = envRaw ? "COALESCE_REPO_PATH" : "repoPath in ~/.coa/config";
   if (!raw) return { status: "missing" };
   const path = isAbsolute(raw) ? raw : resolve(process.cwd(), raw);
   if (!existsSync(path)) {
     return {
       status: "invalid",
-      reason: "COALESCE_REPO_PATH does not exist on disk.",
+      reason: `${sourceLabel} does not exist on disk.`,
       path,
     };
   }
@@ -244,7 +251,7 @@ export function diagnoseRepoPath(): RepoPathStatus {
   if (!stat.isDirectory()) {
     return {
       status: "invalid",
-      reason: "COALESCE_REPO_PATH is not a directory.",
+      reason: `${sourceLabel} is not a directory.`,
       path,
     };
   }
@@ -412,15 +419,15 @@ function buildNextSteps(parts: {
 
   if (parts.repoPath.status === "missing") {
     steps.push(
-      "Optional: clone your Coalesce project locally and set COALESCE_REPO_PATH to the clone root. Enables repo-backed node-type lookup and all coa_* local tools."
+      "Optional: clone your Coalesce project locally and either set COALESCE_REPO_PATH, or add `repoPath=` to your profile in ~/.coa/config. Enables repo-backed node-type lookup and all coa_* local tools."
     );
   } else if (parts.repoPath.status === "invalid") {
     steps.push(
-      `COALESCE_REPO_PATH is set but unusable: ${parts.repoPath.reason} (path: ${parts.repoPath.path})`
+      `Configured repo path is unusable: ${parts.repoPath.reason} (path: ${parts.repoPath.path})`
     );
   } else if (parts.repoPath.status === "ok" && !parts.repoPath.isCoaProject) {
     steps.push(
-      `COALESCE_REPO_PATH (${parts.repoPath.path}) has no data.yml, so coa_* local tools will not work against it. If you intend to use COA, point the env var at a directory containing data.yml.`
+      `Configured repo path (${parts.repoPath.path}) has no data.yml, so coa_* local tools will not work against it. If you intend to use COA, point COALESCE_REPO_PATH or your profile's repoPath at a directory containing data.yml.`
     );
   }
 

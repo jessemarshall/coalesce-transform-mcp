@@ -211,7 +211,7 @@ describe("repo-backed tools", () => {
 
   it("errors when neither repoPath nor COALESCE_REPO_PATH is provided", () => {
     expect(() => listRepoPackages({})).toThrow(
-      "repoPath is required for repo-backed tools. Provide repoPath explicitly or set COALESCE_REPO_PATH."
+      /repoPath is required for repo-backed tools/
     );
   });
 

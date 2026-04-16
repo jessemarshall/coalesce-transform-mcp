@@ -228,6 +228,23 @@ describe("diagnoseRepoPath", () => {
     expect(result).toMatchObject({ status: "ok", isCoaProject: true });
     rmSync(tmp, { recursive: true, force: true });
   });
+
+  it("falls back to repoPath from the active ~/.coa/config profile when env is unset", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "coa-setup-repo-profile-"));
+    mkdirSync(join(tmp, "nodeTypes"));
+    writeFileSync(join(tmp, "data.yml"), "fileVersion: 3\n");
+
+    const handle = setupTempHome();
+    handle.writeConfig(`[default]\ntoken=T\nrepoPath=${tmp}\n`);
+
+    try {
+      const result = diagnoseRepoPath();
+      expect(result).toMatchObject({ status: "ok", path: tmp, isCoaProject: true });
+    } finally {
+      handle.cleanup();
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("diagnoseSetup (aggregate)", () => {

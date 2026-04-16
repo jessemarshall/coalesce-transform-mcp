@@ -231,7 +231,7 @@ export function registerPrompts(server: McpServer): void {
               "   - If the user doesn't use run tools today, they can skip this step — read-only Cloud REST tools work fine without Snowflake creds.\n\n" +
               "3. Repo path (optional). Only needed for repo-backed node-type lookup and local coa_* tools (coa_doctor, coa_validate, coa_create, coa_run, coa_plan).\n" +
               "   - Skip this if repoPath.status is already 'ok' or the user doesn't need those tools yet.\n" +
-              "   - Otherwise: ask for the project's git URL (list_git_accounts may help). Tell them to `git clone <url> <target>`, then add `\"COALESCE_REPO_PATH\": \"<absolute-path>\"` to their MCP client env block, restart the MCP client, and re-run diagnose_setup.\n" +
+              "   - Otherwise: ask for the project's git URL (list_git_accounts may help). Tell them to `git clone <url> <target>`, then either add `\"COALESCE_REPO_PATH\": \"<absolute-path>\"` to their MCP client env block OR add `repoPath=<absolute-path>` to their profile in ~/.coa/config, restart the MCP client, and re-run diagnose_setup.\n" +
               "   - Target state: repoPath.isCoaProject === true and coaDoctor.status === 'ok' (or 'skipped' if the project doesn't yet have workspaces.yml).\n\n" +
               "RULES:\n" +
               "- Never skip diagnose_setup between steps. Actual state drifts from assumed state easily, especially across MCP-client restarts.\n" +

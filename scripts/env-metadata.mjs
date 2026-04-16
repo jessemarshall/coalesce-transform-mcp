@@ -29,7 +29,7 @@ export const ENV_METADATA = [
   {
     name: "COALESCE_ORG_ID",
     group: "core",
-    description: "Fallback org ID for cancel-run.",
+    description: "Fallback org ID for cancel-run. Also readable from `orgID` in the active ~/.coa/config profile.",
     defaultValue: null,
     requiredForServer: false,
     requiredForRunTools: false,
@@ -38,7 +38,7 @@ export const ENV_METADATA = [
   {
     name: "COALESCE_REPO_PATH",
     group: "core",
-    description: "Local repo root for repo-backed tools and pipeline planning.",
+    description: "Local repo root for repo-backed tools and pipeline planning. Also readable from `repoPath` in the active ~/.coa/config profile.",
     defaultValue: null,
     requiredForServer: false,
     requiredForRunTools: false,
@@ -47,7 +47,7 @@ export const ENV_METADATA = [
   {
     name: "COALESCE_CACHE_DIR",
     group: "core",
-    description: "Base directory for the local data cache. When set, cache files are written here instead of the working directory.",
+    description: "Base directory for the local data cache. When set, cache files are written here instead of the working directory. Also readable from `cacheDir` in the active ~/.coa/config profile.",
     defaultValue: null,
     requiredForServer: false,
     requiredForRunTools: false,

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CACHE_DIR_NAME } from "../cache-dir.js";
+import { CACHE_DIR_NAME, getCacheBaseDir } from "../cache-dir.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
 import { buildPlanConfirmationToken, sortJsonValue } from "../services/pipelines/confirmation.js";
@@ -123,7 +123,7 @@ function buildPlanFingerprint(
 }
 
 function getPlanSummaryDir(): string {
-  return join(process.env.COALESCE_CACHE_DIR ?? process.cwd(), CACHE_DIR_NAME, "plans");
+  return join(getCacheBaseDir(), CACHE_DIR_NAME, "plans");
 }
 
 function findCachedPlanSummary(
@@ -396,7 +396,7 @@ export function definePipelineTools(
         repoPath: z
           .string()
           .optional()
-          .describe("Optional local committed Coalesce repo path for repo-first node-type ranking. Falls back to COALESCE_REPO_PATH when omitted."),
+          .describe("Optional local committed Coalesce repo path for repo-first node-type ranking. Falls back to COALESCE_REPO_PATH or `repoPath` in the active ~/.coa/config profile when omitted."),
         sourceNodeIDs: z
           .array(z.string())
           .optional()
@@ -549,7 +549,7 @@ export function definePipelineTools(
         repoPath: z
           .string()
           .optional()
-          .describe("Optional local committed Coalesce repo path for repo-first node-type ranking. Falls back to COALESCE_REPO_PATH when omitted."),
+          .describe("Optional local committed Coalesce repo path for repo-first node-type ranking. Falls back to COALESCE_REPO_PATH or `repoPath` in the active ~/.coa/config profile when omitted."),
         confirmed: z
           .boolean()
           .optional()
@@ -641,7 +641,7 @@ export function definePipelineTools(
           .string()
           .optional()
           .describe(
-            "Optional local committed Coalesce repo path for repo-first node-type ranking. Falls back to COALESCE_REPO_PATH when omitted."
+            "Optional local committed Coalesce repo path for repo-first node-type ranking. Falls back to COALESCE_REPO_PATH or `repoPath` in the active ~/.coa/config profile when omitted."
           ),
         locationName: z.string().optional().describe("Optional target locationName"),
         database: z.string().optional().describe("Optional target database"),
@@ -968,7 +968,7 @@ export function definePipelineTools(
         hasGroupBy: z.boolean().optional().describe("Does this step involve a GROUP BY? Influences selection toward aggregation-capable types."),
         hasBusinessKeys: z.boolean().optional().describe("Are business keys explicitly defined? Influences dimensional/data-vault type selection."),
         targetNodeType: z.string().optional().describe("Optional explicit node type override — bypasses ranking and validates this specific type."),
-        repoPath: z.string().optional().describe("Optional local committed Coalesce repo path. Falls back to COALESCE_REPO_PATH when omitted."),
+        repoPath: z.string().optional().describe("Optional local committed Coalesce repo path. Falls back to COALESCE_REPO_PATH or `repoPath` in the active ~/.coa/config profile when omitted."),
       }),
       outputSchema: getToolOutputSchema("select_pipeline_node_type"),
       annotations: READ_ONLY_ANNOTATIONS,
