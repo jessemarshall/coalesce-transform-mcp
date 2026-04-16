@@ -8,7 +8,7 @@ import { listOrgUsers } from "../../coalesce/api/users.js";
 import { sanitizeResponse, validatePathSegment } from "../../coalesce/types.js";
 import type { NodeSummary } from "../workspace/analysis.js";
 import { isPlainObject } from "../../utils.js";
-import { CACHE_DIR_NAME } from "../../cache-dir.js";
+import { CACHE_DIR_NAME, getCacheBaseDir } from "../../cache-dir.js";
 import { DEFAULT_PAGE_SIZE, DETAIL_FETCH_TIMEOUT_MS, type RunStatus } from "../../constants.js";
 
 type PaginatedParams = {
@@ -267,10 +267,11 @@ function buildNodeCacheRelativePath(
   scope: "workspace" | "environment",
   id: string,
   detail: boolean
-): { safeID: string; fileName: string } {
+): { scopeDir: string; fileName: string } {
   const safeID = validatePathSegment(id, `${scope}ID`);
+  const scopeDir = `${scope}-${safeID}`;
   const fileName = detail ? "nodes.ndjson" : "nodes-summary.ndjson";
-  return { safeID, fileName };
+  return { scopeDir, fileName };
 }
 
 function buildRunsCacheFileName(params: {
@@ -388,9 +389,9 @@ export async function cacheWorkspaceNodes(
   cachedAt: string;
 }> {
   const detail = params.detail ?? true;
-  const baseDir = options?.baseDir ?? process.cwd();
-  const { safeID, fileName } = buildNodeCacheRelativePath("workspace", params.workspaceID, detail);
-  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, safeID, "nodes");
+  const baseDir = getCacheBaseDir(options?.baseDir);
+  const { scopeDir, fileName } = buildNodeCacheRelativePath("workspace", params.workspaceID, detail);
+  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, scopeDir, "nodes");
   const ndjsonPath = join(directory, fileName);
   const metaPath = join(directory, fileName.replace(/\.ndjson$/, ".meta.json"));
 
@@ -437,9 +438,9 @@ export async function cacheEnvironmentNodes(
   cachedAt: string;
 }> {
   const detail = params.detail ?? true;
-  const baseDir = options?.baseDir ?? process.cwd();
-  const { safeID, fileName } = buildNodeCacheRelativePath("environment", params.environmentID, detail);
-  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, safeID, "nodes");
+  const baseDir = getCacheBaseDir(options?.baseDir);
+  const { scopeDir, fileName } = buildNodeCacheRelativePath("environment", params.environmentID, detail);
+  const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, scopeDir, "nodes");
   const ndjsonPath = join(directory, fileName);
   const metaPath = join(directory, fileName.replace(/\.ndjson$/, ".meta.json"));
 
@@ -493,7 +494,7 @@ export async function cacheRuns(
   environmentID?: string;
 }> {
   const detail = params.detail ?? false;
-  const baseDir = options?.baseDir ?? process.cwd();
+  const baseDir = getCacheBaseDir(options?.baseDir);
   const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, "runs");
   const baseName = buildRunsCacheFileName({ ...params, detail });
   const ndjsonPath = join(directory, baseName);
@@ -547,7 +548,7 @@ export async function cacheOrgUsers(
   metaPath: string;
   cachedAt: string;
 }> {
-  const baseDir = options?.baseDir ?? process.cwd();
+  const baseDir = getCacheBaseDir(options?.baseDir);
   const directory = ensureDirectory(baseDir, CACHE_DIR_NAME, "users");
   const ndjsonPath = join(directory, "org-users.ndjson");
   const metaPath = join(directory, "org-users.meta.json");

@@ -251,11 +251,11 @@ describe("Resources", () => {
     const orphanNdjsonPath = join(
       tempDir,
       "coalesce_transform_mcp_data_cache",
-      "ws-1",
+      "workspace-ws-1",
       "nodes",
       "nodes.ndjson"
     );
-    mkdirSync(join(tempDir, "coalesce_transform_mcp_data_cache", "ws-1", "nodes"), {
+    mkdirSync(join(tempDir, "coalesce_transform_mcp_data_cache", "workspace-ws-1", "nodes"), {
       recursive: true,
     });
     writeFileSync(orphanNdjsonPath, '{"id":"partial"}\n', "utf8");
@@ -293,11 +293,11 @@ describe("Resources", () => {
     const orphanMetaPath = join(
       tempDir,
       "coalesce_transform_mcp_data_cache",
-      "ws-1",
+      "workspace-ws-1",
       "nodes",
       "nodes.meta.json"
     );
-    mkdirSync(join(tempDir, "coalesce_transform_mcp_data_cache", "ws-1", "nodes"), {
+    mkdirSync(join(tempDir, "coalesce_transform_mcp_data_cache", "workspace-ws-1", "nodes"), {
       recursive: true,
     });
     writeFileSync(orphanMetaPath, JSON.stringify({ totalItems: 1 }, null, 2), "utf8");

@@ -123,10 +123,11 @@ describe("propagateColumnChange", () => {
         metadata: { columns: [{ id: "c3", columnID: "c3", name: "col_a", dataType: "INT" }] },
       });
 
-    // First write succeeds, second fails
+    // First write succeeds, second fails, rollback succeeds
     vi.mocked(setWorkspaceNode)
       .mockResolvedValueOnce(undefined as never)
-      .mockRejectedValueOnce(new Error("API timeout"));
+      .mockRejectedValueOnce(new Error("API timeout"))
+      .mockResolvedValueOnce(undefined as never);
 
     const result = await propagateColumnChange(
       client as never,
@@ -142,11 +143,119 @@ describe("propagateColumnChange", () => {
     expect(result.preMutationSnapshot[0].nodeID).toBe("n2");
     expect(result.preMutationSnapshot[1].nodeID).toBe("n3");
 
-    // Partial failure: first write succeeded, second failed
-    expect(result.partialFailure).toBe(true);
-    expect(result.totalUpdated).toBe(1);
+    // The successful write should be rolled back, so no downstream updates remain applied
+    expect(result.partialFailure).toBeUndefined();
+    expect(result.rolledBack).toBe(true);
+    expect(result.totalUpdated).toBe(0);
+    expect(result.updatedNodes).toEqual([]);
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0].message).toBe("API timeout");
+    expect(setWorkspaceNode).toHaveBeenCalledTimes(3);
+  });
+
+  it("updates all affected columns on the same downstream node in a single write", async () => {
+    const client = createMockClient();
+    const cache = buildFakeCache({
+      n1: { name: "SRC_RAW", nodeType: "Source", columns: [{ id: "c1", name: "order_id" }] },
+      n2: {
+        name: "STG_ORDERS",
+        nodeType: "Stage",
+        columns: [
+          { id: "c2", name: "order_id" },
+          { id: "c3", name: "order_id_copy" },
+        ],
+      },
+    });
+
+    vi.mocked(walkColumnLineage).mockReturnValue([
+      { nodeID: "n2", nodeName: "STG_ORDERS", nodeType: "Stage", columnID: "c2", columnName: "order_id", direction: "downstream" as const, depth: 1 },
+      { nodeID: "n2", nodeName: "STG_ORDERS", nodeType: "Stage", columnID: "c3", columnName: "order_id_copy", direction: "downstream" as const, depth: 1 },
+    ]);
+
+    client.get.mockResolvedValue({
+      id: "n2",
+      name: "STG_ORDERS",
+      metadata: {
+        columns: [
+          { id: "c2", columnID: "c2", name: "order_id", dataType: "VARCHAR" },
+          { id: "c3", columnID: "c3", name: "order_id_copy", dataType: "VARCHAR" },
+        ],
+      },
+    });
+    vi.mocked(setWorkspaceNode).mockResolvedValue(undefined as never);
+
+    const result = await propagateColumnChange(
+      client as never,
+      cache,
+      "ws-1",
+      "n1",
+      "c1",
+      { columnName: "renamed_order_id" },
+    );
+
+    expect(result.totalUpdated).toBe(2);
+    expect(result.errors).toEqual([]);
+    expect(setWorkspaceNode).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(setWorkspaceNode).mock.calls[0]?.[1]).toEqual({
+      workspaceID: "ws-1",
+      nodeID: "n2",
+      body: {
+        metadata: {
+          columns: [
+            { id: "c2", columnID: "c2", name: "renamed_order_id", dataType: "VARCHAR" },
+            { id: "c3", columnID: "c3", name: "renamed_order_id", dataType: "VARCHAR" },
+          ],
+        },
+        merged: true,
+      },
+    });
+  });
+
+  it("reports partial failure only when rollback also fails", async () => {
+    const client = createMockClient();
+    const cache = buildFakeCache({
+      n1: { name: "SRC_RAW", nodeType: "Source", columns: [{ id: "c1", name: "col_a" }] },
+      n2: { name: "STG_A", nodeType: "Stage", columns: [{ id: "c2", name: "col_a" }] },
+      n3: { name: "STG_B", nodeType: "Stage", columns: [{ id: "c3", name: "col_a" }] },
+    });
+
+    vi.mocked(walkColumnLineage).mockReturnValue([
+      { nodeID: "n2", nodeName: "STG_A", nodeType: "Stage", columnID: "c2", columnName: "col_a", direction: "downstream" as const, depth: 1 },
+      { nodeID: "n3", nodeName: "STG_B", nodeType: "Stage", columnID: "c3", columnName: "col_a", direction: "downstream" as const, depth: 2 },
+    ]);
+
+    client.get
+      .mockResolvedValueOnce({
+        id: "n2", name: "STG_A",
+        metadata: { columns: [{ id: "c2", columnID: "c2", name: "col_a", dataType: "INT" }] },
+      })
+      .mockResolvedValueOnce({
+        id: "n3", name: "STG_B",
+        metadata: { columns: [{ id: "c3", columnID: "c3", name: "col_a", dataType: "INT" }] },
+      });
+
+    vi.mocked(setWorkspaceNode)
+      .mockResolvedValueOnce(undefined as never)
+      .mockRejectedValueOnce(new Error("API timeout"))
+      .mockRejectedValueOnce(new Error("Rollback failed"));
+
+    const result = await propagateColumnChange(
+      client as never,
+      cache,
+      "ws-1",
+      "n1",
+      "c1",
+      { columnName: "renamed_col" },
+    );
+
+    expect(result.partialFailure).toBe(true);
+    expect(result.rolledBack).toBeUndefined();
+    expect(result.totalUpdated).toBe(1);
+    expect(result.updatedNodes.map((node) => node.nodeID)).toEqual(["n2"]);
+    expect(result.errors.map((error) => error.message)).toEqual([
+      "API timeout",
+      "Rollback failed after propagation error: Rollback failed",
+    ]);
   });
 
   it("returns empty snapshot when no downstream entries exist", async () => {
@@ -168,6 +277,48 @@ describe("propagateColumnChange", () => {
 
     expect(result.preMutationSnapshot).toHaveLength(0);
     expect(result.totalUpdated).toBe(0);
+    expect(setWorkspaceNode).not.toHaveBeenCalled();
+  });
+
+  it("does not apply any writes when prepare phase fails for one of the downstream nodes", async () => {
+    const client = createMockClient();
+    const cache = buildFakeCache({
+      n1: { name: "SRC_RAW", nodeType: "Source", columns: [{ id: "c1", name: "col_a" }] },
+      n2: { name: "STG_A", nodeType: "Stage", columns: [{ id: "c2", name: "col_a" }] },
+      n3: { name: "STG_B", nodeType: "Stage", columns: [{ id: "c3", name: "col_a" }] },
+    });
+
+    vi.mocked(walkColumnLineage).mockReturnValue([
+      { nodeID: "n2", nodeName: "STG_A", nodeType: "Stage", columnID: "c2", columnName: "col_a", direction: "downstream" as const, depth: 1 },
+      { nodeID: "n3", nodeName: "STG_B", nodeType: "Stage", columnID: "c3", columnName: "col_a", direction: "downstream" as const, depth: 2 },
+    ]);
+
+    client.get
+      .mockResolvedValueOnce({
+        id: "n2",
+        name: "STG_A",
+        metadata: { columns: [{ id: "c2", columnID: "c2", name: "col_a", dataType: "INT" }] },
+      })
+      .mockResolvedValueOnce({
+        id: "n3",
+        name: "STG_B",
+        metadata: null,
+      });
+
+    const result = await propagateColumnChange(
+      client as never,
+      cache,
+      "ws-1",
+      "n1",
+      "c1",
+      { columnName: "renamed_col" },
+    );
+
+    expect(result.totalUpdated).toBe(0);
+    expect(result.errors).toEqual([
+      { nodeID: "n3", columnID: "c3", message: "Could not read node metadata" },
+    ]);
+    expect(result.skippedNodes?.map((node) => node.nodeID)).toEqual(["n2"]);
     expect(setWorkspaceNode).not.toHaveBeenCalled();
   });
 
