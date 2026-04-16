@@ -18,8 +18,8 @@
     "import:node-type-corpus": "node scripts/import-node-type-corpus.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "preversion": "npm run build && npm audit --omit=dev && node scripts/sync-version.mjs",
-    "postversion": "node scripts/sync-version.mjs && git add server.json && git commit --amend --no-edit",
+    "preversion": "npm run build && npm audit --omit=dev",
+    "version": "node scripts/sync-version.mjs && git add server.json README.md",
     "prepublishOnly": "npm run build",
     "prepare": "husky"
   },
