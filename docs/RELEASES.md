@@ -18,60 +18,88 @@ Every release lives on one of two npm dist-tags:
 
 The [release workflow](.github/workflows/release.yml) reads `package.json` on every tag push and routes automatically — you never pass `--tag alpha` by hand.
 
-## Standard release flow (develop → main → alpha series → stable)
+## Standard release flow (develop → alpha → main)
 
-Typical cadence: iterate on `develop`, merge to `main`, publish a series of alphas from `main` for testing, then promote to stable.
+Three branches:
 
-### 1. Iterate
+- **`develop`** — feature work lands here via PRs from feature branches.
+- **`alpha`** — staging for alpha testing. Merged from `develop` via PR. Alpha tags (`X.Y.Z-alpha.N`) are cut here.
+- **`main`** — stable. Merged from `alpha` via PR when an alpha series is ready to promote. Stable tags (`X.Y.Z`) are cut here.
 
-Work on `develop` as usual. When a feature or fix is ready to ship to testers:
+Only `main` moves when stable ships; `alpha` carries every alpha in between.
+
+### 1. Iterate on `develop` and promote to `alpha`
 
 ```bash
 git checkout develop && git pull
-# (make changes, commit)
-gh pr create --base main --title "0.5: add coalesce-setup prompt" --body "…"
+# (merge feature branches into develop via PR as usual)
+gh pr create --base alpha --head develop \
+  --title "0.5 alpha: <what's new>" --body "<summary>"
+gh pr merge <pr-number> --merge --delete-branch=false
 ```
 
-Merge the PR on GitHub, then:
-
-```bash
-git checkout main && git pull origin main
-```
+`develop` stays open — you don't delete it when the PR merges.
 
 ### 2. First alpha of a new version
 
-Use `preminor` + `--preid=alpha` to bump (e.g. `0.4.8` → `0.5.0-alpha.0`):
+On the **alpha** branch (not main — the alpha series owns the prerelease commits):
 
 ```bash
-npm version preminor --preid=alpha
-git push origin main --tags
+git checkout alpha && git pull origin alpha
+
+# Pre-flight: the preversion hook runs `npm audit --omit=dev`, which
+# fails on any moderate+ vulnerability. If audit reports a new issue
+# (common for transitive deps of @modelcontextprotocol/sdk), fix first
+# and commit the lockfile bump BEFORE running npm version:
+npm audit --omit=dev || (npm audit fix && git add package-lock.json \
+  && git commit -m "chore: bump <pkg> transitive dep (<advisory>)")
+
+# COALESCE_* env vars must be unset for the preversion run — stale
+# cache/repo pointers break vitest during sync. Wrap in a subshell:
+(unset COALESCE_ACCESS_TOKEN COALESCE_BASE_URL COALESCE_REPO_PATH \
+        COALESCE_CACHE_DIR COALESCE_PROFILE; \
+ npm version preminor --preid=alpha)
+# 0.4.8 → 0.5.0-alpha.0
+
+git push origin alpha --tags
 ```
 
 (`prepatch --preid=alpha` for a patch-level series, `premajor --preid=alpha` for a major.)
 
-The workflow detects `-alpha.*`, publishes to `@alpha`, skips the MCP Registry, and cuts a prerelease GitHub Release. Users test with `npm install coalesce-transform-mcp@alpha`.
+The release workflow detects `-alpha.*`, publishes to the `@alpha` npm dist-tag, skips the MCP Registry, and cuts a prerelease GitHub Release. Users install with `npm install coalesce-transform-mcp@alpha`.
+
+Watch the workflow synchronously with `gh run watch <id> --exit-status` — exits non-zero on failure so you know immediately.
 
 ### 3. Subsequent alphas in the same series
 
-More fixes on `develop` → PR → merge to `main` → on `main`:
+More fixes on `develop` → PR → merge to `alpha` → on `alpha`:
 
 ```bash
-npm version prerelease --preid=alpha
-git push origin main --tags
+(unset COALESCE_ACCESS_TOKEN COALESCE_BASE_URL COALESCE_REPO_PATH \
+        COALESCE_CACHE_DIR COALESCE_PROFILE; \
+ npm version prerelease --preid=alpha)
+git push origin alpha --tags
 ```
 
 That bumps `0.5.0-alpha.0` → `0.5.0-alpha.1` → `0.5.0-alpha.2`, each publishing to `@alpha`.
 
 ### 4. Cut the stable release
 
-Once confident the last alpha is good, bump to the bare version:
+Promote `alpha` to `main`, then bump the bare version on `main`:
 
 ```bash
-npm version 0.5.0
+gh pr create --base main --head alpha \
+  --title "Release 0.5.0" --body "Promote <last-alpha> to stable"
+gh pr merge <pr-number> --merge --delete-branch=false
+
+git checkout main && git pull origin main
+(unset COALESCE_ACCESS_TOKEN COALESCE_BASE_URL COALESCE_REPO_PATH \
+        COALESCE_CACHE_DIR COALESCE_PROFILE; \
+ npm version 0.5.0)
 git push origin main --tags
 ```
 
-The workflow detects no `-alpha.*` suffix and routes to the stable flow: `@latest`, MCP Registry, full GitHub Release. The release content is identical to the last alpha you tested — only the version string changes.
+The workflow sees no `-alpha.*` suffix and routes to the stable flow: `@latest`, MCP Registry, full (non-prerelease) GitHub Release. The release content is identical to the last alpha you tested — only the version string changes.
 
 ### 5. Sync develop
 
@@ -80,6 +108,19 @@ git checkout develop
 git merge main
 git push origin develop
 ```
+
+### Post-release verification
+
+Run after any release — cheap, and catches "did it actually publish?" before you find out the hard way:
+
+```bash
+npm view coalesce-transform-mcp dist-tags
+npm view coalesce-transform-mcp@<version> version
+gh release view v<version> --json tagName,isPrerelease,url
+gh run list --workflow=release.yml --limit 1
+```
+
+Alpha releases should show `isPrerelease: true` and **not** appear in MCP Registry searches; stable releases should show `isPrerelease: false` and land in MCP Registry within a minute of workflow completion.
 
 ### 6. (Optional) Move the `@alpha` tag forward
 
