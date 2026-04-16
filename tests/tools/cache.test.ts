@@ -58,8 +58,8 @@ describe("cache snapshot tools", () => {
 
     const result = await cacheWorkspaceNodes(client as any, { workspaceID: "ws-1" }, { baseDir });
 
-    expect(result.filePath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "ws-1", "nodes", "nodes.ndjson"));
-    expect(result.metaPath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "ws-1", "nodes", "nodes.meta.json"));
+    expect(result.filePath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "workspace-ws-1", "nodes", "nodes.ndjson"));
+    expect(result.metaPath).toBe(join(baseDir, "coalesce_transform_mcp_data_cache", "workspace-ws-1", "nodes", "nodes.meta.json"));
     expect(result.totalNodes).toBe(2);
     expect(client.get).toHaveBeenNthCalledWith(
       1,
@@ -100,10 +100,10 @@ describe("cache snapshot tools", () => {
     );
 
     expect(result.filePath).toBe(
-      join(baseDir, "coalesce_transform_mcp_data_cache", "env-1", "nodes", "nodes-summary.ndjson")
+      join(baseDir, "coalesce_transform_mcp_data_cache", "environment-env-1", "nodes", "nodes-summary.ndjson")
     );
     expect(result.metaPath).toBe(
-      join(baseDir, "coalesce_transform_mcp_data_cache", "env-1", "nodes", "nodes-summary.meta.json")
+      join(baseDir, "coalesce_transform_mcp_data_cache", "environment-env-1", "nodes", "nodes-summary.meta.json")
     );
     expect(result.detail).toBe(false);
     expect(client.get).toHaveBeenCalledWith("/api/v1/environments/env-1/nodes", {
@@ -118,6 +118,43 @@ describe("cache snapshot tools", () => {
 
     const meta = JSON.parse(readFileSync(result.metaPath, "utf8"));
     expect(meta.totalItems).toBe(1);
+  });
+
+  it("keeps workspace and environment snapshots separate when IDs match", async () => {
+    const client = createMockClient();
+    const baseDir = createTempDir();
+
+    client.get
+      .mockResolvedValueOnce({
+        data: [{ id: "ws-node-1", name: "WS_NODE", nodeType: "Stage" }],
+      })
+      .mockResolvedValueOnce({
+        data: [{ id: "env-node-1", name: "ENV_NODE", nodeType: "Stage" }],
+      });
+
+    const workspaceResult = await cacheWorkspaceNodes(
+      client as any,
+      { workspaceID: "123", detail: false },
+      { baseDir }
+    );
+    const environmentResult = await cacheEnvironmentNodes(
+      client as any,
+      { environmentID: "123", detail: false },
+      { baseDir }
+    );
+
+    expect(workspaceResult.filePath).toBe(
+      join(baseDir, "coalesce_transform_mcp_data_cache", "workspace-123", "nodes", "nodes-summary.ndjson")
+    );
+    expect(environmentResult.filePath).toBe(
+      join(baseDir, "coalesce_transform_mcp_data_cache", "environment-123", "nodes", "nodes-summary.ndjson")
+    );
+    expect(workspaceResult.filePath).not.toBe(environmentResult.filePath);
+
+    const workspaceLines = readFileSync(workspaceResult.filePath, "utf8").trimEnd().split("\n");
+    const environmentLines = readFileSync(environmentResult.filePath, "utf8").trimEnd().split("\n");
+    expect(JSON.parse(workspaceLines[0])).toMatchObject({ id: "ws-node-1", name: "WS_NODE" });
+    expect(JSON.parse(environmentLines[0])).toMatchObject({ id: "env-node-1", name: "ENV_NODE" });
   });
 
   it("caches runs and strips userCredentials from each NDJSON line", async () => {

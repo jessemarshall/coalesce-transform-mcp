@@ -42,7 +42,7 @@ The system automatically detects aggregate functions, identifies non-aggregate c
 **Aggregate functions** (column goes into aggregate list):
 `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `STDDEV`, `VARIANCE`, `LISTAGG`, `ARRAY_AGG`
 
-**Window functions** (column goes into aggregate list):
+**Window functions** (tracked separately and not treated as GROUP BY-safe by `convert_join_to_aggregation`):
 `ROW_NUMBER`, `RANK`, `DENSE_RANK`, `LEAD`, `LAG`, `FIRST_VALUE`, `LAST_VALUE`
 
 **Non-aggregate columns** (must be in GROUP BY):
@@ -50,7 +50,7 @@ Simple references (`"TABLE"."COLUMN"`), expressions without aggregation (`UPPER(
 
 ### Validation
 
-Non-aggregate columns are automatically included in GROUP BY, and pure-aggregate queries (all columns use aggregate/window functions) are valid without GROUP BY — the entire result set is a single group.
+Non-aggregate columns are automatically included in GROUP BY, and pure-aggregate queries (all columns use aggregate functions) are valid without GROUP BY — the entire result set is a single group. Window functions require manual handling because they are not treated as GROUP BY-safe in `convert_join_to_aggregation`.
 
 ## Common Patterns
 

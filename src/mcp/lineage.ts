@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
+import { getCacheBaseDir } from "../cache-dir.js";
 import {
   buildJsonToolResponse,
   getToolOutputSchema,
@@ -373,7 +374,7 @@ export function defineLineageTools(
           params.columnID,
           params.changes,
           progressReporter,
-          process.env.COALESCE_CACHE_DIR ?? process.cwd(),
+          getCacheBaseDir(),
         );
 
         const response = buildJsonToolResponse("propagate_column_change", result, {
@@ -392,7 +393,20 @@ export function defineLineageTools(
             ],
           };
         }
-        if (result.errors.length > 0 && result.totalUpdated === 0) {
+        if (result.errors.length > 0) {
+          if (result.rolledBack) {
+            return {
+              ...response,
+              isError: true,
+              content: [
+                {
+                  type: "text" as const,
+                  text: "Propagation failed after a write error, and any earlier successful writes were rolled back. No downstream updates remain applied.",
+                },
+                ...(Array.isArray(response.content) ? response.content : []),
+              ],
+            };
+          }
           return { ...response, isError: true };
         }
         return response;
