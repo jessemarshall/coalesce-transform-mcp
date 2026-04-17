@@ -364,7 +364,7 @@ describe("defineNodeTypeCorpusTools — generate_set_workspace_node_template_fro
     ).toBe(true);
   });
 
-  it("rejects workspaceID without nodeID (and vice versa)", async () => {
+  it("rejects workspaceID without nodeID", async () => {
     const variants = [makeSupportedVariant({ variantKey: "Stage:::1" })];
     vi.spyOn(corpusLoader, "loadNodeTypeCorpusSnapshot").mockReturnValue(makeSnapshot(variants));
 
@@ -381,6 +381,101 @@ describe("defineNodeTypeCorpusTools — generate_set_workspace_node_template_fro
     expect(response.isError).toBe(true);
     const text = response.content.map((c) => c.text).join("\n");
     expect(text).toContain("workspaceID and nodeID must be provided together");
+  });
+
+  it("rejects nodeID without workspaceID", async () => {
+    const variants = [makeSupportedVariant({ variantKey: "Stage:::1" })];
+    vi.spyOn(corpusLoader, "loadNodeTypeCorpusSnapshot").mockReturnValue(makeSnapshot(variants));
+
+    const tools = defineNodeTypeCorpusTools(mockServer, makeMockClient());
+    const handler = getHandler(
+      tools,
+      "generate_set_workspace_node_template_from_variant"
+    );
+    const response = await callHandler(handler, {
+      variantKey: "Stage:::1",
+      nodeID: "node-1",
+    });
+
+    expect(response.isError).toBe(true);
+    const text = response.content.map((c) => c.text).join("\n");
+    expect(text).toContain("workspaceID and nodeID must be provided together");
+    expect(mockServer).toBeDefined();
+  });
+
+  it("deduplicates warnings when generator emits a message for a supported variant", async () => {
+    const variants = [
+      makeSupportedVariant({
+        variantKey: "Stage:::withDupWarnings",
+        nodeDefinition: {
+          capitalized: "Stage",
+          short: "STG",
+          plural: "Stages",
+          tagColor: "#abcdef",
+          deployStrategy: "recreate",
+          config: [
+            {
+              groupName: "General",
+              items: [
+                {
+                  type: "textbox",
+                  displayName: "Node Name",
+                  attributeName: "nodeName",
+                  default: "",
+                },
+                {
+                  type: "unknownPrimitive",
+                  displayName: "Weird",
+                  attributeName: "weird",
+                },
+                {
+                  type: "unknownPrimitive",
+                  displayName: "Weird2",
+                  attributeName: "weird2",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ];
+    vi.spyOn(corpusLoader, "loadNodeTypeCorpusSnapshot").mockReturnValue(makeSnapshot(variants));
+
+    const tools = defineNodeTypeCorpusTools(mockServer, makeMockClient());
+    const handler = getHandler(
+      tools,
+      "generate_set_workspace_node_template_from_variant"
+    );
+    const result = parseResponse(
+      await callHandler(handler, { variantKey: "Stage:::withDupWarnings" })
+    );
+
+    expect(Array.isArray(result.warnings)).toBe(true);
+    const uniqueWarnings = new Set(result.warnings);
+    expect(uniqueWarnings.size).toBe(result.warnings.length);
+  });
+
+  it("surfaces the defensive error when sanitization produces a non-object definition", async () => {
+    const variants = [makeSupportedVariant({ variantKey: "Stage:::broken" })];
+    vi.spyOn(corpusLoader, "loadNodeTypeCorpusSnapshot").mockReturnValue(makeSnapshot(variants));
+    const sqlOverridePolicyModule = await import(
+      "../../src/services/policies/sql-override.js"
+    );
+    vi.spyOn(sqlOverridePolicyModule, "sanitizeNodeDefinitionSqlOverridePolicy").mockReturnValue({
+      nodeDefinition: null as unknown as Record<string, unknown>,
+      warnings: [],
+    });
+
+    const tools = defineNodeTypeCorpusTools(mockServer, makeMockClient());
+    const handler = getHandler(
+      tools,
+      "generate_set_workspace_node_template_from_variant"
+    );
+    const response = await callHandler(handler, { variantKey: "Stage:::broken" });
+
+    expect(response.isError).toBe(true);
+    const text = response.content.map((c) => c.text).join("\n");
+    expect(text).toContain("Sanitized node definition was not an object");
   });
 
   it("rejects a parse_error variant with an actionable error", async () => {
