@@ -2769,6 +2769,266 @@ describe("Pipeline Tools", () => {
     });
   });
 
+  describe("parse_sql_structure tool", () => {
+    it("rejects an empty SQL string with a descriptive error", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const toolSpy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+
+      definePipelineTools(server, client as any).forEach(t => server.registerTool(...t));
+
+      const handler = toolSpy.mock.calls.find(
+        (call) => call[0] === "parse_sql_structure"
+      )?.[2] as
+        | ((params: { sql: string }) => Promise<{ isError?: boolean; content: { text: string }[]; structuredContent?: Record<string, unknown> }>)
+        | undefined;
+
+      expect(typeof handler).toBe("function");
+
+      const result = await handler!({ sql: "   " });
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        error: "SQL parameter must not be empty.",
+      });
+    });
+
+    it("returns non-CTE structure with sourceRefs and select items", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const toolSpy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+
+      definePipelineTools(server, client as any).forEach(t => server.registerTool(...t));
+
+      const handler = toolSpy.mock.calls.find(
+        (call) => call[0] === "parse_sql_structure"
+      )?.[2] as
+        | ((params: { sql: string }) => Promise<{ isError?: boolean; content: { text: string }[]; structuredContent?: Record<string, unknown> }>)
+        | undefined;
+
+      const result = await handler!({
+        sql: "SELECT CUSTOMER_ID, UPPER(CUSTOMER_NAME) AS NAME_UPPER FROM RAW.CUSTOMERS c",
+      });
+
+      expect(result.isError).toBeUndefined();
+      const structured = result.structuredContent as Record<string, unknown>;
+      expect(structured.hasCtes).toBe(false);
+      expect(structured.sourceCount).toBe(1);
+      expect(structured.hasJoin).toBe(false);
+      expect(Array.isArray(structured.sourceRefs)).toBe(true);
+      expect((structured.sourceRefs as unknown[])[0]).toMatchObject({
+        nodeName: "CUSTOMERS",
+        alias: "c",
+      });
+      expect(Array.isArray(structured.selectItems)).toBe(true);
+      expect(structured.selectItemCount).toBe(2);
+      expect(typeof structured.guidance).toBe("string");
+    });
+
+    it("flags hasJoin=true when multiple source refs are parsed", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const toolSpy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+
+      definePipelineTools(server, client as any).forEach(t => server.registerTool(...t));
+
+      const handler = toolSpy.mock.calls.find(
+        (call) => call[0] === "parse_sql_structure"
+      )?.[2] as
+        | ((params: { sql: string }) => Promise<{ structuredContent?: Record<string, unknown> }>)
+        | undefined;
+
+      const result = await handler!({
+        sql: "SELECT c.CUSTOMER_ID, o.ORDER_ID FROM RAW.CUSTOMERS c JOIN RAW.ORDERS o ON c.CUSTOMER_ID = o.CUSTOMER_ID",
+      });
+
+      const structured = result.structuredContent as Record<string, unknown>;
+      expect(structured.hasCtes).toBe(false);
+      expect(structured.hasJoin).toBe(true);
+      expect(structured.sourceCount).toBe(2);
+    });
+
+    it("returns CTE decomposition with dependsOnCtes and finalSelect", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const toolSpy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+
+      definePipelineTools(server, client as any).forEach(t => server.registerTool(...t));
+
+      const handler = toolSpy.mock.calls.find(
+        (call) => call[0] === "parse_sql_structure"
+      )?.[2] as
+        | ((params: { sql: string }) => Promise<{ structuredContent?: Record<string, unknown> }>)
+        | undefined;
+
+      const cteSql = [
+        "WITH active_customers AS (",
+        "  SELECT CUSTOMER_ID, CUSTOMER_NAME FROM RAW.CUSTOMERS WHERE IS_ACTIVE = TRUE",
+        "),",
+        "ranked AS (",
+        "  SELECT CUSTOMER_ID, UPPER(CUSTOMER_NAME) AS NAME_UPPER FROM active_customers",
+        ")",
+        "SELECT * FROM ranked",
+      ].join("\n");
+
+      const result = await handler!({ sql: cteSql });
+      const structured = result.structuredContent as Record<string, unknown>;
+
+      expect(structured.hasCtes).toBe(true);
+      expect(structured.cteCount).toBe(2);
+      const ctes = structured.ctes as Array<Record<string, unknown>>;
+      expect(ctes).toHaveLength(2);
+
+      const active = ctes.find((c) => c.name === "ACTIVE_CUSTOMERS")!;
+      expect(active.dependsOnCtes).toEqual([]);
+
+      const ranked = ctes.find((c) => c.name === "RANKED")!;
+      expect(ranked.dependsOnCtes).toEqual(["ACTIVE_CUSTOMERS"]);
+
+      expect(structured.finalSelect).toBeDefined();
+      const finalSelect = structured.finalSelect as Record<string, unknown>;
+      expect(finalSelect.sourceCount).toBe(1);
+      expect(typeof structured.guidance).toBe("string");
+    });
+  });
+
+  describe("select_pipeline_node_type tool", () => {
+    it("returns a selected node type from workspace-observed inventory", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const toolSpy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+
+      client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+        if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+          return Promise.resolve({
+            data: [
+              { nodeType: "Stage" },
+              { nodeType: "Stage" },
+              { nodeType: "View" },
+              { nodeType: "Source" },
+            ],
+          });
+        }
+        throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+      });
+
+      definePipelineTools(server, client as any).forEach(t => server.registerTool(...t));
+
+      const handler = toolSpy.mock.calls.find(
+        (call) => call[0] === "select_pipeline_node_type"
+      )?.[2] as
+        | ((params: Record<string, unknown>) => Promise<{ isError?: boolean; structuredContent?: Record<string, unknown> }>)
+        | undefined;
+
+      expect(typeof handler).toBe("function");
+
+      const result = await handler!({
+        workspaceID: "ws-1",
+        goal: "staging layer for raw customer data",
+        targetName: "STG_CUSTOMER",
+        sourceCount: 1,
+        hasJoin: false,
+      });
+
+      expect(result.isError).toBeUndefined();
+      const structured = result.structuredContent as Record<string, unknown>;
+      expect(typeof structured.selectedNodeType).toBe("string");
+      expect(structured.selection).toBeDefined();
+      const selection = structured.selection as Record<string, unknown>;
+      expect(Array.isArray(selection.consideredNodeTypes)).toBe(true);
+      expect((selection.consideredNodeTypes as unknown[]).length).toBeGreaterThan(0);
+      expect(typeof selection.strategy).toBe("string");
+      expect(Array.isArray(structured.warnings)).toBe(true);
+    });
+
+    it("honors an explicit targetNodeType override", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const toolSpy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+
+      client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+        if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+          return Promise.resolve({
+            data: [{ nodeType: "Stage" }, { nodeType: "View" }],
+          });
+        }
+        throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+      });
+
+      definePipelineTools(server, client as any).forEach(t => server.registerTool(...t));
+
+      const handler = toolSpy.mock.calls.find(
+        (call) => call[0] === "select_pipeline_node_type"
+      )?.[2] as
+        | ((params: Record<string, unknown>) => Promise<{ structuredContent?: Record<string, unknown> }>)
+        | undefined;
+
+      const result = await handler!({
+        workspaceID: "ws-1",
+        sourceCount: 1,
+        targetNodeType: "View",
+      });
+
+      const structured = result.structuredContent as Record<string, unknown>;
+      expect(structured.selectedNodeType).toBe("View");
+      const selection = structured.selection as Record<string, unknown>;
+      expect(selection.strategy).toBe("explicit");
+    });
+
+    it("flags selectionDegraded when workspace inventory cannot be fetched", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const toolSpy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+
+      client.get.mockImplementation((path: string, params?: Record<string, unknown>) => {
+        if (path === "/api/v1/workspaces/ws-1/nodes" && params?.detail === false) {
+          return Promise.reject(new Error("timeout fetching nodes"));
+        }
+        throw new Error(`Unexpected GET ${path} ${JSON.stringify(params)}`);
+      });
+
+      definePipelineTools(server, client as any).forEach(t => server.registerTool(...t));
+
+      const handler = toolSpy.mock.calls.find(
+        (call) => call[0] === "select_pipeline_node_type"
+      )?.[2] as
+        | ((params: Record<string, unknown>) => Promise<{ structuredContent?: Record<string, unknown> }>)
+        | undefined;
+
+      const result = await handler!({
+        workspaceID: "ws-1",
+        sourceCount: 1,
+      });
+
+      const structured = result.structuredContent as Record<string, unknown>;
+      expect(structured.selectionDegraded).toBe(true);
+      expect(Array.isArray(structured.warnings)).toBe(true);
+      expect((structured.warnings as string[]).join(" ")).toContain("Observed workspace node types could not be fetched");
+    });
+
+    it("surfaces auth failures as isError via handleToolError", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const toolSpy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+
+      client.get.mockRejectedValue(new CoalesceApiError("Unauthorized", 401));
+
+      definePipelineTools(server, client as any).forEach(t => server.registerTool(...t));
+
+      const handler = toolSpy.mock.calls.find(
+        (call) => call[0] === "select_pipeline_node_type"
+      )?.[2] as
+        | ((params: Record<string, unknown>) => Promise<{ isError?: boolean }>)
+        | undefined;
+
+      const result = await handler!({
+        workspaceID: "ws-1",
+        sourceCount: 1,
+      });
+
+      expect(result.isError).toBe(true);
+    });
+  });
+
   describe("build_pipeline_from_intent tool", () => {
     it("returns needs_clarification when workspace has no matching entities", async () => {
       const server = new McpServer({ name: "test", version: "0.0.1" });
