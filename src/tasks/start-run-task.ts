@@ -19,7 +19,7 @@ export function registerStartRunTask(
     {
       title: "Start Run",
       description:
-        "Start a new Coalesce refresh run. Returns a task that resolves once the run has been submitted.\n\nRequires Snowflake auth — credentials read from environment variables (Key Pair: SNOWFLAKE_KEY_PAIR_KEY, or PAT: SNOWFLAKE_PAT, plus SNOWFLAKE_USERNAME, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_ROLE).\n\nRequires a numeric environmentID and optionally a jobID. If the user provides a job name, look up the ID with list_environment_jobs first.\n\nArgs:\n  - runDetails.environmentID (string, required): Target environment\n  - runDetails.jobID (string, optional): Specific job to run\n  - runDetails.includeNodesSelector (string, optional): Node filter for ad-hoc runs\n  - runDetails.excludeNodesSelector (string, optional): Node exclusion filter\n  - runDetails.parallelism (number, optional): Max parallel nodes (default: 16)\n  - runDetails.forceIgnoreWorkspaceStatus (boolean, optional): Allow run even if last deploy failed\n  - confirmRunAllNodes (boolean): Required when no job/node scope is provided\n  - parameters (object, optional): Key-value runtime parameters\n\nReturns:\n  { runCounter: number, runStatus: string, message: string }\n\nPrefer run_and_wait when you need the final outcome in a single call.",
+        "Start a new Coalesce refresh run. Returns a task that resolves once the run has been submitted.\n\nRequires Snowflake auth — credentials read from environment variables (Key Pair: SNOWFLAKE_KEY_PAIR_KEY, or PAT: SNOWFLAKE_PAT, plus SNOWFLAKE_USERNAME, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_ROLE).\n\nProvide exactly one of runDetails.environmentID or runDetails.workspaceID. If the user provides a job name, look up the ID with list_environment_jobs first.\n\nArgs:\n  - runDetails.environmentID (string, optional): Target deployed environment (numeric ID as string)\n  - runDetails.workspaceID (string, optional): Target workspace for a development run (numeric ID as string)\n  - runDetails.jobID (string, optional): Specific job to run\n  - runDetails.includeNodesSelector (string, optional): Node filter for ad-hoc runs\n  - runDetails.excludeNodesSelector (string, optional): Node exclusion filter\n  - runDetails.parallelism (number, optional): Max parallel nodes (default: 16)\n  - runDetails.forceIgnoreWorkspaceStatus (boolean, optional): Allow run even if last deploy failed\n  - confirmRunAllNodes (boolean): Required when no job/node scope is provided\n  - parameters (object, optional): Key-value runtime parameters\n\nReturns:\n  { runCounter: number, runStatus: string, message: string }\n\nPrefer run_and_wait when you need the final outcome in a single call.",
       inputSchema: StartRunParams,
       outputSchema: getToolOutputSchema("start_run"),
       annotations: WRITE_ANNOTATIONS,
@@ -37,7 +37,9 @@ export function registerStartRunTask(
             const result = await startRun(client, params);
             const sanitized = sanitizeResponse(result);
             const response = buildJsonToolResponse("start_run", sanitized, {
-              workspaceID: params.runDetails?.environmentID,
+              workspaceID:
+                params.runDetails?.workspaceID ??
+                params.runDetails?.environmentID,
             });
             await extra.taskStore.storeTaskResult(
               task.taskId,

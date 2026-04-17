@@ -32,7 +32,7 @@ export function registerRunAndWaitTask(
     {
       title: "Run and Wait",
       description:
-        "Start a Coalesce refresh run and poll until completion or timeout. Returns a task that can be polled for status.\n\nRequires Snowflake auth via environment variables (Key Pair or PAT). If the user provides a job name instead of an ID, look it up with list_environment_jobs first.\n\nArgs:\n  - runDetails.environmentID (string, required): Target environment\n  - runDetails.jobID (string, optional): Specific job to run\n  - runDetails.includeNodesSelector (string, optional): Node filter\n  - runDetails.excludeNodesSelector (string, optional): Node exclusion\n  - runDetails.parallelism (number, optional): Max parallel nodes\n  - runDetails.forceIgnoreWorkspaceStatus (boolean, optional): Force run\n  - confirmRunAllNodes (boolean): Required when no job/node scope\n  - parameters (object, optional): Runtime parameters\n  - pollInterval (number, optional): Seconds between checks (default: 10, range: 5–300)\n  - timeout (number, optional): Max wait seconds (default: 1800, range: 30–3600)\n\nReturns:\n  { status, results, resultsError?, incomplete?, timedOut? }\n\nInspect timedOut, incomplete, and resultsError fields before continuing.",
+        "Start a Coalesce refresh run and poll until completion or timeout. Returns a task that can be polled for status.\n\nRequires Snowflake auth via environment variables (Key Pair or PAT). Provide exactly one of runDetails.environmentID or runDetails.workspaceID. If the user provides a job name instead of an ID, look it up with list_environment_jobs first.\n\nArgs:\n  - runDetails.environmentID (string, optional): Target deployed environment (numeric ID as string)\n  - runDetails.workspaceID (string, optional): Target workspace for a development run (numeric ID as string)\n  - runDetails.jobID (string, optional): Specific job to run\n  - runDetails.includeNodesSelector (string, optional): Node filter\n  - runDetails.excludeNodesSelector (string, optional): Node exclusion\n  - runDetails.parallelism (number, optional): Max parallel nodes\n  - runDetails.forceIgnoreWorkspaceStatus (boolean, optional): Force run\n  - confirmRunAllNodes (boolean): Required when no job/node scope\n  - parameters (object, optional): Runtime parameters\n  - pollInterval (number, optional): Seconds between checks (default: 10, range: 5–300)\n  - timeout (number, optional): Max wait seconds (default: 1800, range: 30–3600)\n\nReturns:\n  { status, results, resultsError?, incomplete?, timedOut? }\n\nInspect timedOut, incomplete, and resultsError fields before continuing.",
       inputSchema: RunAndWaitTaskInput,
       outputSchema: getToolOutputSchema("run_and_wait"),
       annotations: WRITE_ANNOTATIONS,
@@ -53,7 +53,9 @@ export function registerRunAndWaitTask(
             });
             const sanitized = sanitizeResponse(result);
             const response = buildJsonToolResponse("run_and_wait", sanitized, {
-              workspaceID: params.runDetails?.environmentID,
+              workspaceID:
+                params.runDetails?.workspaceID ??
+                params.runDetails?.environmentID,
             });
             await extra.taskStore.storeTaskResult(
               task.taskId,

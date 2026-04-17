@@ -38,8 +38,17 @@ type ToolCallback = any;
  */
 function extractWorkspaceID(params: unknown): string | undefined {
   if (params && typeof params === "object" && !Array.isArray(params)) {
-    const value = (params as Record<string, unknown>).workspaceID;
-    if (typeof value === "string" && value.length > 0) return value;
+    const record = params as Record<string, unknown>;
+    const top = record.workspaceID;
+    if (typeof top === "string" && top.length > 0) return top;
+    const runDetails = record.runDetails;
+    if (runDetails && typeof runDetails === "object" && !Array.isArray(runDetails)) {
+      const rd = runDetails as Record<string, unknown>;
+      const ws = rd.workspaceID;
+      if (typeof ws === "string" && ws.length > 0) return ws;
+      const env = rd.environmentID;
+      if (typeof env === "string" && env.length > 0) return env;
+    }
   }
   return undefined;
 }

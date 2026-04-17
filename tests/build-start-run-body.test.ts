@@ -254,4 +254,43 @@ describe("buildStartRunBody", () => {
     process.env.SNOWFLAKE_PAT = "~/keys/snowflake.pem";
     expect(() => buildStartRunBody(scopedParams)).toThrow("appears to be a file path");
   });
+
+  // --- workspaceID alternate target ---
+
+  it("maps workspaceID to environmentID for the API body", () => {
+    const body = buildStartRunBody({
+      runDetails: { workspaceID: "1", includeNodesSelector: "{ name: FOO }" },
+    });
+    expect(body.runDetails.environmentID).toBe("1");
+    expect(body.runDetails).not.toHaveProperty("workspaceID");
+    expect(body.runDetails.includeNodesSelector).toBe("{ name: FOO }");
+  });
+
+  it("keeps environmentID unchanged when only environmentID is provided", () => {
+    const body = buildStartRunBody({
+      runDetails: { environmentID: "9", jobID: "job-1" },
+    });
+    expect(body.runDetails.environmentID).toBe("9");
+    expect(body.runDetails).not.toHaveProperty("workspaceID");
+  });
+
+  it("throws when both environmentID and workspaceID are provided", () => {
+    expect(() =>
+      buildStartRunBody({
+        runDetails: {
+          environmentID: "9",
+          workspaceID: "1",
+          jobID: "job-1",
+        },
+      })
+    ).toThrow("exactly one");
+  });
+
+  it("throws when neither environmentID nor workspaceID is provided", () => {
+    expect(() =>
+      buildStartRunBody({
+        runDetails: { jobID: "job-1" },
+      })
+    ).toThrow("exactly one");
+  });
 });
