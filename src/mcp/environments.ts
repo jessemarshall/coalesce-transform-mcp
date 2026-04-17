@@ -14,7 +14,7 @@ import {
   DESTRUCTIVE_ANNOTATIONS,
   type ToolDefinition,
 } from "../coalesce/types.js";
-import { defineSimpleTool, defineDestructiveTool } from "./tool-helpers.js";
+import { defineSimpleTool, defineDestructiveTool, extractEntityName } from "./tool-helpers.js";
 
 export function defineEnvironmentTools(
   server: McpServer,
@@ -78,7 +78,22 @@ export function defineEnvironmentTools(
         .describe("Set to true after the user explicitly confirms the deletion."),
     }),
     annotations: DESTRUCTIVE_ANNOTATIONS,
-    confirmMessage: (params) => `This will permanently delete environment "${params.environmentID}". This cannot be undone.`,
+    resolve: async (client, params) => {
+      const env = await getEnvironment(client, { environmentID: params.environmentID });
+      return {
+        primary: {
+          type: "environment",
+          id: params.environmentID,
+          name: extractEntityName(env),
+        },
+      };
+    },
+    confirmMessage: (params, preview) => {
+      const label = preview?.primary.name
+        ? `"${preview.primary.name}" (${params.environmentID})`
+        : `"${params.environmentID}"`;
+      return `This will permanently delete environment ${label}. This cannot be undone.`;
+    },
   }, deleteEnvironment),
   ];
 }

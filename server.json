@@ -6,22 +6,29 @@
     "url": "https://github.com/jessemarshall/coalesce-transform-mcp",
     "source": "github"
   },
-  "version": "0.4.8",
+  "version": "0.5.0-alpha.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "coalesce-transform-mcp",
-      "version": "0.4.8",
+      "version": "0.5.0-alpha.2",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
-          "description": "Bearer token from the Coalesce Deploy tab.",
-          "isRequired": true,
+          "description": "Bearer token from the Coalesce Deploy tab. Optional when `~/.coa/config` provides a `token`.",
+          "isRequired": false,
           "format": "string",
           "isSecret": true,
           "name": "COALESCE_ACCESS_TOKEN"
+        },
+        {
+          "description": "Selects which `~/.coa/config` profile to load. Defaults to default.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_PROFILE"
         },
         {
           "description": "Region-specific base URL. Defaults to https://app.coalescesoftware.io (US).",
@@ -31,21 +38,21 @@
           "name": "COALESCE_BASE_URL"
         },
         {
-          "description": "Fallback org ID for cancel-run.",
+          "description": "Fallback org ID for cancel-run. Also readable from `orgID` in the active ~/.coa/config profile.",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
           "name": "COALESCE_ORG_ID"
         },
         {
-          "description": "Local repo root for repo-backed tools and pipeline planning.",
+          "description": "Local repo root for repo-backed tools and pipeline planning. Also readable from `repoPath` in the active ~/.coa/config profile.",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
           "name": "COALESCE_REPO_PATH"
         },
         {
-          "description": "Base directory for the local data cache. When set, cache files are written here instead of the working directory.",
+          "description": "Base directory for the local data cache. When set, cache files are written here instead of the working directory. Also readable from `cacheDir` in the active ~/.coa/config profile.",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
@@ -85,6 +92,13 @@
           "format": "string",
           "isSecret": false,
           "name": "COALESCE_MCP_SKILLS_DIR"
+        },
+        {
+          "description": "Snowflake account identifier (e.g., `abc12345.us-east-1`). Required by the local `coa` CLI and `coa doctor`; not used by the MCP's REST run path. (required for run tools)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "SNOWFLAKE_ACCOUNT"
         },
         {
           "description": "Snowflake account username (required for run tools)",

@@ -20,7 +20,7 @@ import {
   DESTRUCTIVE_ANNOTATIONS,
   type ToolDefinition,
 } from "../coalesce/types.js";
-import { defineSimpleTool, defineDestructiveTool } from "./tool-helpers.js";
+import { defineSimpleTool, defineDestructiveTool, extractEntityName } from "./tool-helpers.js";
 import { RUN_STATUS_VALUES } from "../constants.js";
 
 // NOTE: runID (string) and runCounter (number) are both Coalesce API concepts, not a naming inconsistency.
@@ -71,7 +71,7 @@ export function defineRunTools(
   ...(!options?.skipStartRun ? [defineSimpleTool(client, "start_run", {
       title: "Start Run",
       description:
-        "Start a new Coalesce refresh run. Requires Snowflake auth — credentials read from environment variables (Key Pair: SNOWFLAKE_KEY_PAIR_KEY, or PAT: SNOWFLAKE_PAT, plus SNOWFLAKE_USERNAME, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_ROLE).\n\nRequires a numeric environmentID and optionally a jobID. If the user provides a job name, look up the ID with list_environment_jobs first.\n\nArgs:\n  - runDetails.environmentID (string, required): Target environment\n  - runDetails.jobID (string, optional): Specific job to run\n  - runDetails.includeNodesSelector (string, optional): Node filter for ad-hoc runs\n  - runDetails.excludeNodesSelector (string, optional): Node exclusion filter\n  - runDetails.parallelism (number, optional): Max parallel nodes (default: 16)\n  - runDetails.forceIgnoreWorkspaceStatus (boolean, optional): Allow run even if last deploy failed\n  - confirmRunAllNodes (boolean): Required when no job/node scope is provided\n  - parameters (object, optional): Key-value runtime parameters\n\nReturns:\n  { runCounter: number, runStatus: string, message: string }\n\nPrefer run_and_wait when you need the final outcome in a single call.",
+        "Start a new Coalesce refresh run. Requires Snowflake auth — credentials read from environment variables (Key Pair: SNOWFLAKE_KEY_PAIR_KEY, or PAT: SNOWFLAKE_PAT, plus SNOWFLAKE_USERNAME, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_ROLE).\n\nProvide exactly one of runDetails.environmentID or runDetails.workspaceID. If the user provides a job name, look up the ID with list_environment_jobs first.\n\nArgs:\n  - runDetails.environmentID (string, optional): Target deployed environment (numeric ID as string)\n  - runDetails.workspaceID (string, optional): Target workspace for a development run (numeric ID as string)\n  - runDetails.jobID (string, optional): Specific job to run\n  - runDetails.includeNodesSelector (string, optional): Node filter for ad-hoc runs\n  - runDetails.excludeNodesSelector (string, optional): Node exclusion filter\n  - runDetails.parallelism (number, optional): Max parallel nodes (default: 16)\n  - runDetails.forceIgnoreWorkspaceStatus (boolean, optional): Allow run even if last deploy failed\n  - confirmRunAllNodes (boolean): Required when no job/node scope is provided\n  - parameters (object, optional): Key-value runtime parameters\n\nReturns:\n  { runCounter: number, runStatus: string, message: string }\n\nPrefer run_and_wait when you need the final outcome in a single call.",
       inputSchema: StartRunParams,
       annotations: WRITE_ANNOTATIONS,
       sanitize: true,
@@ -118,13 +118,13 @@ export function defineRunTools(
   defineDestructiveTool(server, client, "cancel_run", {
     title: "Cancel Run",
     description:
-      "Cancel an in-progress Coalesce run. Destructive — the run will be terminated immediately. Canceling a running pipeline mid-execution can leave data in an inconsistent state (partial loads, half-transformed tables). There is no 'undo cancel'.\n\nArgs:\n  - runID (string, required): Numeric run ID to cancel\n  - environmentID (string, required): Environment the run belongs to\n  - orgID (string, optional): Organization ID. Falls back to COALESCE_ORG_ID env var.\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms cancellation\n\nReturns:\n  Confirmation with updated run status.",
+      "Cancel an in-progress Coalesce run. Destructive — the run will be terminated immediately. Canceling a running pipeline mid-execution can leave data in an inconsistent state (partial loads, half-transformed tables). There is no 'undo cancel'.\n\nArgs:\n  - runID (string, required): Numeric run ID to cancel\n  - environmentID (string, required): Environment the run belongs to\n  - orgID (string, optional): Organization ID. Falls back to COALESCE_ORG_ID env var or `orgID` in the active ~/.coa/config profile.\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms cancellation\n\nReturns:\n  Confirmation with updated run status.",
     inputSchema: z.object({
       runID: z.string().describe("The numeric run ID (integer) of the run to cancel"),
       orgID: z
         .string()
         .optional()
-        .describe("The organization ID. Optional if COALESCE_ORG_ID is set."),
+        .describe("The organization ID. Optional if COALESCE_ORG_ID is set, or if `orgID` is present in the active ~/.coa/config profile."),
       environmentID: z.string().describe("The environment ID the run belongs to"),
       confirmed: z
         .boolean()
@@ -132,8 +132,33 @@ export function defineRunTools(
         .describe("Set to true after the user explicitly confirms the cancellation."),
     }),
     annotations: DESTRUCTIVE_ANNOTATIONS,
+    resolve: async (client, params) => {
+      const run = await getRun(client, { runID: params.runID });
+      const runObj = run as Record<string, unknown> | null;
+      const status = typeof runObj?.runStatus === "string" ? runObj.runStatus : undefined;
+      if (status && !["running", "waitingToRun"].includes(status)) {
+        throw new Error(
+          `run ${params.runID} is in terminal state "${status}" — there is nothing to cancel`
+        );
+      }
+      return {
+        primary: {
+          type: "run",
+          id: params.runID,
+          name: extractEntityName(run) ?? (status ? `status=${status}` : undefined),
+        },
+        context: {
+          environmentID: params.environmentID,
+          runStatus: status,
+        },
+      };
+    },
     sanitize: true,
-    confirmMessage: (params) => `This will cancel run "${params.runID}" in environment "${params.environmentID}". The run will be terminated immediately and cannot be resumed — data may be left in an inconsistent state.`,
+    confirmMessage: (params, preview) => {
+      const status = (preview?.context as { runStatus?: string } | undefined)?.runStatus;
+      const suffix = status ? ` (current status: ${status})` : "";
+      return `This will cancel run "${params.runID}" in environment "${params.environmentID}"${suffix}. The run will be terminated immediately and cannot be resumed — data may be left in an inconsistent state.`;
+    },
   }, cancelRun),
   ];
 }

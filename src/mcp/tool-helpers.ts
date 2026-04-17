@@ -38,8 +38,17 @@ type ToolCallback = any;
  */
 function extractWorkspaceID(params: unknown): string | undefined {
   if (params && typeof params === "object" && !Array.isArray(params)) {
-    const value = (params as Record<string, unknown>).workspaceID;
-    if (typeof value === "string" && value.length > 0) return value;
+    const record = params as Record<string, unknown>;
+    const top = record.workspaceID;
+    if (typeof top === "string" && top.length > 0) return top;
+    const runDetails = record.runDetails;
+    if (runDetails && typeof runDetails === "object" && !Array.isArray(runDetails)) {
+      const rd = runDetails as Record<string, unknown>;
+      const ws = rd.workspaceID;
+      if (typeof ws === "string" && ws.length > 0) return ws;
+      const env = rd.environmentID;
+      if (typeof env === "string" && env.length > 0) return env;
+    }
   }
   return undefined;
 }
@@ -109,15 +118,15 @@ export function defineLocalTool<S extends z.ZodType>(
 }
 
 /**
- * Define a destructive tool that requires user confirmation before executing.
- * The `server` parameter is still needed for elicitation.
+ * Define a destructive tool that does not talk to the Coalesce REST API
+ * (e.g., shells out to the coa CLI). Same confirmation gate as
+ * defineDestructiveTool, but no CoalesceClient dependency.
  */
-export function defineDestructiveTool<S extends z.ZodType>(
+export function defineDestructiveLocalTool<S extends z.ZodType>(
   server: McpServer,
-  client: CoalesceClient,
   name: string,
   def: ToolDef<S> & { confirmMessage: (params: z.infer<S>) => string },
-  apiFunc: (client: CoalesceClient, params: z.infer<S>) => Promise<unknown>
+  handler: (params: z.infer<S>) => unknown | Promise<unknown>
 ): ToolDefinition {
   return [
     name,
@@ -138,8 +147,120 @@ export function defineDestructiveTool<S extends z.ZodType>(
         );
         if (approvalResponse) return approvalResponse;
 
-        const result = await apiFunc(client, params);
+        const result = await handler(params);
         return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result, {
+          workspaceID: extractWorkspaceID(params),
+        });
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }) as ToolCallback,
+  ];
+}
+
+/**
+ * Preview of what a destructive tool is about to mutate. Returned from a tool's
+ * `resolve` hook and surfaced in both the confirmation message and the final
+ * response so the caller can verify targets before and after the operation.
+ */
+export interface DestructivePreview {
+  /** The primary target of the mutation (what the user named). */
+  primary: { type: string; id: string; name?: string };
+  /** Additional entities that will be affected (cascaded deletes, dependents). */
+  affected?: Array<{ type: string; id: string; name?: string; note?: string }>;
+  /** Arbitrary extra context to include in the confirmation and response. */
+  context?: Record<string, unknown>;
+}
+
+/**
+ * Best-effort extraction of a human-readable name from a Coalesce API response.
+ * Returns undefined when the shape is unexpected — callers should fall back to
+ * the ID for confirmation text.
+ */
+export function extractEntityName(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = (value as Record<string, unknown>).name
+    ?? (value as Record<string, unknown>).label
+    ?? (value as Record<string, unknown>).displayName;
+  return typeof candidate === "string" && candidate.length > 0 ? candidate : undefined;
+}
+
+function formatPreviewForConfirmation(preview: DestructivePreview): string {
+  const name = preview.primary.name ? `"${preview.primary.name}"` : `(unnamed)`;
+  const header = `Target: ${preview.primary.type} ${name} [${preview.primary.id}]`;
+  if (!preview.affected || preview.affected.length === 0) return header;
+  const lines = preview.affected.slice(0, 10).map((item) => {
+    const n = item.name ? `"${item.name}"` : "(unnamed)";
+    const note = item.note ? ` — ${item.note}` : "";
+    return `  • ${item.type} ${n} [${item.id}]${note}`;
+  });
+  const suffix = preview.affected.length > 10
+    ? `\n  … and ${preview.affected.length - 10} more`
+    : "";
+  return `${header}\nAlso affected (${preview.affected.length}):\n${lines.join("\n")}${suffix}`;
+}
+
+/**
+ * Define a destructive tool that requires user confirmation before executing.
+ * The `server` parameter is still needed for elicitation.
+ *
+ * Safety guardrail: when `resolve` is provided, it runs BEFORE confirmation and
+ * BEFORE mutation — even when `confirmed: true` is already set. If resolve throws
+ * (typical case: the primary target returns 404), the mutation is blocked. This
+ * prevents destructive calls from succeeding against phantom/unresolvable IDs.
+ */
+export function defineDestructiveTool<S extends z.ZodType>(
+  server: McpServer,
+  client: CoalesceClient,
+  name: string,
+  def: ToolDef<S> & {
+    confirmMessage: (params: z.infer<S>, preview?: DestructivePreview) => string;
+    resolve?: (client: CoalesceClient, params: z.infer<S>) => Promise<DestructivePreview>;
+  },
+  apiFunc: (client: CoalesceClient, params: z.infer<S>) => Promise<unknown>
+): ToolDefinition {
+  return [
+    name,
+    {
+      title: def.title,
+      description: def.description,
+      inputSchema: def.inputSchema,
+      outputSchema: getToolOutputSchema(name),
+      annotations: def.annotations,
+    },
+    (async (params: z.infer<S>) => {
+      try {
+        let preview: DestructivePreview | undefined;
+        if (def.resolve) {
+          try {
+            preview = await def.resolve(client, params);
+          } catch (err) {
+            const reason = err instanceof Error ? err.message : String(err);
+            throw new Error(
+              `Refusing to run ${name}: could not resolve target before mutation — ${reason}`
+            );
+          }
+        }
+
+        const messageBody = def.confirmMessage(params, preview);
+        const previewBlock = preview
+          ? `\n\n${formatPreviewForConfirmation(preview)}`
+          : "";
+        const approvalResponse = await requireDestructiveConfirmation(
+          server,
+          name,
+          `${messageBody}${previewBlock}`,
+          params.confirmed,
+          preview ? { preview } : undefined,
+        );
+        if (approvalResponse) return approvalResponse;
+
+        const result = await apiFunc(client, params);
+        const body = def.sanitize ? sanitizeResponse(result) : result;
+        const enriched = preview && body && typeof body === "object" && !Array.isArray(body)
+          ? { ...(body as Record<string, unknown>), resolvedTargets: preview }
+          : body;
+        return buildJsonToolResponse(name, enriched, {
           workspaceID: extractWorkspaceID(params),
         });
       } catch (error) {

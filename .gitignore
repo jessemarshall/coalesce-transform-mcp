@@ -22,3 +22,5 @@ CLAUDE.md
 tests/services/intent-simulation.test.ts
 INTEGRATION-TESTING.md
 CLAUDE.md
+docs/RELEASES.md
+docs/COA-INTEGRATION-PLAN.md

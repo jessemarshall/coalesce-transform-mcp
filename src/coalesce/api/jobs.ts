@@ -58,6 +58,17 @@ export async function updateWorkspaceJob(
   );
 }
 
+export async function getWorkspaceJob(
+  client: CoalesceClient,
+  params: { workspaceID: string; jobID: string }
+): Promise<unknown> {
+  const { workspaceID, jobID } = params;
+  return client.get(
+    `/api/v1/workspaces/${validatePathSegment(workspaceID, "workspaceID")}/jobs/${validatePathSegment(jobID, "jobID")}`,
+    {}
+  );
+}
+
 export async function deleteWorkspaceJob(
   client: CoalesceClient,
   params: { workspaceID: string; jobID: string }

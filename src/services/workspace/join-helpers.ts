@@ -43,8 +43,14 @@ export type JoinClause = {
 export type GroupByAnalysis = {
   groupByColumns: string[];
   aggregateColumns: { name: string; transform: string }[];
+  windowColumns: { name: string; transform: string }[];
   hasAggregates: boolean;
+  hasWindowFunctions: boolean;
   groupByClause: string;
+  validation: {
+    valid: boolean;
+    errors: string[];
+  };
 };
 
 export type ColumnTransform = {
@@ -478,6 +484,8 @@ export function analyzeColumnsForGroupBy(
 
   const groupByColumns: string[] = [];
   const aggregateColumns: { name: string; transform: string }[] = [];
+  const windowColumns: { name: string; transform: string }[] = [];
+  const errors: string[] = [];
 
   for (const col of columns) {
     const upperTransform = col.transform.toUpperCase();
@@ -487,15 +495,27 @@ export function analyzeColumnsForGroupBy(
     );
     const isWindow = windowFunctions.some((fn) => upperTransform.includes(fn));
 
-    if (isAggregate || isWindow) {
+    if (isAggregate) {
       aggregateColumns.push({ name: col.name, transform: col.transform });
+    } else if (isWindow) {
+      windowColumns.push({ name: col.name, transform: col.transform });
     } else {
       // This is a non-aggregate column, needs to be in GROUP BY
       groupByColumns.push(col.transform);
     }
   }
 
-  const hasAggregates = aggregateColumns.length > 0;
+  const hasWindowFunctions = windowColumns.length > 0;
+  const hasAggregates = aggregateColumns.length > 0 || hasWindowFunctions;
+
+  let valid = true;
+  if (hasWindowFunctions) {
+    errors.push(
+      "Window functions are not GROUP BY-safe in convert_join_to_aggregation. " +
+      "Use aggregate functions only, or rewrite the node with replace_workspace_node_columns."
+    );
+    valid = false;
+  }
 
   const groupByClause =
     hasAggregates && groupByColumns.length > 0
@@ -505,8 +525,14 @@ export function analyzeColumnsForGroupBy(
   return {
     groupByColumns,
     aggregateColumns,
+    windowColumns,
     hasAggregates,
+    hasWindowFunctions,
     groupByClause,
+    validation: {
+      valid,
+      errors,
+    },
   };
 }
 

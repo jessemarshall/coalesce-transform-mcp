@@ -32,6 +32,12 @@ Use these run tools and workflows:
 - The source only treats terminal completion as the point where success or failure can actually be asserted.
 - The MCP `run_and_wait` and `retry_and_wait` workflows follow that same model and then fetch `/api/v1/runs/{runCounter}/results`.
 
+## Run Targets
+
+- `start_run`, `run_and_wait` take exactly one of `runDetails.environmentID` (deployed environment) or `runDetails.workspaceID` (development workspace).
+- Use `environmentID` when the user wants a scheduled/production refresh; use `workspaceID` when they want to refresh a node in their own workspace during development.
+- Both identifiers are numeric IDs passed as strings. Resolve names to IDs first via `list_environments` / `list_workspaces`.
+
 ## Routing Rules
 
 - Use `run_and_wait` when the user wants the final run outcome in one call.

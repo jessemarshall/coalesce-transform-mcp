@@ -4,12 +4,13 @@ import type { CoalesceClient, QueryParams } from "../../client.js";
 import { listWorkspaceNodes } from "../../coalesce/api/nodes.js";
 import { validatePathSegment } from "../../coalesce/types.js";
 import { isPlainObject } from "../../utils.js";
-import { CACHE_DIR_NAME } from "../../cache-dir.js";
+import { CACHE_DIR_NAME, getCacheBaseDir } from "../../cache-dir.js";
 import type { WorkflowProgressReporter } from "../../workflows/progress.js";
 import { DEFAULT_PAGE_SIZE, DETAIL_FETCH_TIMEOUT_MS } from "../../constants.js";
 
 const DEFAULT_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const MAX_CACHE_ENTRIES = 50;
+const MAX_PAGES = 500;
 const PROGRESS_INTERVAL = 500;
 
 export type LineageNode = {
@@ -204,20 +205,34 @@ function buildIndexes(nodes: Map<string, LineageNode>): Pick<
 
 function tryLoadFromSnapshot(workspaceID: string, baseDir: string): Record<string, unknown>[] | null {
   const safeID = validatePathSegment(workspaceID, "workspaceID");
-  const ndjsonPath = join(baseDir, CACHE_DIR_NAME, safeID, "nodes", "nodes.ndjson");
-  const metaPath = join(baseDir, CACHE_DIR_NAME, safeID, "nodes", "nodes.meta.json");
-
-  if (!existsSync(ndjsonPath) || !existsSync(metaPath)) return null;
+  const candidatePaths = [
+    {
+      ndjsonPath: join(baseDir, CACHE_DIR_NAME, `workspace-${safeID}`, "nodes", "nodes.ndjson"),
+      metaPath: join(baseDir, CACHE_DIR_NAME, `workspace-${safeID}`, "nodes", "nodes.meta.json"),
+    },
+    {
+      ndjsonPath: join(baseDir, CACHE_DIR_NAME, safeID, "nodes", "nodes.ndjson"),
+      metaPath: join(baseDir, CACHE_DIR_NAME, safeID, "nodes", "nodes.meta.json"),
+    },
+    {
+      ndjsonPath: join(baseDir, CACHE_DIR_NAME, "nodes", `workspace-${safeID}-nodes.ndjson`),
+      metaPath: join(baseDir, CACHE_DIR_NAME, "nodes", `workspace-${safeID}-nodes.meta.json`),
+    },
+  ];
+  const snapshot = candidatePaths.find(
+    ({ ndjsonPath, metaPath }) => existsSync(ndjsonPath) && existsSync(metaPath)
+  );
+  if (!snapshot) return null;
 
   try {
-    const meta = JSON.parse(readFileSync(metaPath, "utf8"));
+    const meta = JSON.parse(readFileSync(snapshot.metaPath, "utf8"));
     if (!isPlainObject(meta) || typeof meta.cachedAt !== "string") return null;
 
     // Check if snapshot is within TTL
     const cachedAt = new Date(meta.cachedAt).getTime();
     if (Date.now() - cachedAt > getLineageTtlMs()) return null;
 
-    const lines = readFileSync(ndjsonPath, "utf8").trimEnd().split("\n");
+    const lines = readFileSync(snapshot.ndjsonPath, "utf8").trimEnd().split("\n");
     const items: Record<string, unknown>[] = [];
     for (const line of lines) {
       if (line.trim().length === 0) continue;
@@ -273,8 +288,15 @@ async function fetchAllNodes(
   const seenCursors = new Set<string>();
   let next: string | undefined;
   let isFirstPage = true;
+  let pageCount = 0;
 
   while (isFirstPage || next) {
+    if (++pageCount > MAX_PAGES) {
+      throw new Error(
+        `Workspace node pagination exceeded ${MAX_PAGES} pages (${items.length} nodes fetched). ` +
+        `This likely indicates an API bug. The nodes fetched so far are not returned.`
+      );
+    }
     const response = await listWorkspaceNodes(client, {
       workspaceID: safeID,
       detail: true,
@@ -331,7 +353,7 @@ export async function buildLineageCache(
     }
   }
 
-  const baseDir = options.baseDir ?? process.cwd();
+  const baseDir = getCacheBaseDir(options.baseDir);
 
   // Try loading from disk snapshot
   let rawNodes: Record<string, unknown>[] | null = null;

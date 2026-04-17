@@ -1,6 +1,8 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
+import { loadCoaProfile } from "../config/coa-config.js";
+
 /**
  * Validates that a path is a legitimate Coalesce repo directory.
  *
@@ -57,6 +59,11 @@ function getConfiguredRepoPathInput(repoPath?: string): string | undefined {
     return envRepoPath;
   }
 
+  const profileRepoPath = loadCoaProfile()?.repoPath;
+  if (typeof profileRepoPath === "string" && profileRepoPath.trim().length > 0) {
+    return profileRepoPath;
+  }
+
   return undefined;
 }
 
@@ -74,6 +81,6 @@ export function resolveRepoPathInput(repoPath?: string): string {
   }
 
   throw new Error(
-    "repoPath is required for repo-backed tools. Provide repoPath explicitly or set COALESCE_REPO_PATH."
+    "repoPath is required for repo-backed tools. Provide repoPath explicitly, set COALESCE_REPO_PATH, or add `repoPath=` to your profile in ~/.coa/config."
   );
 }

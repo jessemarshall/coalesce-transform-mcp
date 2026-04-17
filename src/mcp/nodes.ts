@@ -43,7 +43,7 @@ import {
   handleToolError,
   type ToolDefinition,
 } from "../coalesce/types.js";
-import { defineSimpleTool, defineDestructiveTool } from "./tool-helpers.js";
+import { defineSimpleTool, defineDestructiveTool, extractEntityName } from "./tool-helpers.js";
 
 export function defineNodeTools(
   server: McpServer,
@@ -433,7 +433,7 @@ export function defineNodeTools(
   defineDestructiveTool(server, client, "delete_workspace_node", {
     title: "Delete Workspace Node",
     description:
-      "Permanently delete a workspace node. Destructive — check for downstream dependencies first.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - nodeID (string, required): The node ID\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms deletion\n\nReturns:\n  Confirmation message.",
+      "Permanently delete a workspace node. Destructive — check for downstream dependencies first. Before mutating, the tool resolves the node via get_workspace_node and blocks the delete if the ID does not exist.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - nodeID (string, required): The node ID\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms deletion\n\nReturns:\n  Confirmation message plus the resolved node name.",
     inputSchema: z.object({
       workspaceID: z.string().describe("The workspace ID"),
       nodeID: z.string().describe("The node ID to delete"),
@@ -443,7 +443,26 @@ export function defineNodeTools(
         .describe("Set to true after the user explicitly confirms the deletion."),
     }),
     annotations: DESTRUCTIVE_ANNOTATIONS,
-    confirmMessage: (params) => `This will permanently delete node "${params.nodeID}" from workspace "${params.workspaceID}". This cannot be undone.`,
+    resolve: async (client, params) => {
+      const node = await getWorkspaceNode(client, {
+        workspaceID: params.workspaceID,
+        nodeID: params.nodeID,
+      });
+      return {
+        primary: {
+          type: "workspace_node",
+          id: params.nodeID,
+          name: extractEntityName(node),
+        },
+        context: { workspaceID: params.workspaceID },
+      };
+    },
+    confirmMessage: (params, preview) => {
+      const label = preview?.primary.name
+        ? `"${preview.primary.name}" (${params.nodeID})`
+        : `"${params.nodeID}"`;
+      return `This will permanently delete node ${label} from workspace "${params.workspaceID}". This cannot be undone.`;
+    },
   }, deleteWorkspaceNode),
 
   defineSimpleTool(client, "complete_node_configuration", {

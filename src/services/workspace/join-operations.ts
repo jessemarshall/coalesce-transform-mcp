@@ -160,7 +160,21 @@ export async function convertJoinToAggregation(
   // Analyze GROUP BY requirements
   const groupByAnalysis = analyzeColumnsForGroupBy(columns);
 
-  const warnings: string[] = [];
+  const warnings: string[] = [...groupByAnalysis.validation.errors];
+
+  if (!groupByAnalysis.validation.valid) {
+    return {
+      node: current,
+      joinSQL,
+      groupByAnalysis,
+      validation: {
+        valid: false,
+        warnings,
+      },
+      configCompletionSkipped:
+        "Aggregation was not applied because one or more requested columns are not GROUP BY-safe.",
+    };
+  }
 
   // Derive business key and change tracking column names
   // Business key = GROUP BY columns (dimensions)
@@ -275,7 +289,7 @@ export async function convertJoinToAggregation(
     joinSQL,
     groupByAnalysis,
     validation: {
-      valid: warnings.length === 0,
+      valid: groupByAnalysis.validation.valid && warnings.length === 0,
       warnings,
     },
     ...completion,

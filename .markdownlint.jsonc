@@ -1,0 +1,30 @@
+{
+  // Inline HTML is load-bearing for the README's collapsible sections
+  // and Octicon-based `<picture>` theme-switching pattern.
+  "MD033": false,
+
+  // Adjacent GitHub callout blockquotes (> [!TIP] then > [!NOTE]) need
+  // a blank line separator to render as two distinct alerts.
+  "MD028": false,
+
+  // The "I want to…" table uses a leading icon column that triggers
+  // "compact" pipe-spacing complaints. The visual alignment is deliberate.
+  "MD060": false,
+
+  // Long lines are fine for prose-style README content.
+  "MD013": false,
+
+  // Bold-as-subheading inside `<details>` collapsibles is intentional —
+  // real `###` headings would pollute the TOC.
+  "MD036": false,
+
+  // Allow duplicate heading names under different parent sections
+  // (e.g., repeated "Tasks" or "Tools to add" in planning docs).
+  "MD024": { "siblings_only": true },
+
+  // Minor style-only rules that don't affect GitHub rendering.
+  "MD012": false,
+  "MD031": false,
+  "MD034": false,
+  "MD040": false
+}

@@ -1,20 +1,25 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { writeFileSync, unlinkSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildStartRunBody } from "../src/coalesce/types.js";
+import { setupTempHome, type TempHomeHandle } from "./helpers/coa-config-fixture.js";
 
 describe("buildStartRunBody", () => {
   const originalEnv = process.env;
   const tempDir = join(tmpdir(), "coalesce-test-" + process.pid);
   const keyFilePath = join(tempDir, "test-key.pem");
   const pemContent = "-----BEGIN PRIVATE KEY-----\nxxx\n-----END PRIVATE KEY-----";
+  let tempHome: TempHomeHandle;
 
   beforeEach(() => {
+    tempHome = setupTempHome();
     mkdirSync(tempDir, { recursive: true });
     writeFileSync(keyFilePath, pemContent);
     process.env = {
       ...originalEnv,
+      HOME: tempHome.home,
+      USERPROFILE: tempHome.home,
       SNOWFLAKE_USERNAME: "user",
       SNOWFLAKE_KEY_PAIR_KEY: keyFilePath,
       SNOWFLAKE_WAREHOUSE: "WH",
@@ -25,6 +30,8 @@ describe("buildStartRunBody", () => {
   afterEach(() => {
     process.env = originalEnv;
     try { unlinkSync(keyFilePath); } catch { /* ignore */ }
+    vi.unstubAllEnvs();
+    tempHome.cleanup();
   });
 
   // Params with a jobID (scoped — no confirmation needed)
@@ -246,5 +253,44 @@ describe("buildStartRunBody", () => {
     delete process.env.SNOWFLAKE_KEY_PAIR_KEY;
     process.env.SNOWFLAKE_PAT = "~/keys/snowflake.pem";
     expect(() => buildStartRunBody(scopedParams)).toThrow("appears to be a file path");
+  });
+
+  // --- workspaceID alternate target ---
+
+  it("maps workspaceID to environmentID for the API body", () => {
+    const body = buildStartRunBody({
+      runDetails: { workspaceID: "1", includeNodesSelector: "{ name: FOO }" },
+    });
+    expect(body.runDetails.environmentID).toBe("1");
+    expect(body.runDetails).not.toHaveProperty("workspaceID");
+    expect(body.runDetails.includeNodesSelector).toBe("{ name: FOO }");
+  });
+
+  it("keeps environmentID unchanged when only environmentID is provided", () => {
+    const body = buildStartRunBody({
+      runDetails: { environmentID: "9", jobID: "job-1" },
+    });
+    expect(body.runDetails.environmentID).toBe("9");
+    expect(body.runDetails).not.toHaveProperty("workspaceID");
+  });
+
+  it("throws when both environmentID and workspaceID are provided", () => {
+    expect(() =>
+      buildStartRunBody({
+        runDetails: {
+          environmentID: "9",
+          workspaceID: "1",
+          jobID: "job-1",
+        },
+      })
+    ).toThrow("exactly one");
+  });
+
+  it("throws when neither environmentID nor workspaceID is provided", () => {
+    expect(() =>
+      buildStartRunBody({
+        runDetails: { jobID: "job-1" },
+      })
+    ).toThrow("exactly one");
   });
 });

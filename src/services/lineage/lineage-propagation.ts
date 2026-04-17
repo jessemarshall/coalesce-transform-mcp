@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CoalesceClient } from "../../client.js";
-import { CACHE_DIR_NAME } from "../../cache-dir.js";
+import { CACHE_DIR_NAME, getCacheBaseDir } from "../../cache-dir.js";
 import type { LineageCacheEntry } from "./lineage-cache.js";
 import { invalidateLineageCache } from "./lineage-cache.js";
 import { walkColumnLineage } from "./lineage-traversal.js";
@@ -51,11 +51,55 @@ export type PropagationResult = {
   errors: Array<{ nodeID: string; columnID: string; message: string }>;
   partialFailure?: boolean;
   skippedNodes?: ColumnUpdateInfo[];
+  rolledBack?: boolean;
 };
 
-type PreparedColumnUpdate = ColumnUpdateInfo & {
+type PreparedNodeUpdate = {
+  nodeID: string;
+  nodeName: string;
   body: Record<string, unknown>;
+  originalBody: Record<string, unknown>;
+  affectedColumns: ColumnUpdateInfo[];
 };
+
+type PropagationError = PropagationResult["errors"][number];
+
+function expandNodeError(
+  update: PreparedNodeUpdate,
+  message: string
+): PropagationError[] {
+  return update.affectedColumns.map((column) => ({
+    nodeID: column.nodeID,
+    columnID: column.columnID,
+    message,
+  }));
+}
+
+async function rollbackPreparedNodeUpdates(
+  client: CoalesceClient,
+  workspaceID: string,
+  appliedUpdates: PreparedNodeUpdate[],
+): Promise<PropagationError[]> {
+  const rollbackErrors: PropagationError[] = [];
+
+  for (const update of [...appliedUpdates].reverse()) {
+    try {
+      await setWorkspaceNode(client, {
+        workspaceID,
+        nodeID: validatePathSegment(update.nodeID, "nodeID"),
+        body: update.originalBody,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      rollbackErrors.push(...expandNodeError(
+        update,
+        `Rollback failed after propagation error: ${message}`
+      ));
+    }
+  }
+
+  return rollbackErrors;
+}
 
 export async function propagateColumnChange(
   client: CoalesceClient,
@@ -95,73 +139,110 @@ export async function propagateColumnChange(
   }
 
   // --- Phase 1: Prepare all changes (read-only, no writes) ---
-  const prepared: PreparedColumnUpdate[] = [];
+  const prepared: PreparedNodeUpdate[] = [];
   const prepareErrors: PropagationResult["errors"] = [];
   const snapshotTimestamp = new Date().toISOString();
   const fullSnapshot: PreMutationSnapshotEntry[] = [];
+  const downstreamByNodeID = new Map<string, typeof downstreamEntries>();
 
-  for (let i = 0; i < downstreamEntries.length; i++) {
-    const entry = downstreamEntries[i];
-    await emitProgress("Preparing", `${entry.columnName} on ${entry.nodeName}`, i, downstreamEntries.length);
+  for (const entry of downstreamEntries) {
+    const existing = downstreamByNodeID.get(entry.nodeID) ?? [];
+    existing.push(entry);
+    downstreamByNodeID.set(entry.nodeID, existing);
+  }
+
+  const downstreamNodeGroups = Array.from(downstreamByNodeID.values());
+  for (let i = 0; i < downstreamNodeGroups.length; i++) {
+    const nodeEntries = downstreamNodeGroups[i] ?? [];
+    const firstEntry = nodeEntries[0];
+    if (!firstEntry) continue;
+    await emitProgress("Preparing", firstEntry.nodeName, i, downstreamNodeGroups.length);
 
     try {
       const currentNode = await client.get(
-        `/api/v1/workspaces/${safeWorkspaceID}/nodes/${validatePathSegment(entry.nodeID, "nodeID")}`,
+        `/api/v1/workspaces/${safeWorkspaceID}/nodes/${validatePathSegment(firstEntry.nodeID, "nodeID")}`,
         {}
       );
 
       if (!isPlainObject(currentNode) || !isPlainObject(currentNode.metadata)) {
-        prepareErrors.push({ nodeID: entry.nodeID, columnID: entry.columnID, message: "Could not read node metadata" });
+        for (const entry of nodeEntries) {
+          prepareErrors.push({
+            nodeID: entry.nodeID,
+            columnID: entry.columnID,
+            message: "Could not read node metadata",
+          });
+        }
         continue;
       }
 
       const metadata = currentNode.metadata as Record<string, unknown>;
       const columns = Array.isArray(metadata.columns) ? [...metadata.columns] : [];
-      const colIndex = columns.findIndex(
-        (c) =>
-          isPlainObject(c) &&
-          (c.id === entry.columnID || c.columnID === entry.columnID)
-      );
+      const originalBody = structuredClone(currentNode) as Record<string, unknown>;
+      const affectedColumns: ColumnUpdateInfo[] = [];
 
-      if (colIndex === -1) {
-        prepareErrors.push({ nodeID: entry.nodeID, columnID: entry.columnID, message: "Column not found in current node state" });
-        continue;
+      for (const entry of nodeEntries) {
+        const colIndex = columns.findIndex(
+          (c) =>
+            isPlainObject(c) &&
+            (c.id === entry.columnID || c.columnID === entry.columnID)
+        );
+
+        if (colIndex === -1) {
+          prepareErrors.push({
+            nodeID: entry.nodeID,
+            columnID: entry.columnID,
+            message: "Column not found in current node state",
+          });
+          continue;
+        }
+
+        const col = columns[colIndex] as Record<string, unknown>;
+        const previousName = typeof col.name === "string" ? col.name : undefined;
+        const previousDataType = typeof col.dataType === "string" ? col.dataType : undefined;
+
+        fullSnapshot.push({
+          nodeID: entry.nodeID,
+          nodeName: entry.nodeName,
+          columnID: entry.columnID,
+          previousColumnName: previousName ?? entry.columnName,
+          previousDataType: previousDataType ?? "unknown",
+          capturedAt: snapshotTimestamp,
+          nodeBody: structuredClone(originalBody),
+        });
+
+        const updatedCol = { ...col };
+        if (changes.columnName) updatedCol.name = changes.columnName;
+        if (changes.dataType) updatedCol.dataType = changes.dataType;
+        columns[colIndex] = updatedCol;
+
+        affectedColumns.push({
+          nodeID: entry.nodeID,
+          nodeName: entry.nodeName,
+          columnID: entry.columnID,
+          columnName: changes.columnName ?? entry.columnName,
+          previousName,
+          previousDataType,
+        });
       }
 
-      const col = columns[colIndex] as Record<string, unknown>;
-      const previousName = typeof col.name === "string" ? col.name : undefined;
-      const previousDataType = typeof col.dataType === "string" ? col.dataType : undefined;
-
-      // Capture pre-mutation snapshot (full nodeBody for disk persistence)
-      fullSnapshot.push({
-        nodeID: entry.nodeID,
-        nodeName: entry.nodeName,
-        columnID: entry.columnID,
-        previousColumnName: previousName ?? entry.columnName,
-        previousDataType: previousDataType ?? "unknown",
-        capturedAt: snapshotTimestamp,
-        nodeBody: structuredClone(currentNode) as Record<string, unknown>,
-      });
-
-      const updatedCol = { ...col };
-      if (changes.columnName) updatedCol.name = changes.columnName;
-      if (changes.dataType) updatedCol.dataType = changes.dataType;
-      columns[colIndex] = updatedCol;
+      if (affectedColumns.length === 0) {
+        continue;
+      }
 
       const body = buildUpdatedWorkspaceNodeBody(currentNode, { metadata: { columns } });
 
       prepared.push({
-        nodeID: entry.nodeID,
-        nodeName: entry.nodeName,
-        columnID: entry.columnID,
-        columnName: changes.columnName ?? entry.columnName,
-        previousName,
-        previousDataType,
+        nodeID: firstEntry.nodeID,
+        nodeName: firstEntry.nodeName,
         body,
+        originalBody,
+        affectedColumns,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      prepareErrors.push({ nodeID: entry.nodeID, columnID: entry.columnID, message });
+      for (const entry of nodeEntries) {
+        prepareErrors.push({ nodeID: entry.nodeID, columnID: entry.columnID, message });
+      }
     }
   }
 
@@ -183,10 +264,23 @@ export async function propagateColumnChange(
     };
   }
 
+  if (prepareErrors.length > 0) {
+    return {
+      sourceNodeID: nodeID,
+      sourceColumnID: columnID,
+      changes,
+      preMutationSnapshot: toSummary(fullSnapshot),
+      updatedNodes: [],
+      totalUpdated: 0,
+      errors: prepareErrors,
+      skippedNodes: prepared.flatMap((update) => update.affectedColumns),
+    };
+  }
+
   // --- Persist pre-mutation snapshot to disk ---
   let snapshotPath: string | undefined;
   try {
-    const resolvedBase = baseDir ?? process.cwd();
+    const resolvedBase = getCacheBaseDir(baseDir);
     const snapshotDir = join(resolvedBase, CACHE_DIR_NAME, "propagation-snapshots");
     mkdirSync(snapshotDir, { recursive: true });
     const fileName = `propagation-${workspaceID}-${snapshotTimestamp.replace(/[:.]/g, "-")}.json`;
@@ -208,12 +302,12 @@ export async function propagateColumnChange(
   }
 
   // --- Phase 2: Apply all prepared changes ---
-  const updatedNodes: ColumnUpdateInfo[] = [];
+  const appliedUpdates: PreparedNodeUpdate[] = [];
   const writeErrors: PropagationResult["errors"] = [];
 
   for (let i = 0; i < prepared.length; i++) {
     const update = prepared[i];
-    await emitProgress("Applying", `${update.columnName} on ${update.nodeName}`, i, prepared.length);
+    await emitProgress("Applying", update.nodeName, i, prepared.length);
 
     try {
       await setWorkspaceNode(client, {
@@ -222,24 +316,44 @@ export async function propagateColumnChange(
         body: update.body,
       });
 
-      const { body: _, ...info } = update;
-      updatedNodes.push(info);
+      appliedUpdates.push(update);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      writeErrors.push({ nodeID: update.nodeID, columnID: update.columnID, message });
-      // Stop on first write failure to minimize workspace inconsistency
-      break;
+      writeErrors.push(...expandNodeError(update, message));
+      const rollbackErrors = await rollbackPreparedNodeUpdates(client, safeWorkspaceID, appliedUpdates);
+      const rollbackFailedNodeIDs = new Set(rollbackErrors.map((entry) => entry.nodeID));
+      const updatedNodes = appliedUpdates
+        .filter((applied) => rollbackFailedNodeIDs.has(applied.nodeID))
+        .flatMap((applied) => applied.affectedColumns);
+      const skippedNodes = rollbackErrors.length > 0
+        ? prepared
+            .flatMap((preparedNode) => preparedNode.affectedColumns)
+            .filter((column) => !updatedNodes.some(
+              (updated) => updated.nodeID === column.nodeID && updated.columnID === column.columnID
+            ))
+        : prepared.flatMap((preparedNode) => preparedNode.affectedColumns);
+
+      if (appliedUpdates.length > 0 || rollbackErrors.length > 0) {
+        invalidateLineageCache(workspaceID);
+      }
+
+      return {
+        sourceNodeID: nodeID,
+        sourceColumnID: columnID,
+        changes,
+        preMutationSnapshot: toSummary(fullSnapshot),
+        ...(snapshotPath ? { snapshotPath } : {}),
+        updatedNodes,
+        totalUpdated: updatedNodes.length,
+        errors: [...writeErrors, ...rollbackErrors],
+        partialFailure: rollbackErrors.length > 0 ? true : undefined,
+        skippedNodes,
+        rolledBack: rollbackErrors.length === 0 ? true : undefined,
+      };
     }
   }
 
-  const allErrors = [...prepareErrors, ...writeErrors];
-  const partialFailure = updatedNodes.length > 0 && writeErrors.length > 0;
-
-  // Skipped = prepared entries after the last written + 1 failed entry.
-  // The write loop processes prepared[] in order and breaks on first error,
-  // so everything beyond (updatedNodes.length + writeErrors.length) was skipped.
-  const firstSkippedIndex = updatedNodes.length + writeErrors.length;
-  const skippedNodes = prepared.slice(firstSkippedIndex).map(({ body: _, ...info }) => info);
+  const updatedNodes = appliedUpdates.flatMap((update) => update.affectedColumns);
 
   // Only invalidate cache if writes were actually made
   if (updatedNodes.length > 0) {
@@ -254,10 +368,8 @@ export async function propagateColumnChange(
     ...(snapshotPath ? { snapshotPath } : {}),
     updatedNodes,
     totalUpdated: updatedNodes.length,
-    errors: allErrors,
+    errors: writeErrors,
   };
-  if (partialFailure) result.partialFailure = true;
-  if (skippedNodes.length > 0) result.skippedNodes = skippedNodes;
 
   return result;
 }

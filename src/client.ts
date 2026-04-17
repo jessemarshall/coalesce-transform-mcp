@@ -1,3 +1,6 @@
+import { resolveCoalesceAuth } from "./services/config/credentials.js";
+import { withSetupHint } from "./services/setup/hint.js";
+
 export interface ClientConfig {
   accessToken: string;
   baseUrl: string;
@@ -20,7 +23,6 @@ function getMaxRequestBodyBytes(): number {
   return parsed;
 }
 
-const DEFAULT_BASE_URL = "https://app.coalescesoftware.io";
 const MAX_RETRY_ATTEMPTS = 5;
 const RETRY_BASE_DELAY_MS = 1_000;
 const RETRY_MAX_DELAY_MS = 30_000;
@@ -30,20 +32,8 @@ const RETRY_MAX_DELAY_MS = 30_000;
 const RETRYABLE_RATE_LIMIT_METHODS = new Set(["GET"]);
 
 export function validateConfig(): ClientConfig {
-  const accessToken = process.env.COALESCE_ACCESS_TOKEN?.trim();
-  const baseUrl = (process.env.COALESCE_BASE_URL || DEFAULT_BASE_URL).trim();
-
-  if (!accessToken) {
-    throw new Error(
-      "COALESCE_ACCESS_TOKEN environment variable is required. " +
-        "Generate a token from the Deploy tab in Coalesce."
-    );
-  }
-
-  return {
-    accessToken,
-    baseUrl: baseUrl.replace(/\/+$/, ""),
-  };
+  const { accessToken, baseUrl } = resolveCoalesceAuth();
+  return { accessToken, baseUrl };
 }
 
 export class CoalesceApiError extends Error {
@@ -120,13 +110,15 @@ async function handleResponse(response: Response): Promise<unknown> {
         throw new CoalesceApiError(fullMessage, 400, detail);
       case 401:
         throw new CoalesceApiError(
-          "Invalid or expired access token",
+          withSetupHint("Invalid or expired access token"),
           401,
           detail
         );
       case 403:
         throw new CoalesceApiError(
-          "Insufficient permissions for this operation",
+          withSetupHint(
+            "Insufficient permissions for this operation. The token may be scoped to a different workspace"
+          ),
           403,
           detail
         );

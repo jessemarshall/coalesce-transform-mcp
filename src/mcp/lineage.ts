@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
+import { getCacheBaseDir } from "../cache-dir.js";
 import {
   buildJsonToolResponse,
   getToolOutputSchema,
@@ -356,12 +357,50 @@ export function defineLineageTools(
           params.changes.dataType ? `change type to ${params.changes.dataType}` : null,
         ].filter(Boolean).join(" and ");
 
+        // Build a per-node preview (deduped by node) so the user sees exactly
+        // which downstream nodes will be modified before confirming.
+        const affectedNodeMap = new Map<string, { name?: string; columns: string[] }>();
+        for (const entry of downstreamColumns) {
+          const downstreamNode = cache.nodes.get(entry.nodeID);
+          const bucket = affectedNodeMap.get(entry.nodeID) ?? {
+            name: downstreamNode?.name,
+            columns: [],
+          };
+          if (!bucket.columns.includes(entry.columnID)) bucket.columns.push(entry.columnID);
+          affectedNodeMap.set(entry.nodeID, bucket);
+        }
+        const affectedPreview = Array.from(affectedNodeMap.entries()).map(([id, info]) => ({
+          type: "downstream_node",
+          id,
+          name: info.name,
+          note: `${info.columns.length} column ref${info.columns.length === 1 ? "" : "s"} to update`,
+        }));
+        const previewLines = affectedPreview.slice(0, 10).map(
+          (a) => `  • ${a.name ? `"${a.name}"` : "(unnamed)"} [${a.id}] — ${a.note}`,
+        );
+        const previewSuffix = affectedPreview.length > 10
+          ? `\n  … and ${affectedPreview.length - 10} more`
+          : "";
+        const previewBlock = affectedPreview.length > 0
+          ? `\n\nNodes to be modified (${affectedPreview.length}):\n${previewLines.join("\n")}${previewSuffix}`
+          : "";
+
         const approvalResponse = await requireDestructiveConfirmation(
           server,
           "propagate_column_change",
-          `This will update column references across ${downstreamColumns.length} downstream node(s) of "${node.name}" (${changeDesc}). This modifies node bodies via the API and cannot be easily undone.`,
+          `This will update column references across ${downstreamColumns.length} downstream column(s) in ${affectedPreview.length} node(s) of "${node.name}" (${changeDesc}). This modifies node bodies via the API and cannot be easily undone.${previewBlock}`,
           params.confirmed,
-          { nodeID: params.nodeID, columnID: params.columnID, downstreamCount: downstreamColumns.length },
+          {
+            preview: {
+              primary: { type: "source_node", id: params.nodeID, name: node.name },
+              affected: affectedPreview,
+              context: {
+                columnID: params.columnID,
+                downstreamColumnCount: downstreamColumns.length,
+                downstreamNodeCount: affectedPreview.length,
+              },
+            },
+          },
         );
         if (approvalResponse) return approvalResponse;
 
@@ -373,7 +412,7 @@ export function defineLineageTools(
           params.columnID,
           params.changes,
           progressReporter,
-          process.env.COALESCE_CACHE_DIR ?? process.cwd(),
+          getCacheBaseDir(),
         );
 
         const response = buildJsonToolResponse("propagate_column_change", result, {
@@ -392,7 +431,20 @@ export function defineLineageTools(
             ],
           };
         }
-        if (result.errors.length > 0 && result.totalUpdated === 0) {
+        if (result.errors.length > 0) {
+          if (result.rolledBack) {
+            return {
+              ...response,
+              isError: true,
+              content: [
+                {
+                  type: "text" as const,
+                  text: "Propagation failed after a write error, and any earlier successful writes were rolled back. No downstream updates remain applied.",
+                },
+                ...(Array.isArray(response.content) ? response.content : []),
+              ],
+            };
+          }
           return { ...response, isError: true };
         }
         return response;

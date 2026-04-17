@@ -412,6 +412,49 @@ describe("Lineage Tool Handlers", () => {
       expect(result.content[0]!.text).toContain("At least one change required");
     });
 
+    it("returns isError when propagation result contains errors even without partialFailure", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const spy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+      defineLineageTools(server, client as never).forEach(t => server.registerTool(...t));
+
+      vi.mocked(buildLineageCache).mockResolvedValue(buildFakeCache({
+        "n1": { name: "SRC_RAW", nodeType: "Source", columns: [{ id: "c1", name: "order_id" }] },
+      }) as never);
+      vi.mocked(walkColumnLineage).mockReturnValue([
+        { nodeID: "n2", nodeName: "STG_ORDERS", nodeType: "Stage", columnID: "c2", columnName: "order_id", direction: "downstream" as const, depth: 1 },
+      ]);
+      vi.mocked(propagateColumnChange).mockResolvedValue({
+        sourceNodeID: "n1",
+        sourceColumnID: "c1",
+        changes: { columnName: "renamed_order_id" },
+        preMutationSnapshot: [],
+        updatedNodes: [{ nodeID: "n2", nodeName: "STG_ORDERS", columnID: "c2", columnName: "renamed_order_id" }],
+        totalUpdated: 1,
+        errors: [{ nodeID: "n3", columnID: "c3", message: "Could not read node metadata" }],
+      } as never);
+
+      const handler = extractHandler<{
+        workspaceID: string;
+        nodeID: string;
+        columnID: string;
+        changes: { columnName?: string; dataType?: string };
+        confirmed?: boolean;
+      }>(spy, "propagate_column_change");
+      const result = await handler({
+        workspaceID: "ws-1",
+        nodeID: "n1",
+        columnID: "c1",
+        changes: { columnName: "renamed_order_id" },
+        confirmed: true,
+      });
+
+      expect(result.isError).toBe(true);
+      const data = JSON.parse(result.content[result.content.length - 1]!.text);
+      expect(data.errors).toHaveLength(1);
+      expect(data.totalUpdated).toBe(1);
+    });
+
     it("returns isError when workspaceID contains path-traversal characters", async () => {
       const server = new McpServer({ name: "test", version: "0.0.1" });
       const spy = vi.spyOn(server, "registerTool");

@@ -826,16 +826,19 @@ describe("analyzeColumnsForGroupBy", () => {
     expect(result.groupByClause).toBe("");
   });
 
-  it("treats window functions as aggregates (not in GROUP BY)", () => {
+  it("tracks window functions separately and marks them invalid for aggregation conversion", () => {
     const columns: ColumnTransform[] = [
       { name: "ID", transform: "ID" },
       { name: "RN", transform: "ROW_NUMBER() OVER (PARTITION BY ID ORDER BY DATE)" },
     ];
 
     const result = analyzeColumnsForGroupBy(columns);
-    expect(result.aggregateColumns).toHaveLength(1);
-    expect(result.aggregateColumns[0].name).toBe("RN");
+    expect(result.aggregateColumns).toHaveLength(0);
+    expect(result.windowColumns).toHaveLength(1);
+    expect(result.windowColumns[0].name).toBe("RN");
     expect(result.groupByColumns).toEqual(["ID"]);
+    expect(result.hasWindowFunctions).toBe(true);
+    expect(result.validation.valid).toBe(false);
   });
 
   it("treats pure-aggregate queries as valid without GROUP BY", () => {
@@ -847,6 +850,7 @@ describe("analyzeColumnsForGroupBy", () => {
     const result = analyzeColumnsForGroupBy(columns);
     // Pure-aggregate queries are valid SQL — the entire result set is one group
     expect(result.groupByClause).toBe("");
+    expect(result.validation.valid).toBe(true);
   });
 
   it("considers single aggregate column valid without GROUP BY", () => {
@@ -856,6 +860,7 @@ describe("analyzeColumnsForGroupBy", () => {
 
     const result = analyzeColumnsForGroupBy(columns);
     expect(result.groupByClause).toBe("");
+    expect(result.validation.valid).toBe(true);
   });
 
   it("detects all aggregate function types", () => {
@@ -873,8 +878,11 @@ describe("analyzeColumnsForGroupBy", () => {
     const result = analyzeColumnsForGroupBy([]);
     expect(result.groupByColumns).toEqual([]);
     expect(result.aggregateColumns).toEqual([]);
+    expect(result.windowColumns).toEqual([]);
     expect(result.hasAggregates).toBe(false);
+    expect(result.hasWindowFunctions).toBe(false);
     expect(result.groupByClause).toBe("");
+    expect(result.validation.valid).toBe(true);
   });
 });
 

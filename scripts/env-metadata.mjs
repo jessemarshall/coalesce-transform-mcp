@@ -2,11 +2,20 @@ export const ENV_METADATA = [
   {
     name: "COALESCE_ACCESS_TOKEN",
     group: "core",
-    description: "Bearer token from the Coalesce Deploy tab.",
+    description: "Bearer token from the Coalesce Deploy tab. Optional when `~/.coa/config` provides a `token`.",
     defaultValue: null,
-    requiredForServer: true,
+    requiredForServer: false,
     requiredForRunTools: false,
     isSecret: true,
+  },
+  {
+    name: "COALESCE_PROFILE",
+    group: "core",
+    description: "Selects which `~/.coa/config` profile to load.",
+    defaultValue: "default",
+    requiredForServer: false,
+    requiredForRunTools: false,
+    isSecret: false,
   },
   {
     name: "COALESCE_BASE_URL",
@@ -20,7 +29,7 @@ export const ENV_METADATA = [
   {
     name: "COALESCE_ORG_ID",
     group: "core",
-    description: "Fallback org ID for cancel-run.",
+    description: "Fallback org ID for cancel-run. Also readable from `orgID` in the active ~/.coa/config profile.",
     defaultValue: null,
     requiredForServer: false,
     requiredForRunTools: false,
@@ -29,7 +38,7 @@ export const ENV_METADATA = [
   {
     name: "COALESCE_REPO_PATH",
     group: "core",
-    description: "Local repo root for repo-backed tools and pipeline planning.",
+    description: "Local repo root for repo-backed tools and pipeline planning. Also readable from `repoPath` in the active ~/.coa/config profile.",
     defaultValue: null,
     requiredForServer: false,
     requiredForRunTools: false,
@@ -38,7 +47,7 @@ export const ENV_METADATA = [
   {
     name: "COALESCE_CACHE_DIR",
     group: "core",
-    description: "Base directory for the local data cache. When set, cache files are written here instead of the working directory.",
+    description: "Base directory for the local data cache. When set, cache files are written here instead of the working directory. Also readable from `cacheDir` in the active ~/.coa/config profile.",
     defaultValue: null,
     requiredForServer: false,
     requiredForRunTools: false,
@@ -87,6 +96,15 @@ export const ENV_METADATA = [
     defaultValue: null,
     requiredForServer: false,
     requiredForRunTools: false,
+    isSecret: false,
+  },
+  {
+    name: "SNOWFLAKE_ACCOUNT",
+    group: "snowflake",
+    description: "Snowflake account identifier (e.g., `abc12345.us-east-1`). Required by the local `coa` CLI and `coa doctor`; not used by the MCP's REST run path.",
+    defaultValue: null,
+    requiredForServer: false,
+    requiredForRunTools: true,
     isSecret: false,
   },
   {

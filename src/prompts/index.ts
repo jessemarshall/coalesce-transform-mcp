@@ -171,6 +171,102 @@ export function registerPrompts(server: McpServer): void {
   );
 
   server.registerPrompt(
+    "cross-server-workflow",
+    {
+      title: "Cross-Server Workflow",
+      description:
+        "Patterns for combining this MCP with Snowflake, Fivetran, dbt, or Catalog MCPs for end-to-end data workflows.",
+    },
+    async () => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              "This MCP manages Coalesce transform definitions — not warehouse data, ingestion, or catalog metadata. " +
+              "For cross-server workflows:\n" +
+              "- Pre-run validation: Fivetran MCP (check sync status) → this MCP (run_and_wait) → Snowflake MCP (validate output)\n" +
+              "- Impact analysis: this MCP (analyze_impact) → Catalog MCP (check downstream consumers beyond Coalesce)\n" +
+              "- Debugging: Snowflake MCP (find bad data) → this MCP (trace upstream lineage) → Fivetran MCP (check source sync)\n" +
+              "Lineage tools here cover Coalesce nodes only. For end-to-end lineage across ingestion, transform, and consumption, combine with the Catalog MCP.\n" +
+              "Read coalesce://context/ecosystem-boundaries for full details on scope boundaries and handoff patterns.",
+          },
+        },
+      ],
+    })
+  );
+
+  server.registerPrompt(
+    "coalesce-setup",
+    {
+      title: "Coalesce Setup",
+      description:
+        "Guided first-time setup. Credentials can come from a `COALESCE_ACCESS_TOKEN` env var OR from `~/.coa/config` — whichever the user prefers. Use this the first time a user connects the MCP to a new machine.",
+    },
+    async () => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              "You are guiding the user through first-time Coalesce MCP setup. The server accepts credentials from two sources:\n" +
+              "  (a) `~/.coa/config` — the same INI file the `coa` CLI uses. Good for users who already run `coa` locally; avoids duplicating credentials.\n" +
+              "  (b) MCP-client env vars (`COALESCE_ACCESS_TOKEN`, `SNOWFLAKE_*`). Good for first-time users or CI, no file required.\n" +
+              "Env wins when both are set. The goal is to get `diagnose_setup` reporting `ready: true`.\n\n" +
+              "Do not assume any state — call diagnose_setup first and base every subsequent step on its output. After the user completes an action, call diagnose_setup again before moving on.\n\n" +
+              "SEQUENCE:\n\n" +
+              "0. Baseline. Call diagnose_setup. If `ready` is true, tell the user they're already set up and stop. Otherwise present the current state compactly: the `coaConfig` block (file status + active profile + presentKeys), then accessToken (with its `source`) and snowflakeCreds (with its per-field `sources` map). Those source tags tell the user exactly where each value came from — env, profile:default, etc.\n\n" +
+              "1. Access token. If accessToken.status is 'missing' or 'invalid':\n" +
+              "   - 'missing' AND coaConfig.status === 'missing-file': offer the user the two paths. Env-var path: generate a token from Deploy → User Settings, then add `\"env\": { \"COALESCE_ACCESS_TOKEN\": \"<token>\" }` to their MCP client config. Profile path: create `~/.coa/config` with the INI shape shown in the README (or run `npx @coalescesoftware/coa describe config` for the canonical reference). Either works; env wins if both are set.\n" +
+              "   - 'missing' but coaConfig.status === 'ok' with profileExists === true: the profile is loaded but has no `token=` field. Tell the user to add one, or set COALESCE_ACCESS_TOKEN in their MCP client env.\n" +
+              "   - 'missing' but coaConfig.status === 'ok' with profileExists === false: COALESCE_PROFILE points at a profile that isn't in the file. Show `availableProfiles` from the diagnose output; have the user either switch COALESCE_PROFILE or add the missing section to ~/.coa/config.\n" +
+              "   - 'invalid' (401/403): the token was rejected. Show the `source` from diagnose_setup so the user knows whether to fix the env var or the profile's `token` field. Generate a fresh token from Deploy → User Settings.\n" +
+              "   - IMPORTANT: env-wins precedence. If `accessToken.source === 'env'` but the user expected their profile to supply it, there's a stale env var shadowing it. Point at the `source` field.\n" +
+              "   - Wait for diagnose_setup to return accessToken.status === 'ok' before moving on.\n\n" +
+              "2. Snowflake credentials (only if the user needs run tools or `coa_create`/`coa_run`). If snowflakeCreds.status is 'missing' or 'invalid':\n" +
+              "   - For run tools the user needs SNOWFLAKE_USERNAME, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_ROLE, plus either SNOWFLAKE_KEY_PAIR_KEY (path to PEM) or SNOWFLAKE_PAT. These come from env OR the matching `snowflake*` keys in ~/.coa/config.\n" +
+              "   - PATs are env-only. The MCP doesn't read the profile's `snowflakePassword` field (that's COA's Basic-auth mechanism, different from our PAT flow).\n" +
+              "   - If the user doesn't use run tools today, they can skip this step — read-only Cloud REST tools work fine without Snowflake creds.\n\n" +
+              "3. Repo path (optional). Only needed for repo-backed node-type lookup and local coa_* tools (coa_doctor, coa_validate, coa_create, coa_run, coa_plan).\n" +
+              "   - Skip this if repoPath.status is already 'ok' or the user doesn't need those tools yet.\n" +
+              "   - Otherwise: ask for the project's git URL (list_git_accounts may help). Tell them to `git clone <url> <target>`, then either add `\"COALESCE_REPO_PATH\": \"<absolute-path>\"` to their MCP client env block OR add `repoPath=<absolute-path>` to their profile in ~/.coa/config, restart the MCP client, and re-run diagnose_setup.\n" +
+              "   - Target state: repoPath.isCoaProject === true.\n\n" +
+              "4. workspaces.yml (REQUIRED for coa_create / coa_run / coa_dry_run_*; skip only if the user will not run warehouse-touching COA tools). Do not skip this step silently — if nextSteps mentions `workspaces.yml` or coaDoctor.status is 'failed' with stderr referencing it, walk the user through creation.\n" +
+              "   - Detection: run coa_doctor with projectPath=<repoPath>. If the doctor output reports workspaces.yml missing (or the preflight error code is `WORKSPACES_YML_MISSING`), proceed.\n" +
+              "   - Offer two paths:\n" +
+              "     (a) Bootstrap with COA (easiest): call the `coa_bootstrap_workspaces` MCP tool (with `confirmed: true` after the user approves) — this runs `coa doctor --fix` and writes a starter `workspaces.yml` seeded from `locations.yml`. Or have the user run `npx @coalescesoftware/coa doctor --fix` in a shell. EITHER WAY: the generated file contains PLACEHOLDER `database`/`schema` values. Tell the user clearly that they MUST open it and set real values for every location before running coa_create/coa_run — otherwise warehouse ops will target the wrong (or missing) database.\n" +
+              "     (b) Hand-write it. Give them the authoritative schema below verbatim. Before pasting, read their `locations.yml` so the location keys match — never invent keys.\n" +
+              "\n" +
+              "     ```yaml\n" +
+              "     # workspaces.yml lives next to data.yml. Top-level keys are workspace names.\n" +
+              "     # `dev` is the default when --workspace is omitted. No fileVersion. No top-level `workspaces:` wrapper.\n" +
+              "     dev:\n" +
+              "       connection: snowflake          # required — name of the connection COA should use\n" +
+              "       locations:                     # optional — one entry per storage location name from locations.yml\n" +
+              "         SRC_EXAMPLE:\n" +
+              "           database: MY_DEV_DB        # required\n" +
+              "           schema: SRC_EXAMPLE        # required\n" +
+              "     ```\n" +
+              "\n" +
+              "   - Common gotchas to call out: the field is `locations`, not `storageLocations`; there is no `fileVersion`; location keys must match `locations.yml` exactly (case-sensitive); this file is typically gitignored (per-developer).\n" +
+              "   - After the user creates the file, re-run coa_doctor (no --fix) to confirm it parses and connects. Target state: coaDoctor.status === 'ok'.\n\n" +
+              "RULES:\n" +
+              "- Never skip diagnose_setup between steps. Actual state drifts from assumed state easily, especially across MCP-client restarts.\n" +
+              "- Never write to the user's shell profile or ~/.coa/config yourself. Give them the exact text to paste; they apply it.\n" +
+              "- Never ask the user for their token, PAT, or passphrase in chat. Secrets belong in ~/.coa/config or the MCP client env block — never in the conversation transcript.\n" +
+              "- Each restart of the MCP client ends this conversation's access to the new values. The user may need to /coalesce-setup again after each restart; diagnose_setup will confirm which step they're resuming.\n" +
+              "- COA cloud commands (coa_list_environments, coa_deploy, coa_refresh) read the same ~/.coa/config. If the user has a populated profile, those tools work automatically; pass `profile` as a tool arg only when they want a non-default one.\n" +
+              "- Read coalesce://context/overview for broader context if the user asks.\n\n" +
+              "Start now by calling diagnose_setup.",
+          },
+        },
+      ],
+    })
+  );
+
+  server.registerPrompt(
     "column-change-workflow",
     {
       title: "Column Change Workflow",

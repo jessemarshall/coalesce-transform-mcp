@@ -26,7 +26,8 @@ describe("Resources", () => {
   it("registers fixed context resources plus the cache resource template", () => {
     registerResources(server);
 
-    expect(resourceSpy).toHaveBeenCalledTimes(24);
+    // 24 context resources + 10 coa_describe resources + 1 cache template = 35
+    expect(resourceSpy).toHaveBeenCalledTimes(35);
     const fixedResourceCalls = resourceSpy.mock.calls
       .filter((call) => typeof call[1] === "string")
       .map((call) => ({
@@ -126,6 +127,50 @@ describe("Resources", () => {
         name: "Pipeline Workshop Guide",
         uri: "coalesce://context/pipeline-workshop-guide",
       },
+      {
+        name: "Ecosystem Boundaries",
+        uri: "coalesce://context/ecosystem-boundaries",
+      },
+      {
+        name: "COA Describe: Overview",
+        uri: "coalesce://coa/describe/overview",
+      },
+      {
+        name: "COA Describe: Commands",
+        uri: "coalesce://coa/describe/commands",
+      },
+      {
+        name: "COA Describe: Selectors",
+        uri: "coalesce://coa/describe/selectors",
+      },
+      {
+        name: "COA Describe: Schemas",
+        uri: "coalesce://coa/describe/schemas",
+      },
+      {
+        name: "COA Describe: Workflow",
+        uri: "coalesce://coa/describe/workflow",
+      },
+      {
+        name: "COA Describe: Structure",
+        uri: "coalesce://coa/describe/structure",
+      },
+      {
+        name: "COA Describe: Concepts",
+        uri: "coalesce://coa/describe/concepts",
+      },
+      {
+        name: "COA Describe: SQL Format",
+        uri: "coalesce://coa/describe/sql-format",
+      },
+      {
+        name: "COA Describe: Node Types",
+        uri: "coalesce://coa/describe/node-types",
+      },
+      {
+        name: "COA Describe: Config",
+        uri: "coalesce://coa/describe/config",
+      },
     ]);
 
     const cacheTemplateCall = resourceSpy.mock.calls.find(
@@ -161,30 +206,36 @@ describe("Resources", () => {
     });
   });
 
-  it("can read every registered resource callback", async () => {
-    registerResources(server);
+  it(
+    "can read every registered resource callback",
+    async () => {
+      registerResources(server);
 
-    for (const call of resourceSpy.mock.calls.filter(
-      (entry) => typeof entry[1] === "string"
-    )) {
-      const uri = call[1] as string;
-      const readCallback = call[3];
+      for (const call of resourceSpy.mock.calls.filter(
+        (entry) => typeof entry[1] === "string"
+      )) {
+        const uri = call[1] as string;
+        const readCallback = call[3];
 
-      expect(typeof readCallback).toBe("function");
+        expect(typeof readCallback).toBe("function");
 
-      const result = await readCallback(new URL(uri), {} as never);
-      expect(result).toEqual({
-        contents: [
-          expect.objectContaining({
-            uri,
-            mimeType: "text/markdown",
-            text: expect.any(String),
-          }),
-        ],
-      });
-      expect(result.contents[0]?.text.length).toBeGreaterThan(0);
-    }
-  });
+        const result = await readCallback(new URL(uri), {} as never);
+        expect(result).toEqual({
+          contents: [
+            expect.objectContaining({
+              uri,
+              mimeType: "text/markdown",
+              text: expect.any(String),
+            }),
+          ],
+        });
+        expect(result.contents[0]?.text.length).toBeGreaterThan(0);
+      }
+    },
+    // The coa://describe/* resources each spawn the bundled coa CLI on a
+    // cold cache — 10 topics × ~1s each > the default 5s vitest timeout.
+    60_000
+  );
 
   it("exposes cached files through the cache resource template", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "coalesce-resource-cache-"));
@@ -247,11 +298,11 @@ describe("Resources", () => {
     const orphanNdjsonPath = join(
       tempDir,
       "coalesce_transform_mcp_data_cache",
-      "ws-1",
+      "workspace-ws-1",
       "nodes",
       "nodes.ndjson"
     );
-    mkdirSync(join(tempDir, "coalesce_transform_mcp_data_cache", "ws-1", "nodes"), {
+    mkdirSync(join(tempDir, "coalesce_transform_mcp_data_cache", "workspace-ws-1", "nodes"), {
       recursive: true,
     });
     writeFileSync(orphanNdjsonPath, '{"id":"partial"}\n', "utf8");
@@ -289,11 +340,11 @@ describe("Resources", () => {
     const orphanMetaPath = join(
       tempDir,
       "coalesce_transform_mcp_data_cache",
-      "ws-1",
+      "workspace-ws-1",
       "nodes",
       "nodes.meta.json"
     );
-    mkdirSync(join(tempDir, "coalesce_transform_mcp_data_cache", "ws-1", "nodes"), {
+    mkdirSync(join(tempDir, "coalesce_transform_mcp_data_cache", "workspace-ws-1", "nodes"), {
       recursive: true,
     });
     writeFileSync(orphanMetaPath, JSON.stringify({ totalItems: 1 }, null, 2), "utf8");

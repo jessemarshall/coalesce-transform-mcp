@@ -15,7 +15,7 @@ import {
   DESTRUCTIVE_ANNOTATIONS,
   type ToolDefinition,
 } from "../coalesce/types.js";
-import { defineSimpleTool, defineDestructiveTool } from "./tool-helpers.js";
+import { defineSimpleTool, defineDestructiveTool, extractEntityName } from "./tool-helpers.js";
 
 export function defineGitAccountTools(
   server: McpServer,
@@ -102,7 +102,29 @@ export function defineGitAccountTools(
         .describe("Set to true after the user explicitly confirms the deletion."),
     }),
     annotations: DESTRUCTIVE_ANNOTATIONS,
-    confirmMessage: (params) => `This will permanently delete git account "${params.gitAccountID}". This cannot be undone.`,
+    resolve: async (client, params) => {
+      const account = await getGitAccount(client, {
+        gitAccountID: params.gitAccountID,
+        accountOwner: params.accountOwner,
+      });
+      const extracted = extractEntityName(account)
+        ?? (typeof (account as { gitAccountName?: unknown })?.gitAccountName === "string"
+          ? (account as { gitAccountName: string }).gitAccountName
+          : undefined);
+      return {
+        primary: {
+          type: "git_account",
+          id: params.gitAccountID,
+          name: extracted,
+        },
+      };
+    },
+    confirmMessage: (params, preview) => {
+      const label = preview?.primary.name
+        ? `"${preview.primary.name}" (${params.gitAccountID})`
+        : `"${params.gitAccountID}"`;
+      return `This will permanently delete git account ${label}. This cannot be undone.`;
+    },
   }, deleteGitAccount),
   ];
 }
