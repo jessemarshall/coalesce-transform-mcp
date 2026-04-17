@@ -6,16 +6,10 @@
 [![Install in Cursor](https://img.shields.io/badge/Cursor-Install_MCP-000?style=flat&logo=cursor)](https://cursor.com/install-mcp?name=coalesce-transform&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJjb2FsZXNjZS10cmFuc2Zvcm0tbWNwIl19)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-MCP server for [Coalesce](https://coalesce.io/). Built for **Snowflake [Cortex Code](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code-cli) (CoCo)** - with first-class support for every other MCP client (Claude Code, Claude Desktop, Cursor, VS Code, Windsurf). Manage nodes, pipelines, environments, jobs, and runs, and drive the local-first [`coa`](https://www.npmjs.com/package/@coalescesoftware/coa) CLI from the same server: validate a project, preview DDL/DML, plan a deployment, and apply it to a cloud environment. One install, two execution surfaces.
+MCP server for [Coalesce](https://coalesce.io/). Built for **Snowflake [Cortex Code](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code-cli) (CoCo)** - with first-class support for every other MCP client (Claude Code, Claude Desktop, Cursor, VS Code, Windsurf). Manage nodes, pipelines, environments, jobs, and runs, and drive the local-first [`coa`](https://www.npmjs.com/package/@coalescesoftware/coa) CLI from the same server: validate a project, preview DDL/DML, plan a deployment, and apply it to a cloud environment.
 
 - **Cloud REST tools** - build pipelines declaratively, edit node YAML, review lineage, run deployed jobs, audit documentation.
-- **Local COA CLI tools** - validate projects before check-in, preview generated DDL/DML (`--dry-run`), iterate on V2 `.sql` node files, run `plan → deploy → refresh` cycles. COA is bundled - no separate install.
-
-> [!TIP]
-> **❄️ Snowflake Cortex Code + coalesce-transform-mcp.** CoCo is Snowflake's AI coding CLI - it already knows your warehouse, role, and data. Drop this MCP in and an agent can plan pipelines, create nodes, run DML, and verify results in a single session, all under Snowflake's auth model. **[Install in Cortex Code →](docs/installation-guides/cortex-code.md)**
-
-> [!NOTE]
-> The two surfaces are orthogonal. Use both, one, or neither. Every destructive tool - on either surface - requires explicit confirmation before running. New? Run the `/coalesce-setup` prompt after install - it walks you through anything missing.
+- **Local COA CLI tools** - validate projects before check-in, preview generated DDL/DML (`--dry-run`), run `plan → deploy → refresh` cycles. COA is bundled - no separate install.
 
 ---
 
@@ -25,14 +19,14 @@ MCP server for [Coalesce](https://coalesce.io/). Built for **Snowflake [Cortex C
 | :-: | ---- | ------- |
 | 📦 | Install for my AI client | [Installation](#installation) |
 | 🚀 | Get running in 2 minutes | [Quick start](#quick-start) |
+| 🎛️ | Customize agent behavior | [Skills](#skills) |
+| 🔍 | Find a specific tool | [Tools](#tools) |
 | 🔑 | Authenticate (env var or `~/.coa/config`) | [Credentials](#credentials) |
 | 🌐 | Run against multiple Coalesce environments | [Multiple environments](#multiple-environments) |
 | 🔒 | Lock prod down to read-only | [Safety model](docs/safety-model.md) |
 | 🧰 | Use the `coa` CLI tools | [Using the COA CLI tools](#using-the-coa-cli-tools) |
 | 🧪 | Try a prerelease build | [Prerelease channel](docs/prerelease.md) |
 | 🩺 | Debug "why isn't auth working?" | [Diagnosing setup](docs/diagnosing-setup.md) |
-| 🎛️ | Customize agent behavior | [Skills](#skills) |
-| 🔍 | Find a specific tool | [Tools](#tools) |
 
 ---
 
@@ -227,6 +221,12 @@ Windsurf does **not** expand `${VAR}` - paste the literal token, or drop the `en
 > [!CAUTION]
 > **Never hardcode credentials in git-tracked config files.** Only Claude Code's `.mcp.json` expands `${VAR}` from your shell env. For any other client, keep secrets in `~/.coa/config` or a secrets manager your client integrates with - don't commit literals into these JSON files.
 
+> [!TIP]
+> **❄️ Snowflake Cortex Code + coalesce-transform-mcp.** CoCo is Snowflake's AI coding CLI - it already knows your warehouse, role, and data. Drop this MCP in and an agent can plan pipelines, create nodes, run DML, and verify results in a single session, all under Snowflake's auth model. **[Install in Cortex Code →](docs/installation-guides/cortex-code.md)**
+
+> [!TIP]
+> The two surfaces are orthogonal. Use both, one, or neither. Every destructive tool - on either surface - requires explicit confirmation before running. New? Run the `/coalesce-setup` prompt after install - it walks you through anything missing.
+
 ---
 
 ## Quick start
@@ -370,7 +370,7 @@ snowflakeAccount=<your-snowflake-account>   # e.g., abc12345.us-east-1 - require
 snowflakeUsername=YOUR_USER
 snowflakeRole=YOUR_ROLE
 snowflakeWarehouse=YOUR_WAREHOUSE
-snowflakeKeyPairKey=/Users/you/.coa/rsa_key.p8   # see deprecation note below
+snowflakeKeyPairKey=/Users/you/.coa/rsa_key.p8
 snowflakeAuthType=KeyPair
 orgID=<your-org-id>              # optional; fallback for cancel-run
 repoPath=/Users/you/path/to/repo # optional; for repo-backed tools
@@ -380,10 +380,22 @@ cacheDir=/Users/you/.coa/cache   # optional; per-profile cache isolation
 # …additional profiles; select with COALESCE_PROFILE
 ```
 
-> [!IMPORTANT]
-> **`snowflakeKeyPairKey` deprecation loop (known quirk).** The `coa` CLI currently emits a deprecation warning on `snowflakeKeyPairKey` and points you at `snowflakeKeyPairPath`, but `snowflakeKeyPairPath` does not yet accept a file path value. Until the upstream fix ships, keep using `snowflakeKeyPairKey=` (the name shown in `coa describe config`) - the deprecation warning is harmless.
+**Key mapping** - each profile key maps to an env var of the same concept:
 
-Key mapping: `token` ↔ `COALESCE_ACCESS_TOKEN`, `domain` ↔ `COALESCE_BASE_URL`, each `snowflake*` key ↔ its corresponding `SNOWFLAKE_*` env var, `orgID` ↔ `COALESCE_ORG_ID`, `repoPath` ↔ `COALESCE_REPO_PATH`, `cacheDir` ↔ `COALESCE_CACHE_DIR`. `snowflakeAuthType` is read by COA itself (not mapped to an env var) - include it when you're using key-pair auth. `orgID`, `repoPath`, and `cacheDir` are MCP-specific (the COA CLI ignores them). Only the fields the MCP needs are shown above - COA's config supports many more (run `npx @coalescesoftware/coa describe config` for the authoritative reference). Unknown keys are ignored.
+| Profile key | Env var |
+| ----------- | ------- |
+| `token` | `COALESCE_ACCESS_TOKEN` |
+| `domain` | `COALESCE_BASE_URL` |
+| `snowflake*` (all keys) | `SNOWFLAKE_*` (matching suffix) |
+| `orgID` | `COALESCE_ORG_ID` |
+| `repoPath` | `COALESCE_REPO_PATH` |
+| `cacheDir` | `COALESCE_CACHE_DIR` |
+
+Notes:
+
+- `snowflakeAuthType` is read by COA itself (no env var) - include it when using key-pair auth.
+- `orgID`, `repoPath`, and `cacheDir` are MCP-specific - the COA CLI ignores them.
+- Only the fields the MCP needs are shown above. COA's config supports many more - run `npx @coalescesoftware/coa describe config` for the authoritative reference. Unknown keys are ignored.
 
 If `~/.coa/config` doesn't exist the server runs env-only - startup never fails on a missing or malformed profile file; it just logs a stderr warning.
 
