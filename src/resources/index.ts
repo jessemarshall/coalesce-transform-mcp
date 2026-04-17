@@ -47,6 +47,8 @@ const RESOURCES = {
     "coalesce://context/pipeline-workshop-guide",
   ECOSYSTEM_BOUNDARIES:
     "coalesce://context/ecosystem-boundaries",
+  SETUP_GUIDE:
+    "coalesce://context/setup-guide",
 } as const;
 
 // Map URIs to file paths
@@ -83,6 +85,8 @@ export const RESOURCE_FILES: Record<string, string> = {
     "context/pipeline-workshop-guide.md",
   [RESOURCES.ECOSYSTEM_BOUNDARIES]:
     "context/ecosystem-boundaries.md",
+  [RESOURCES.SETUP_GUIDE]:
+    "context/setup-guide.md",
 };
 
 // Resource metadata
@@ -232,6 +236,12 @@ const RESOURCE_METADATA: Record<
     name: "Ecosystem Boundaries",
     description:
       "Scope of this MCP vs adjacent data engineering MCPs (Snowflake, Fivetran, dbt, Catalog) with cross-server workflow patterns",
+    mimeType: "text/markdown",
+  },
+  [RESOURCES.SETUP_GUIDE]: {
+    name: "Setup Guide",
+    description:
+      "How to walk a user through first-time Coalesce MCP setup conversationally — driven by diagnose_setup output. Load when the user is getting configured for the first time or a tool error points at missing credentials/profile/repo path.",
     mimeType: "text/markdown",
   },
 };
