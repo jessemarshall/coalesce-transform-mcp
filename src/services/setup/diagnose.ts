@@ -6,6 +6,11 @@ import { listWorkspaces } from "../../coalesce/api/workspaces.js";
 import { runCoa } from "../coa/runner.js";
 import { redactSensitive } from "../coa/redact.js";
 import {
+  readLocationNames,
+  runPreflight,
+  type PreflightIssue,
+} from "../coa/preflight.js";
+import {
   getActiveProfileName,
   getCoaConfigStatus,
   loadCoaProfile,
@@ -61,6 +66,7 @@ function collectPresentKeys(profile: CoaProfile): string[] {
   const keys: string[] = [];
   if (profile.token) keys.push("token");
   if (profile.domain) keys.push("domain");
+  if (profile.snowflakeAccount) keys.push("snowflakeAccount");
   if (profile.snowflakeUsername) keys.push("snowflakeUsername");
   if (profile.snowflakeRole) keys.push("snowflakeRole");
   if (profile.snowflakeWarehouse) keys.push("snowflakeWarehouse");
@@ -126,6 +132,7 @@ export async function diagnoseAccessToken(
 // ---------- Snowflake credentials ----------
 
 export interface SnowflakeSourceMap {
+  snowflakeAccount: FieldSource;
   snowflakeUsername: FieldSource;
   snowflakeWarehouse: FieldSource;
   snowflakeRole: FieldSource;
@@ -138,6 +145,7 @@ export type SnowflakeCredsStatus =
   | {
       status: "ok";
       authType: "KeyPair" | "PAT";
+      account: string;
       username: string;
       warehouse: string;
       role: string;
@@ -156,6 +164,7 @@ export function diagnoseSnowflakeCreds(): SnowflakeCredsStatus {
   const profile = loadCoaProfile();
   const profileName = profile?.profileName ?? getActiveProfileName();
 
+  const account = pickField(process.env.SNOWFLAKE_ACCOUNT, profile?.snowflakeAccount, profileName);
   const username = pickField(process.env.SNOWFLAKE_USERNAME, profile?.snowflakeUsername, profileName);
   const keyPairPath = pickField(process.env.SNOWFLAKE_KEY_PAIR_KEY, profile?.snowflakeKeyPairKey, profileName);
   const keyPairPass = pickField(process.env.SNOWFLAKE_KEY_PAIR_PASS, profile?.snowflakeKeyPairPass, profileName);
@@ -164,6 +173,9 @@ export function diagnoseSnowflakeCreds(): SnowflakeCredsStatus {
   const role = pickField(process.env.SNOWFLAKE_ROLE, profile?.snowflakeRole, profileName);
 
   const missing: string[] = [];
+  // `coa doctor` and the local coa CLI require snowflakeAccount; the MCP's own
+  // REST run path does not. Flag it here so diagnose_setup and coa doctor agree.
+  if (!account.value) missing.push("SNOWFLAKE_ACCOUNT");
   if (!username.value) missing.push("SNOWFLAKE_USERNAME");
   if (!keyPairPath.value && !pat.value) missing.push("SNOWFLAKE_KEY_PAIR_KEY or SNOWFLAKE_PAT");
   if (!warehouse.value) missing.push("SNOWFLAKE_WAREHOUSE");
@@ -171,6 +183,7 @@ export function diagnoseSnowflakeCreds(): SnowflakeCredsStatus {
   if (missing.length > 0) return { status: "missing", missing };
 
   const sources: SnowflakeSourceMap = {
+    snowflakeAccount: account.source!,
     snowflakeUsername: username.source!,
     snowflakeWarehouse: warehouse.source!,
     snowflakeRole: role.source!,
@@ -201,6 +214,7 @@ export function diagnoseSnowflakeCreds(): SnowflakeCredsStatus {
     return {
       status: "ok",
       authType: "KeyPair",
+      account: account.value!,
       username: username.value!,
       warehouse: warehouse.value!,
       role: role.value!,
@@ -212,6 +226,7 @@ export function diagnoseSnowflakeCreds(): SnowflakeCredsStatus {
   return {
     status: "ok",
     authType: "PAT",
+    account: account.value!,
     username: username.value!,
     warehouse: warehouse.value!,
     role: role.value!,
@@ -320,6 +335,8 @@ export type DiagnoseSetupResult = {
   snowflakeCreds: SnowflakeCredsStatus;
   repoPath: RepoPathStatus;
   coaDoctor: CoaDoctorStatus;
+  /** Preflight warnings gathered against the configured repo path, when present. */
+  projectWarnings: PreflightIssue[];
   /** Human-ordered next steps; empty when fully configured. */
   nextSteps: string[];
   /** Convenience: true only when every probe is in a happy state. */
@@ -336,19 +353,45 @@ export async function diagnoseSetup(
     diagnoseRepoPath(),
   ];
   const coaDoctor = await diagnoseCoaDoctor(repoPath);
+  const projectWarnings = collectProjectWarnings(repoPath);
   const nextSteps = buildNextSteps({
     coaConfig,
     accessToken,
     snowflakeCreds,
     repoPath,
     coaDoctor,
+    projectWarnings,
   });
   const ready =
     accessToken.status === "ok" &&
     snowflakeCreds.status === "ok" &&
     repoPath.status === "ok" &&
     (coaDoctor.status === "ok" || coaDoctor.status === "skipped");
-  return { coaConfig, accessToken, snowflakeCreds, repoPath, coaDoctor, nextSteps, ready };
+  return {
+    coaConfig,
+    accessToken,
+    snowflakeCreds,
+    repoPath,
+    coaDoctor,
+    projectWarnings,
+    nextSteps,
+    ready,
+  };
+}
+
+/**
+ * Run the offline preflight scanner against the configured repo path to surface
+ * workspaces.yml shape typos, stale location keys, and other footguns before
+ * the user ever invokes a coa_* tool. Returns [] when there is no usable repo.
+ */
+function collectProjectWarnings(repoPath: RepoPathStatus): PreflightIssue[] {
+  if (repoPath.status !== "ok" || !repoPath.isCoaProject) return [];
+  try {
+    const report = runPreflight(repoPath.path, { requireWorkspacesYml: false });
+    return report.warnings;
+  } catch {
+    return [];
+  }
 }
 
 function buildNextSteps(parts: {
@@ -357,6 +400,7 @@ function buildNextSteps(parts: {
   snowflakeCreds: SnowflakeCredsStatus;
   repoPath: RepoPathStatus;
   coaDoctor: CoaDoctorStatus;
+  projectWarnings: PreflightIssue[];
 }): string[] {
   const steps: string[] = [];
 
@@ -429,6 +473,18 @@ function buildNextSteps(parts: {
     steps.push(
       `Configured repo path (${parts.repoPath.path}) has no data.yml, so coa_* local tools will not work against it. If you intend to use COA, point COALESCE_REPO_PATH or your profile's repoPath at a directory containing data.yml.`
     );
+  } else if (
+    parts.repoPath.status === "ok" &&
+    parts.repoPath.isCoaProject &&
+    !existsSync(join(parts.repoPath.path, "workspaces.yml"))
+  ) {
+    steps.push(buildMissingWorkspacesYmlStep(parts.repoPath.path));
+  }
+
+  // Surface project-level preflight warnings so typos in workspaces.yml are
+  // caught at diagnose time instead of the first coa_create invocation.
+  for (const step of renderProjectWarningSteps(parts.projectWarnings)) {
+    steps.push(step);
   }
 
   if (parts.coaDoctor.status === "failed") {
@@ -445,4 +501,60 @@ function buildNextSteps(parts: {
 function formatSource(source: FieldSource | undefined): string {
   if (!source) return "unknown";
   return source;
+}
+
+/**
+ * Preflight codes whose fix belongs in the `/coalesce-setup` flow. Other codes
+ * (SQL footguns, data.yml fileVersion quirks) surface elsewhere and would just
+ * be noise in the setup report.
+ */
+const SETUP_RELEVANT_PREFLIGHT_CODES = new Set([
+  "WORKSPACES_YML_NESTED_WRAPPER",
+  "WORKSPACES_YML_UNEXPECTED_FILEVERSION",
+  "WORKSPACES_YML_WRONG_LOCATIONS_KEY",
+  "WORKSPACES_YML_MISSING_CONNECTION",
+  "WORKSPACES_YML_PARSE_FAILED",
+  "WORKSPACES_YML_INVALID_SHAPE",
+  "WORKSPACES_YML_UNKNOWN_LOCATION",
+  "WORKSPACES_YML_NOT_GITIGNORED",
+  "LOCATIONS_YML_PARSE_FAILED",
+  "LOCATIONS_YML_INVALID_SHAPE",
+]);
+
+function renderProjectWarningSteps(warnings: PreflightIssue[]): string[] {
+  return warnings
+    .filter((w) => SETUP_RELEVANT_PREFLIGHT_CODES.has(w.code))
+    .map((w) => `[${w.code}] ${w.message}${w.path ? ` (${w.path})` : ""}`);
+}
+
+function buildMissingWorkspacesYmlStep(projectPath: string): string {
+  const locationNames = readLocationNames(projectPath);
+  const template = renderWorkspacesYmlTemplate(locationNames);
+  const keyHint =
+    locationNames.length > 0
+      ? `Location keys seeded from your locations.yml: ${locationNames.join(", ")}.`
+      : "locations.yml is missing or unreadable — add your real location names from the project's locations.yml.";
+  return [
+    `workspaces.yml is missing from ${projectPath}.`,
+    "It is required for coa_create / coa_run / coa_dry_run_* and maps locations.yml entries to real database+schema pairs.",
+    "Quickest fix: run `npx @coalescesoftware/coa doctor --fix` from the project root to bootstrap it, then open the file and set real database/schema values.",
+    `Or hand-write it. ${keyHint} Ready-to-paste template (fill in database values):`,
+    "",
+    template,
+    "",
+    "Typically gitignored per-developer.",
+  ].join("\n");
+}
+
+function renderWorkspacesYmlTemplate(locationNames: string[]): string {
+  const lines = ["dev:", "  connection: snowflake"];
+  if (locationNames.length > 0) {
+    lines.push("  locations:");
+    for (const name of locationNames) {
+      lines.push(`    ${name}:`);
+      lines.push("      database: <YOUR_DEV_DB>");
+      lines.push(`      schema: ${name}`);
+    }
+  }
+  return lines.join("\n");
 }

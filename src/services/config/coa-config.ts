@@ -6,6 +6,7 @@ export interface CoaProfile {
   profileName: string;
   token?: string;
   domain?: string;
+  snowflakeAccount?: string;
   snowflakeUsername?: string;
   snowflakeRole?: string;
   snowflakeWarehouse?: string;
@@ -112,6 +113,7 @@ function toProfile(profileName: string, section: Map<string, string>): CoaProfil
   const consumed = new Set([
     "token",
     "domain",
+    "snowflakeAccount",
     "snowflakeUsername",
     "snowflakeRole",
     "snowflakeWarehouse",
@@ -131,6 +133,7 @@ function toProfile(profileName: string, section: Map<string, string>): CoaProfil
     profileName,
     token: take("token"),
     domain: take("domain"),
+    snowflakeAccount: take("snowflakeAccount"),
     snowflakeUsername: take("snowflakeUsername"),
     snowflakeRole: take("snowflakeRole"),
     snowflakeWarehouse: take("snowflakeWarehouse"),

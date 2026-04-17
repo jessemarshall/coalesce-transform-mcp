@@ -188,6 +188,26 @@ function redactDoctorRun(result: RunCoaResult): RunCoaResult {
   return next;
 }
 
+const BootstrapWorkspacesParams = ProjectPathParam.extend({
+  confirmed: z
+    .boolean()
+    .optional()
+    .describe(
+      "Set to true after the user explicitly confirms. Without this, the tool returns a STOP_AND_CONFIRM response instead of executing."
+    ),
+});
+
+export async function coaBootstrapWorkspacesHandler(
+  params: z.infer<typeof BootstrapWorkspacesParams>,
+  runCoaFn: RunCoaFn = runCoa
+): Promise<CoaToolResult> {
+  const cwd = validateProjectPath(params.projectPath);
+  const args = ["--json", "doctor", "--dir", cwd, "--fix"];
+  pushIf(args, "--workspace", params.workspace);
+  const result = await runCoaFn(args, { cwd, parseJson: true });
+  return buildResult(args, redactDoctorRun(result));
+}
+
 export async function coaValidateHandler(
   params: z.infer<typeof SelectorParams>,
   runCoaFn: RunCoaFn = runCoa
@@ -573,6 +593,21 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       coaDoctorHandler
     ),
 
+    defineDestructiveLocalTool(
+      server,
+      "coa_bootstrap_workspaces",
+      {
+        title: "COA Bootstrap workspaces.yml (doctor --fix)",
+        description:
+          "Run `coa doctor --fix` — writes a starter `workspaces.yml` in the project root, seeded from `locations.yml`. Safe to re-run; coa will not overwrite a valid existing file.\n\nIMPORTANT: the generated file contains placeholder database/schema values. The user MUST open it and set real values before running coa_create / coa_run — otherwise warehouse operations will target non-existent databases.\n\nDESTRUCTIVE: writes a new file to the project directory. Requires confirmed=true after explicit user approval.\n\nArgs:\n  - projectPath (string, required): Path to the COA project root (directory with data.yml)\n  - workspace (string, optional): workspaces.yml workspace name (default: dev)\n  - confirmed (boolean): must be true to execute\n\nReturns:\n  { command, exitCode, stdout, stderr, json?, coaVersion }",
+        inputSchema: BootstrapWorkspacesParams,
+        annotations: DESTRUCTIVE_ANNOTATIONS,
+        confirmMessage: (params) =>
+          `coa_bootstrap_workspaces will run \`coa doctor --fix\` in ${params.projectPath}. This writes a starter workspaces.yml with placeholder database/schema values — the user must edit real values in before running warehouse operations.`,
+      },
+      coaBootstrapWorkspacesHandler
+    ),
+
     defineLocalTool(
       "coa_validate",
       {
@@ -602,7 +637,7 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       {
         title: "COA Dry Run Create (DDL preview)",
         description:
-          "Preview the DDL that `coa create` would execute, without hitting the warehouse. Forces --dry-run --verbose.\n\nRuns entirely offline against local project files — no Coalesce cloud authentication or API calls. `coa create` (and `coa run`) are the offline local-dev commands; do not confuse with the scheduler-aware `coa deploy` / `coa plan` / `coa refresh` which target cloud environments.\n\nCheck the stdout: table names should resolve (not blank), column types should not be UNKNOWN (indicates broken ref() targets), and SQL should look correct.\n\nArgs:\n  - projectPath (string, required)\n  - workspace (string, optional)\n  - include / exclude (string, optional): Node selector\n\nReturns:\n  { command, exitCode, stdout, stderr, coaVersion }",
+          "Preview the DDL that `coa create` would execute, without hitting the warehouse. Forces --dry-run --verbose.\n\nRuns entirely offline against local project files — no Coalesce cloud authentication or API calls. `coa create` (and `coa run`) are the offline local-dev commands; do not confuse with the scheduler-aware `coa deploy` / `coa plan` / `coa refresh` which target cloud environments.\n\nCheck the stdout: table names should resolve (not blank), column types should not be UNKNOWN (indicates broken ref() targets), and SQL should look correct.\n\nLIMITATION: dry-run only exercises the SQL generator. It does NOT validate that referenced columns or types exist in the actual warehouse — a dry-run can succeed with column references that will fail at run-time with 'invalid identifier'. Use cortex or another Snowflake-capable MCP to confirm the schema when that matters.\n\nArgs:\n  - projectPath (string, required)\n  - workspace (string, optional)\n  - include / exclude (string, optional): Node selector\n\nReturns:\n  { command, exitCode, stdout, stderr, coaVersion }",
         inputSchema: DryRunParams,
         annotations: READ_ONLY_LOCAL_ANNOTATIONS,
       },
@@ -614,7 +649,7 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       {
         title: "COA Dry Run Run (DML preview)",
         description:
-          "Preview the DML that `coa run` would execute, without hitting the warehouse. Forces --dry-run --verbose.\n\nRuns entirely offline against local project files — no Coalesce cloud authentication or API calls. `coa run` (and `coa create`) are the offline local-dev commands; do not confuse with the scheduler-aware `coa deploy` / `coa plan` / `coa refresh` which target cloud environments.\n\nArgs:\n  - projectPath (string, required)\n  - workspace (string, optional)\n  - include / exclude (string, optional): Node selector\n\nReturns:\n  { command, exitCode, stdout, stderr, coaVersion }",
+          "Preview the DML that `coa run` would execute, without hitting the warehouse. Forces --dry-run --verbose.\n\nRuns entirely offline against local project files — no Coalesce cloud authentication or API calls. `coa run` (and `coa create`) are the offline local-dev commands; do not confuse with the scheduler-aware `coa deploy` / `coa plan` / `coa refresh` which target cloud environments.\n\nLIMITATION: dry-run only exercises the SQL generator. It does NOT validate that referenced columns or types exist in the actual warehouse — a dry-run can succeed with column references that will fail at run-time with 'invalid identifier'. Use cortex or another Snowflake-capable MCP to confirm the schema when that matters.\n\nArgs:\n  - projectPath (string, required)\n  - workspace (string, optional)\n  - include / exclude (string, optional): Node selector\n\nReturns:\n  { command, exitCode, stdout, stderr, coaVersion }",
         inputSchema: DryRunParams,
         annotations: READ_ONLY_LOCAL_ANNOTATIONS,
       },

@@ -1,4 +1,5 @@
 import { resolveCoalesceAuth } from "./services/config/credentials.js";
+import { withSetupHint } from "./services/setup/hint.js";
 
 export interface ClientConfig {
   accessToken: string;
@@ -109,13 +110,15 @@ async function handleResponse(response: Response): Promise<unknown> {
         throw new CoalesceApiError(fullMessage, 400, detail);
       case 401:
         throw new CoalesceApiError(
-          "Invalid or expired access token",
+          withSetupHint("Invalid or expired access token"),
           401,
           detail
         );
       case 403:
         throw new CoalesceApiError(
-          "Insufficient permissions for this operation",
+          withSetupHint(
+            "Insufficient permissions for this operation. The token may be scoped to a different workspace"
+          ),
           403,
           detail
         );

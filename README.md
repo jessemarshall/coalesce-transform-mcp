@@ -32,39 +32,162 @@ The two surfaces are orthogonal. Use both, one, or neither. Every destructive to
 - Snowflake credentials — only if you plan to use run tools or `coa_create`/`coa_run` (see [Credentials](#credentials))
 - Install footprint is ~76 MB unpacked (the bundled `@coalescesoftware/coa` CLI ships its own runtime; the MCP tarball itself is under 1 MB)
 
-**1. Pick an auth path:**
+**1. Clone your project**
+
+If your team already has a Coalesce project in Git, clone it locally — the bundled `coa` CLI operates on a project directory, so most local create/run tools require one on disk:
+
+```bash
+git clone <your-coalesce-project-repo-url>
+cd my-project
+```
+
+**Don't have a Git-linked project yet?** In the Coalesce UI, open your workspace → **Settings → Git** and connect a repo (or create one via your Git provider and paste the URL). Coalesce will commit the project skeleton on first push; clone that repo locally once it's populated.
+
+A Coalesce project has this shape:
+
+```text
+my-project/
+├── data.yml                 # Root metadata (fileVersion, platformKind)
+├── locations.yml            # Storage location manifest
+├── nodes/                   # Pipeline nodes (.yml for V1, .sql for V2)
+├── nodeTypes/               # Node type definitions with templates
+├── environments/            # Environment configs with storage mappings
+├── macros/                  # Reusable SQL macros
+├── jobs/                    # Job definitions
+└── subgraphs/               # Subgraph definitions
+```
+
+> **V1 vs V2** — the format is pinned by `fileVersion` in `data.yml`. **V1** (`fileVersion: 1` or `2`) stores each node as a single YAML file with columns, transforms, and config inline. **V2** (`fileVersion: 3`) is SQL-first: the node body lives in a `.sql` file using `@id` / `@nodeType` annotations and `{{ ref() }}` references, with YAML retained for config. New projects default to V2; existing V1 projects keep working unchanged.
+
+Point the MCP at this directory by setting `repoPath` in `~/.coa/config` or `COALESCE_REPO_PATH` in your env block.
+
+### Create `workspaces.yml`
+
+This file is **required** for `coa_create` / `coa_run` and their dry-run variants. It maps each storage location declared in `locations.yml` to a physical database + schema for local development. It's typically gitignored (per-developer), so cloning the project does not give it to you — you have to create it.
+
+The `/coalesce-setup` prompt detects a missing `workspaces.yml` and walks you through it. If you'd rather do it directly, pick one of:
+
+- **Let COA bootstrap it** (easiest): from the project root, run
+
+  ```bash
+  npx @coalescesoftware/coa doctor --fix
+  ```
+
+  Or from your MCP client, call the `coa_bootstrap_workspaces` tool (requires `confirmed: true`) which runs the same command.
+
+  > **⚠️ The generated file contains placeholder values.** `coa doctor --fix` seeds `database`/`schema` with defaults that won't match your real warehouse. Open the file and replace every placeholder before running `coa_create` / `coa_run` — otherwise the generated DDL/DML will target the wrong (or non-existent) database.
+- **Hand-write it.** Authoritative schema (from `coa describe schema workspaces` — no top-level wrapper, no `fileVersion`):
+
+  ```yaml
+  # workspaces.yml — keys are workspace names; `dev` is the default if --workspace is omitted
+  dev:
+    connection: snowflake          # required — name of the connection block COA should use
+    locations:                     # optional — one entry per storage location name from locations.yml
+      SRC_INGEST_TASTY_BITES:
+        database: JESSE_DEV        # required
+        schema: INGEST_TASTY_BITES # required
+      ETL_STAGE:
+        database: JESSE_DEV
+        schema: ETL_STAGE
+      ANALYTICS:
+        database: JESSE_DEV
+        schema: ANALYTICS
+  ```
+
+Verify with `coa_doctor` (or `npx @coalescesoftware/coa doctor`) — it checks `data.yml`, `workspaces.yml`, credentials, and warehouse connectivity end to end.
+
+**2. Pick an auth path:**
 
 - **Option A — env var** (simplest for first-time MCP users). Generate a `COALESCE_ACCESS_TOKEN` from Coalesce → Deploy → User Settings.
-- **Option B — reuse `~/.coa/config`** (best if you already use the `coa` CLI). The server reads the same file — nothing to duplicate. Skip to step 2 and drop the `env` block below. See [Credentials](#credentials) for the schema.
+- **Option B — reuse `~/.coa/config`** (best if you already use the `coa` CLI). The server reads the same file — nothing to duplicate. Skip to step 3 and drop the `env` block below. See [Credentials](#credentials) for the schema.
 
 When both sources set a field, the env var wins.
 
-**2. Add the server to your MCP client config** (Option A shown):
+**3. Add the server to your MCP client config.** Pick your client below and paste the block into the indicated file. Replace `<YOUR_TOKEN>` with a real token only if your client does not support env var substitution (noted per client).
+
+#### Claude Code
+
+File: `.mcp.json` in project root (or `~/.claude.json` for global).
 
 ```json
 {
-  "coalesce-transform": {
-    "command": "npx",
-    "args": ["coalesce-transform-mcp"],
-    "env": {
-      "COALESCE_ACCESS_TOKEN": "${COALESCE_ACCESS_TOKEN}"
+  "mcpServers": {
+    "coalesce-transform": {
+      "command": "npx",
+      "args": ["coalesce-transform-mcp"],
+      "env": {
+        "COALESCE_ACCESS_TOKEN": "${COALESCE_ACCESS_TOKEN}"
+      }
     }
   }
 }
 ```
 
-| Client | Config file |
-| ------ | ----------- |
-| Claude Code | `.mcp.json` in project root (or `~/.claude.json` for global) |
-| Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Cursor | `.cursor/mcp.json` in project root |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+Claude Code expands `${VAR}` from your shell env at load time. Omit the `env` block entirely if you're using `~/.coa/config` (Option B).
 
-Claude Desktop / Cursor / Windsurf wrap the entry in `"mcpServers": { … }`.
+#### Claude Desktop
 
-**3. Restart your client**, then run the `/coalesce-setup` prompt to verify everything is wired up.
+File: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 
-> **Never hardcode credentials in git-tracked config files.** `${VAR}` is expanded by Claude Code's `.mcp.json`; other clients may require a literal value or their own substitution syntax — check your client's docs if the server reports a missing token.
+```json
+{
+  "mcpServers": {
+    "coalesce-transform": {
+      "command": "npx",
+      "args": ["coalesce-transform-mcp"],
+      "env": {
+        "COALESCE_ACCESS_TOKEN": "<YOUR_TOKEN>"
+      }
+    }
+  }
+}
+```
+
+Claude Desktop does **not** expand `${VAR}` — paste the literal token, or drop the `env` block and use `~/.coa/config` (Option B) so nothing sensitive lives in this file.
+
+#### Cursor
+
+File: `.cursor/mcp.json` in project root (or `~/.cursor/mcp.json` for global).
+
+```json
+{
+  "mcpServers": {
+    "coalesce-transform": {
+      "command": "npx",
+      "args": ["coalesce-transform-mcp"],
+      "env": {
+        "COALESCE_ACCESS_TOKEN": "<YOUR_TOKEN>"
+      }
+    }
+  }
+}
+```
+
+Cursor does **not** expand `${VAR}` — paste the literal token, or drop the `env` block and use `~/.coa/config` (Option B).
+
+#### Windsurf
+
+File: `~/.codeium/windsurf/mcp_config.json`.
+
+```json
+{
+  "mcpServers": {
+    "coalesce-transform": {
+      "command": "npx",
+      "args": ["coalesce-transform-mcp"],
+      "env": {
+        "COALESCE_ACCESS_TOKEN": "<YOUR_TOKEN>"
+      }
+    }
+  }
+}
+```
+
+Windsurf does **not** expand `${VAR}` — paste the literal token, or drop the `env` block and use `~/.coa/config` (Option B).
+
+**4. Restart your client**, then run the `/coalesce-setup` prompt to verify everything is wired up.
+
+> **Never hardcode credentials in git-tracked config files.** Only Claude Code's `.mcp.json` expands `${VAR}` from your shell env. For any other client, keep secrets in `~/.coa/config` (Option B) or a secrets manager your client integrates with — don't commit literals into these JSON files.
 
 If you have more than one Coalesce environment to manage, see [Multiple environments](#multiple-environments).
 
@@ -82,10 +205,11 @@ COA stores credentials in a standard INI file. You create it by hand, or let `co
 [default]
 token=<your-coalesce-refresh-token>
 domain=https://your-org.app.coalescesoftware.io
+snowflakeAccount=<your-snowflake-account>   # e.g., abc12345.us-east-1 — required by coa CLI
 snowflakeUsername=YOUR_USER
 snowflakeRole=YOUR_ROLE
 snowflakeWarehouse=YOUR_WAREHOUSE
-snowflakeKeyPairKey=/Users/you/.coa/rsa_key.p8
+snowflakeKeyPairKey=/Users/you/.coa/rsa_key.p8   # see deprecation note below
 snowflakeAuthType=KeyPair
 orgID=<your-org-id>              # optional; fallback for cancel-run
 repoPath=/Users/you/path/to/repo # optional; for repo-backed tools
@@ -94,6 +218,8 @@ cacheDir=/Users/you/.coa/cache   # optional; per-profile cache isolation
 [staging]
 # …additional profiles; select with COALESCE_PROFILE
 ```
+
+> **`snowflakeKeyPairKey` deprecation loop (known quirk).** The `coa` CLI currently emits a deprecation warning on `snowflakeKeyPairKey` and points you at `snowflakeKeyPairPath`, but `snowflakeKeyPairPath` does not yet accept a file path value. Until the upstream fix ships, keep using `snowflakeKeyPairKey=` (the name shown in `coa describe config`) — the deprecation warning is harmless.
 
 Key mapping: `token` ↔ `COALESCE_ACCESS_TOKEN`, `domain` ↔ `COALESCE_BASE_URL`, each `snowflake*` key ↔ its corresponding `SNOWFLAKE_*` env var, `orgID` ↔ `COALESCE_ORG_ID`, `repoPath` ↔ `COALESCE_REPO_PATH`, `cacheDir` ↔ `COALESCE_CACHE_DIR`. `snowflakeAuthType` is read by COA itself (not mapped to an env var) — include it when you're using key-pair auth. `orgID`, `repoPath`, and `cacheDir` are MCP-specific (the COA CLI ignores them). Only the fields the MCP needs are shown above — COA's config supports many more (run `npx @coalescesoftware/coa describe config` for the authoritative reference). Unknown keys are ignored.
 
@@ -124,6 +250,7 @@ If `~/.coa/config` doesn't exist the server runs env-only — startup never fail
 <!-- ENV_METADATA_SNOWFLAKE_TABLE_START -->
 | Variable | Required | Description |
 | -------- | -------- | -------- |
+| `SNOWFLAKE_ACCOUNT` | Yes | Snowflake account identifier (e.g., `abc12345.us-east-1`). Required by the local `coa` CLI and `coa doctor`; not used by the MCP's REST run path. |
 | `SNOWFLAKE_USERNAME` | Yes | Snowflake account username |
 | `SNOWFLAKE_KEY_PAIR_KEY` | No | Path to PEM-encoded private key (required if SNOWFLAKE_PAT not set) |
 | `SNOWFLAKE_PAT` | No | Snowflake Programmatic Access Token (alternative to key pair) |
@@ -491,8 +618,8 @@ All local tools accept a `projectPath` argument and validate that it contains `d
 - 🧰 `coa_doctor` — Check config, credentials, and warehouse connectivity for a project. Wraps `coa doctor --json`
 - 🧰 `coa_validate` — Validate YAML schemas and scan a project for configuration problems. Wraps `coa validate --json`
 - 🧰 `coa_list_project_nodes` — List all nodes defined in a local project (pre-deploy). Wraps `coa create --list-nodes`
-- 🧰 `coa_dry_run_create` — Preview DDL without executing against the warehouse. Forces `--dry-run --verbose`
-- 🧰 `coa_dry_run_run` — Preview DML without executing against the warehouse. Forces `--dry-run --verbose`
+- 🧰 `coa_dry_run_create` — Preview DDL without executing against the warehouse. Forces `--dry-run --verbose`. Does **not** validate that referenced columns/types exist in the warehouse — catches SQL generation bugs, not schema-drift bugs
+- 🧰 `coa_dry_run_run` — Preview DML without executing against the warehouse. Forces `--dry-run --verbose`. Same caveat as `coa_dry_run_create`: SQL that looks valid here can still fail at run-time on missing columns
 
 ### Read-only, cloud (require `~/.coa/config`)
 

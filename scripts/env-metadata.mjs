@@ -99,6 +99,15 @@ export const ENV_METADATA = [
     isSecret: false,
   },
   {
+    name: "SNOWFLAKE_ACCOUNT",
+    group: "snowflake",
+    description: "Snowflake account identifier (e.g., `abc12345.us-east-1`). Required by the local `coa` CLI and `coa doctor`; not used by the MCP's REST run path.",
+    defaultValue: null,
+    requiredForServer: false,
+    requiredForRunTools: true,
+    isSecret: false,
+  },
+  {
     name: "SNOWFLAKE_USERNAME",
     group: "snowflake",
     description: "Snowflake account username",

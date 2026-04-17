@@ -13,10 +13,11 @@ function createMockClient() {
   };
 }
 
-// 106 via registerTool + 3 via registerToolTask (start_run, run_and_wait, retry_and_wait).
-// 106 = 91 pre-COA + 8 read-only coa_* (Phase 2) + 1 coa_describe (Phase 3)
-//       + 5 write/destructive coa_* (Phase 4) + 1 diagnose_setup (setup helper).
-const REGISTER_TOOL_COUNT = 106;
+// 107 via registerTool + 3 via registerToolTask (start_run, run_and_wait, retry_and_wait).
+// 107 = 91 pre-COA + 8 read-only coa_* (Phase 2) + 1 coa_describe (Phase 3)
+//       + 6 write/destructive coa_* (Phase 4, includes coa_bootstrap_workspaces)
+//       + 1 diagnose_setup (setup helper).
+const REGISTER_TOOL_COUNT = 107;
 const TASK_TOOL_NAMES = ["start_run", "run_and_wait", "retry_and_wait"];
 
 describe("Tool Registration", () => {
