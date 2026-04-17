@@ -34,6 +34,9 @@ MCP server for [Coalesce](https://coalesce.io/). Built for **Snowflake [Cortex C
 
 Each link below opens a short install guide with a click-to-install button (where supported) and the manual config.
 
+> [!TIP]
+> **❄️ Snowflake Cortex Code + coalesce-transform-mcp.** CoCo is Snowflake's AI coding CLI - it already knows your warehouse, role, and data. Drop this MCP in and an agent can plan pipelines, create nodes, run DML, and verify results in a single session, all under Snowflake's auth model. **[Install in Cortex Code →](docs/installation-guides/cortex-code.md)**
+
 | Client | Install guide |
 | ------ | ------------- |
 | ❄️ **Snowflake Cortex Code (CoCo)** | [docs/installation-guides/cortex-code.md](docs/installation-guides/cortex-code.md) |
@@ -222,10 +225,7 @@ Windsurf does **not** expand `${VAR}` - paste the literal token, or drop the `en
 > **Never hardcode credentials in git-tracked config files.** Only Claude Code's `.mcp.json` expands `${VAR}` from your shell env. For any other client, keep secrets in `~/.coa/config` or a secrets manager your client integrates with - don't commit literals into these JSON files.
 
 > [!TIP]
-> **❄️ Snowflake Cortex Code + coalesce-transform-mcp.** CoCo is Snowflake's AI coding CLI - it already knows your warehouse, role, and data. Drop this MCP in and an agent can plan pipelines, create nodes, run DML, and verify results in a single session, all under Snowflake's auth model. **[Install in Cortex Code →](docs/installation-guides/cortex-code.md)**
-
-> [!TIP]
-> The two surfaces are orthogonal. Use both, one, or neither. Every destructive tool - on either surface - requires explicit confirmation before running. New? Run the `/coalesce-setup` prompt after install - it walks you through anything missing.
+> New? Run the `/coalesce-setup` prompt after install - it walks you through anything missing.
 
 ---
 
