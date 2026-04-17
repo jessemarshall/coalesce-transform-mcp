@@ -1,14 +1,14 @@
 # Install in Snowflake Cortex Code (CoCo)
 
-[Cortex Code](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code-cli) is Snowflake's AI coding CLI. It acts as an MCP client — like Cursor or Claude Code — so it can drive `coalesce-transform-mcp` directly from your terminal while sitting inside Snowflake's auth and role model.
+[Cortex Code](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code-cli) is Snowflake's AI coding CLI. It acts as an MCP client - like Cursor or Claude Code - so it can drive `coalesce-transform-mcp` directly from your terminal while sitting inside Snowflake's auth and role model.
 
-Pairing Cortex Code with this MCP is one of the tightest Coalesce-on-Snowflake loops available: the same session can plan a pipeline, create nodes, run DML, and sanity-check the resulting data in the warehouse — no context switching.
+Pairing Cortex Code with this MCP is one of the tightest Coalesce-on-Snowflake loops available: the same session can plan a pipeline, create nodes, run DML, and sanity-check the resulting data in the warehouse - no context switching.
 
 ## Prerequisites
 
 - Snowflake user with the `SNOWFLAKE.CORTEX_USER` database role
 - Network access to your Snowflake account
-- bash, zsh, or fish shell (macOS / Linux / WSL) — or PowerShell on Windows
+- bash, zsh, or fish shell (macOS / Linux / WSL) - or PowerShell on Windows
 
 ## 1. Install the Cortex Code CLI
 
@@ -59,7 +59,7 @@ Or edit `~/.snowflake/cortex/mcp.json` directly:
 }
 ```
 
-Drop the `env` block entirely if you're using `~/.coa/config` — Cortex Code and Coalesce will both pick the token up from there.
+Drop the `env` block entirely if you're using `~/.coa/config` - Cortex Code and Coalesce will both pick the token up from there.
 
 ## 4. Start a session
 
@@ -78,7 +78,7 @@ Because Cortex Code already has warehouse context, it routes data questions (row
 
 ## Troubleshooting
 
-- **`cortex` not found after install** — the installer drops the binary in `~/.snowflake/bin`. Add it to your `PATH` or re-run with the absolute path.
-- **MCP server not showing up** — run `cortex mcp list` to confirm registration, then restart your Cortex Code session.
-- **Auth errors** — verify the Snowflake connection works outside MCP first (`cortex sql "select current_role()"`), then restart.
-- **Coalesce auth** — if Coalesce tools fail, run `diagnose_setup` from inside Cortex Code to see whether the token came from env, profile, or is missing.
+- **`cortex` not found after install** - the installer drops the binary in `~/.snowflake/bin`. Add it to your `PATH` or re-run with the absolute path.
+- **MCP server not showing up** - run `cortex mcp list` to confirm registration, then restart your Cortex Code session.
+- **Auth errors** - verify the Snowflake connection works outside MCP first (`cortex sql "select current_role()"`), then restart.
+- **Coalesce auth** - if Coalesce tools fail, run `diagnose_setup` from inside Cortex Code to see whether the token came from env, profile, or is missing.

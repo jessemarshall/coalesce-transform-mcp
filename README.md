@@ -32,7 +32,7 @@ MCP server for [Coalesce](https://coalesce.io/). Built for **Snowflake [Cortex C
 | 🧪 | Try a prerelease build | [Prerelease channel](docs/prerelease.md) |
 | 🩺 | Debug "why isn't auth working?" | [Diagnosing setup](docs/diagnosing-setup.md) |
 | 🎛️ | Customize agent behavior | [Skills](#skills) |
-| 🔍 | Find a specific tool | [Tool reference](#tool-reference) |
+| 🔍 | Find a specific tool | [Tools](#tools) |
 
 ---
 
@@ -52,7 +52,7 @@ Each link below opens a short install guide with a click-to-install button (wher
 
 Or expand the dropdown for your client below to paste directly without leaving this page.
 
-<details open>
+<details>
 <summary><b>❄️ Install in Snowflake Cortex Code (CoCo)</b></summary>
 
 **Why this pairing?** Cortex Code is Snowflake's AI coding CLI - it already authenticates to your warehouse, runs under your Snowflake role, and has native tools for querying live data. Add `coalesce-transform-mcp` and a single agent session can plan pipelines, create nodes, run DML, and verify results against real rows without leaving the terminal.
@@ -495,7 +495,7 @@ COA is bundled - no extra install. Usage notes:
 
 Three layers prevent destructive surprises. See [docs/safety-model.md](docs/safety-model.md) for the full breakdown (tool annotations, read-only mode, explicit confirmation, COA preflight validation).
 
-- **Tool annotations** - every tool carries MCP `readOnlyHint` / `destructiveHint` / `idempotentHint`. The ⚠️ marker in [Tool reference](#tool-reference) marks `destructiveHint: true` tools.
+- **Tool annotations** - every tool carries MCP `readOnlyHint` / `destructiveHint` / `idempotentHint`. The ⚠️ marker in [Tools](#tools) marks `destructiveHint: true` tools.
 - **`COALESCE_MCP_READ_ONLY=true`** hides all write/mutation tools at server startup. Use it for audits, agent sandboxes, or pairing with a prod profile.
 - **Explicit confirmation** on destructive ops - `delete_*`, `propagate_column_change`, `cancel_run`, `clear_data_cache`, `coa_create`, `coa_run`, `coa_deploy`, `coa_refresh` all require `confirmed: true`.
 

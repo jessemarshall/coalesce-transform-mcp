@@ -26,6 +26,6 @@ Paste into `.cursor/mcp.json` in your project root (or `~/.cursor/mcp.json` for 
 
 ## Credential notes
 
-Cursor does **not** expand `${VAR}` — paste the literal token, or drop the `env` block and use `~/.coa/config` (see [Credentials](../../README.md#credentials)) so no secret sits in a git-tracked file.
+Cursor does **not** expand `${VAR}` - paste the literal token, or drop the `env` block and use `~/.coa/config` (see [Credentials](../../README.md#credentials)) so no secret sits in a git-tracked file.
 
 After editing, fully quit and relaunch Cursor so the MCP server reloads.

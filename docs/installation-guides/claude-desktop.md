@@ -1,6 +1,6 @@
 # Install in Claude Desktop
 
-Claude Desktop has no deeplink install yet — paste the config manually.
+Claude Desktop has no deeplink install yet - paste the config manually.
 
 ## File location
 
@@ -25,6 +25,6 @@ Claude Desktop has no deeplink install yet — paste the config manually.
 
 ## Credential notes
 
-Claude Desktop does **not** expand `${VAR}` — paste the literal token, or drop the `env` block and use `~/.coa/config` (see [Credentials](../../README.md#credentials)) so nothing sensitive lives in this file.
+Claude Desktop does **not** expand `${VAR}` - paste the literal token, or drop the `env` block and use `~/.coa/config` (see [Credentials](../../README.md#credentials)) so nothing sensitive lives in this file.
 
 Fully quit Claude Desktop (`Cmd+Q` on macOS, from the tray on Windows) and relaunch it after editing the config.

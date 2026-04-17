@@ -26,9 +26,9 @@ Local COA write tools run preflight validation before shelling out. Errors block
 
 | Code | Level | What it catches |
 | ---- | ----- | --------------- |
-| `SQL_DOUBLE_QUOTED_REF` | error | `.sql` nodes using `ref("…")` — silently returns `UNKNOWN` columns; must be single-quoted |
-| `WORKSPACES_YML_MISSING` | error | `workspaces.yml` not in project root — required for local create/run |
-| `SELECTOR_COMBINED_OR` | error | `{ A \|\| B }` selector form — matches zero nodes; must be `{ A } \|\| { B }` |
-| `SQL_LITERAL_UNION_ALL` | warning | Literal `UNION ALL` in a V2 `.sql` node — silently dropped by the V2 parser; use `insertStrategy: UNION ALL` instead |
+| `SQL_DOUBLE_QUOTED_REF` | error | `.sql` nodes using `ref("…")` - silently returns `UNKNOWN` columns; must be single-quoted |
+| `WORKSPACES_YML_MISSING` | error | `workspaces.yml` not in project root - required for local create/run |
+| `SELECTOR_COMBINED_OR` | error | `{ A \|\| B }` selector form - matches zero nodes; must be `{ A } \|\| { B }` |
+| `SQL_LITERAL_UNION_ALL` | warning | Literal `UNION ALL` in a V2 `.sql` node - silently dropped by the V2 parser; use `insertStrategy: UNION ALL` instead |
 | `DATA_YML_UNEXPECTED_FILEVERSION` | warning | `data.yml` missing or not `fileVersion: 3` |
 | `DATA_YML_NO_FILEVERSION` | warning | `data.yml` has no `fileVersion` field |

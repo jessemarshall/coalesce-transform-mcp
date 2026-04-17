@@ -16,15 +16,15 @@ Every release lives on one of two npm dist-tags:
 | `latest` | `0.5.0`, `0.5.1`, … | `npm install coalesce-transform-mcp` | Published | Full release |
 | `alpha` | `0.5.0-alpha.0`, `0.5.0-alpha.1`, … | `npm install coalesce-transform-mcp@alpha` | **Skipped** | Marked **prerelease** |
 
-The [release workflow](.github/workflows/release.yml) reads `package.json` on every tag push and routes automatically — you never pass `--tag alpha` by hand.
+The [release workflow](.github/workflows/release.yml) reads `package.json` on every tag push and routes automatically - you never pass `--tag alpha` by hand.
 
 ## Standard release flow (develop → alpha → main)
 
 Three branches:
 
-- **`develop`** — feature work lands here via PRs from feature branches.
-- **`alpha`** — staging for alpha testing. Merged from `develop` via PR. Alpha tags (`X.Y.Z-alpha.N`) are cut here.
-- **`main`** — stable. Merged from `alpha` via PR when an alpha series is ready to promote. Stable tags (`X.Y.Z`) are cut here.
+- **`develop`** - feature work lands here via PRs from feature branches.
+- **`alpha`** - staging for alpha testing. Merged from `develop` via PR. Alpha tags (`X.Y.Z-alpha.N`) are cut here.
+- **`main`** - stable. Merged from `alpha` via PR when an alpha series is ready to promote. Stable tags (`X.Y.Z`) are cut here.
 
 Only `main` moves when stable ships; `alpha` carries every alpha in between.
 
@@ -38,11 +38,11 @@ gh pr create --base alpha --head develop \
 gh pr merge <pr-number> --merge --delete-branch=false
 ```
 
-`develop` stays open — you don't delete it when the PR merges.
+`develop` stays open - you don't delete it when the PR merges.
 
 ### 2. First alpha of a new version
 
-On the **alpha** branch (not main — the alpha series owns the prerelease commits):
+On the **alpha** branch (not main - the alpha series owns the prerelease commits):
 
 ```bash
 git checkout alpha && git pull origin alpha
@@ -54,7 +54,7 @@ git checkout alpha && git pull origin alpha
 npm audit --omit=dev || (npm audit fix && git add package-lock.json \
   && git commit -m "chore: bump <pkg> transitive dep (<advisory>)")
 
-# COALESCE_* env vars must be unset for the preversion run — stale
+# COALESCE_* env vars must be unset for the preversion run - stale
 # cache/repo pointers break vitest during sync. Wrap in a subshell:
 (unset COALESCE_ACCESS_TOKEN COALESCE_BASE_URL COALESCE_REPO_PATH \
         COALESCE_CACHE_DIR COALESCE_PROFILE; \
@@ -68,7 +68,7 @@ git push origin alpha --tags
 
 The release workflow detects `-alpha.*`, publishes to the `@alpha` npm dist-tag, skips the MCP Registry, and cuts a prerelease GitHub Release. Users install with `npm install coalesce-transform-mcp@alpha`.
 
-Watch the workflow synchronously with `gh run watch <id> --exit-status` — exits non-zero on failure so you know immediately.
+Watch the workflow synchronously with `gh run watch <id> --exit-status` - exits non-zero on failure so you know immediately.
 
 ### 3. Subsequent alphas in the same series
 
@@ -91,7 +91,7 @@ git merge alpha
 git push origin develop
 ```
 
-Fast-forward merge in the normal case. If you get a conflict, it usually means someone landed a fix directly on `alpha` that conflicts with in-flight work on `develop` — resolve on `develop`.
+Fast-forward merge in the normal case. If you get a conflict, it usually means someone landed a fix directly on `alpha` that conflicts with in-flight work on `develop` - resolve on `develop`.
 
 ### 4. Cut the stable release
 
@@ -109,7 +109,7 @@ git checkout main && git pull origin main
 git push origin main --tags
 ```
 
-The workflow sees no `-alpha.*` suffix and routes to the stable flow: `@latest`, MCP Registry, full (non-prerelease) GitHub Release. The release content is identical to the last alpha you tested — only the version string changes.
+The workflow sees no `-alpha.*` suffix and routes to the stable flow: `@latest`, MCP Registry, full (non-prerelease) GitHub Release. The release content is identical to the last alpha you tested - only the version string changes.
 
 ### 5. Sync develop
 
@@ -121,7 +121,7 @@ git push origin develop
 
 ### Post-release verification
 
-Run after any release — cheap, and catches "did it actually publish?" before you find out the hard way:
+Run after any release - cheap, and catches "did it actually publish?" before you find out the hard way:
 
 ```bash
 npm view coalesce-transform-mcp dist-tags
@@ -143,16 +143,16 @@ Alpha releases should show `isPrerelease: true` and **not** appear in MCP Regist
 
 Per npm's documented lifecycle:
 
-1. **`preversion`** runs *before* the version is bumped — right place for validation (build, audit). Never put `sync-version.mjs` here: at this point `package.json` still holds the OLD version, so the sync would write a stale `server.json`.
+1. **`preversion`** runs *before* the version is bumped - right place for validation (build, audit). Never put `sync-version.mjs` here: at this point `package.json` still holds the OLD version, so the sync would write a stale `server.json`.
 2. npm writes the NEW version into `package.json`.
 3. **`version`** runs *after* the bump but *before* the commit. `sync-version.mjs` now sees the new version, rewrites `server.json` + `README.md`, and `git add` stages both. npm's subsequent commit picks them up.
 4. npm commits (package.json + server.json + README together) and creates the tag.
 
-**There is no `postversion` hook.** An earlier iteration of this repo used `postversion` to `git commit --amend` after the bump, which left the tag pointing at the *pre-amend* commit (with stale `server.json`) while the branch tip was the amended commit. Alpha releases hid the bug because they skip the MCP Registry; the first stable would have published wrong metadata. If you're tempted to add `postversion` back to "fix something" — don't. Put the behavior in `version` instead.
+**There is no `postversion` hook.** An earlier iteration of this repo used `postversion` to `git commit --amend` after the bump, which left the tag pointing at the *pre-amend* commit (with stale `server.json`) while the branch tip was the amended commit. Alpha releases hid the bug because they skip the MCP Registry; the first stable would have published wrong metadata. If you're tempted to add `postversion` back to "fix something" - don't. Put the behavior in `version` instead.
 
 ### 6. (Optional) Move the `@alpha` tag forward
 
-After cutting stable, `@alpha` still points at `0.5.0-alpha.2` — older than `@latest`. Two tidy options:
+After cutting stable, `@alpha` still points at `0.5.0-alpha.2` - older than `@latest`. Two tidy options:
 
 ```bash
 # Option A: point @alpha at the stable until the next prerelease cycle starts.
@@ -183,7 +183,7 @@ Once an alpha is published to `@alpha`, point your own MCP client at it by addin
 }
 ```
 
-**Claude Desktop / Cursor / Windsurf** — same, inside `"mcpServers": { … }`.
+**Claude Desktop / Cursor / Windsurf** - same, inside `"mcpServers": { … }`.
 
 Then restart your MCP client so `npx` re-resolves the dependency.
 
@@ -206,21 +206,21 @@ git push origin main --tags
 
 ## What happens to an alpha after stable ships?
 
-It stays on npm at that exact version forever. Pinned installs (`coalesce-transform-mcp@0.5.0-alpha.2`) keep working. Only the `@alpha` dist-tag moves on (or doesn't — see step 6).
+It stays on npm at that exact version forever. Pinned installs (`coalesce-transform-mcp@0.5.0-alpha.2`) keep working. Only the `@alpha` dist-tag moves on (or doesn't - see step 6).
 
 If you need to actively discourage users from a specific alpha (e.g. it had a serious bug you fixed in a later alpha):
 
 ```bash
-npm deprecate coalesce-transform-mcp@0.5.0-alpha.0 "Use 0.5.0 or later — this alpha had a serious lineage-cache bug."
+npm deprecate coalesce-transform-mcp@0.5.0-alpha.0 "Use 0.5.0 or later - this alpha had a serious lineage-cache bug."
 ```
 
 ## Pre-commit hooks (husky)
 
 The `.husky/pre-commit` hook runs automatically on every commit:
 
-1. **Secret scanning** — blocks commits containing tokens, private keys, or API keys
-2. **Type check** — `tsc --noEmit`
-3. **Tests** — `npm test`
+1. **Secret scanning** - blocks commits containing tokens, private keys, or API keys
+2. **Type check** - `tsc --noEmit`
+3. **Tests** - `npm test`
 
 Skip with `git commit --no-verify` for false positives.
 
@@ -265,8 +265,8 @@ Run before every release:
 
 4. (If you touched any `coa_*` tool or preflight logic) run the eval skills:
 
-   - `eval-pipeline-e2e` — end-to-end pipeline creation
-   - `eval-smoke` — live API smoke test
+   - `eval-pipeline-e2e` - end-to-end pipeline creation
+   - `eval-smoke` - live API smoke test
 
 ### Bumping the pinned COA version
 
@@ -299,4 +299,4 @@ If a COA upgrade breaks MCP users post-release:
 1. **Downgrade path for users**: `npm install coalesce-transform-mcp@<prior>`.
 2. **Emergency hotfix**: revert the COA version bump in `package.json` + `package-lock.json`, cut a new patch release. All `coa_*` tools degrade gracefully when COA is missing or non-functional (they return a structured error, not a crash), so we don't need to remove the dependency entirely.
 
-The resolver (`src/services/coa/resolver.ts`) is intentionally non-fatal at MCP startup — only tool invocations surface COA failures. Cloud REST tools are unaffected by COA regressions.
+The resolver (`src/services/coa/resolver.ts`) is intentionally non-fatal at MCP startup - only tool invocations surface COA failures. Cloud REST tools are unaffected by COA regressions.

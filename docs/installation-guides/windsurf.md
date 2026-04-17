@@ -1,6 +1,6 @@
 # Install in Windsurf
 
-Windsurf has no deeplink install yet — paste the config manually.
+Windsurf has no deeplink install yet - paste the config manually.
 
 ## File location
 
@@ -24,6 +24,6 @@ Windsurf has no deeplink install yet — paste the config manually.
 
 ## Credential notes
 
-Windsurf does **not** expand `${VAR}` — paste the literal token, or drop the `env` block and use `~/.coa/config` (see [Credentials](../../README.md#credentials)).
+Windsurf does **not** expand `${VAR}` - paste the literal token, or drop the `env` block and use `~/.coa/config` (see [Credentials](../../README.md#credentials)).
 
 Restart Windsurf after editing the config.

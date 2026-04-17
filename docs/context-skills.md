@@ -1,6 +1,6 @@
 # Context skills
 
-24 curated markdown resources under `coalesce://context/*` guide how agents interact with the server — SQL conventions per warehouse, node-type selection, pipeline workflows, lineage/impact guidance.
+24 curated markdown resources under `coalesce://context/*` guide how agents interact with the server - SQL conventions per warehouse, node-type selection, pipeline workflows, lineage/impact guidance.
 
 ## Customizing skills
 
@@ -12,19 +12,19 @@ export COALESCE_MCP_SKILLS_DIR="/path/to/my-skills"
 
 On first run the server seeds the directory with two files per skill:
 
-- `coalesce_skills.<name>.md` — the default skill content (editable)
-- `user_skills.<name>.md` — your customization file (starts as an inactive stub with instructions)
+- `coalesce_skills.<name>.md` - the default skill content (editable)
+- `user_skills.<name>.md` - your customization file (starts as an inactive stub with instructions)
 
 ## Resolution order
 
 Each resource resolves using this priority:
 
-1. **Override** — `user_skills.<name>.md` starts with `<!-- OVERRIDE -->` → only the user file is served
-2. **Augment** — `user_skills.<name>.md` has custom content (remove the `<!-- STUB -->` line first) → default + user content are concatenated
-3. **Default** — `user_skills.<name>.md` is missing, empty, or still has the seeded stub → default skill content is served
-4. **Disabled** — both files deleted → empty content is served
+1. **Override** - `user_skills.<name>.md` starts with `<!-- OVERRIDE -->` → only the user file is served
+2. **Augment** - `user_skills.<name>.md` has custom content (remove the `<!-- STUB -->` line first) → default + user content are concatenated
+3. **Default** - `user_skills.<name>.md` is missing, empty, or still has the seeded stub → default skill content is served
+4. **Disabled** - both files deleted → empty content is served
 
-Seeding is idempotent — it never overwrites files you've already modified.
+Seeding is idempotent - it never overwrites files you've already modified.
 
 ## All skills
 
@@ -57,7 +57,7 @@ Seeding is idempotent — it never overwrites files you've already modified.
 
 ## COA describe topics
 
-10 resources under `coalesce://coa/describe/*` surface the bundled COA CLI's self-describing documentation. Content is fetched from `coa describe <topic>` on first access and cached to disk, keyed by the pinned COA version — agents always see docs that match the CLI they're driving.
+10 resources under `coalesce://coa/describe/*` surface the bundled COA CLI's self-describing documentation. Content is fetched from `coa describe <topic>` on first access and cached to disk, keyed by the pinned COA version - agents always see docs that match the CLI they're driving.
 
 Topics: `overview`, `commands`, `selectors`, `schemas`, `workflow`, `structure`, `concepts`, `sql-format`, `node-types`, `config`.
 

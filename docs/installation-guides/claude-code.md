@@ -34,6 +34,6 @@ Paste into `.mcp.json` in your project root (or `~/.claude.json` for a global in
 
 ## Credential notes
 
-Claude Code **does** expand `${VAR}` from your shell env at load time — `.mcp.json` can stay safely committed to git with variable references. Omit the `env` block entirely if you're using `~/.coa/config` (see [Credentials](../../README.md#credentials)).
+Claude Code **does** expand `${VAR}` from your shell env at load time - `.mcp.json` can stay safely committed to git with variable references. Omit the `env` block entirely if you're using `~/.coa/config` (see [Credentials](../../README.md#credentials)).
 
 Restart Claude Code after editing so `npx` re-resolves.

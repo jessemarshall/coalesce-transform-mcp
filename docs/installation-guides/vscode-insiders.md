@@ -8,4 +8,4 @@ The button opens VS Code Insiders' "Add MCP server" flow with the command and ar
 
 ## Manual install
 
-Identical to the stable [VS Code install](vscode.md) — VS Code Insiders reads the same MCP config.
+Identical to the stable [VS Code install](vscode.md) - VS Code Insiders reads the same MCP config.

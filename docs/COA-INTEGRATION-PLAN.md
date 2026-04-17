@@ -3,7 +3,7 @@
 > **Status:** Phases 1–5 complete. See [RELEASES.md](./RELEASES.md#coa-cli-dependency) for the operational runbook that replaces the plan's Phase 5 checklist.
 
 
-Integrating the Coalesce `coa` CLI (`@coalescesoftware/coa`) into this MCP as a bundled dependency. COA is Coalesce's local-first CLI that works against project files + warehouse directly — distinct from the existing cloud REST path this MCP already covers.
+Integrating the Coalesce `coa` CLI (`@coalescesoftware/coa`) into this MCP as a bundled dependency. COA is Coalesce's local-first CLI that works against project files + warehouse directly - distinct from the existing cloud REST path this MCP already covers.
 
 ## Decisions (locked)
 
@@ -15,11 +15,11 @@ Integrating the Coalesce `coa` CLI (`@coalescesoftware/coa`) into this MCP as a 
 
 ## Open questions to resolve during Phase 1
 
-- Does `@coalescesoftware/coa` pull in native bindings (e.g., Snowflake driver)? Check `npm ls` after install — if yes, document platform caveats in README.
+- Does `@coalescesoftware/coa` pull in native bindings (e.g., Snowflake driver)? Check `npm ls` after install - if yes, document platform caveats in README.
 - Does `coa --version` output parse cleanly? Confirm format before using it in the resolver/startup log.
 - Do `coa doctor`, `coa validate`, `coa environments list` all support `--json`? The Notion doc only calls out `--json` for `validate`. Test each and fall back to stdout parsing where needed.
 
-## Phase 1 — Dependency wiring (no tools yet)
+## Phase 1 - Dependency wiring (no tools yet)
 
 Goal: prove the install/resolution story end-to-end before writing tool wrappers.
 
@@ -29,20 +29,20 @@ Goal: prove the install/resolution story end-to-end before writing tool wrappers
 - [ ] `npm install` locally. Confirm `node_modules/@coalescesoftware/coa/coa.js` exists.
 - [ ] Create [src/services/coa/resolver.ts](../src/services/coa/resolver.ts):
   - `resolveCoaBinary()`: returns `{ binaryPath, source: 'bundled' | 'path', version }`.
-  - Try `require.resolve('@coalescesoftware/coa/coa.js')` first. Bin entry per `npm view` is `coa.js` at package root, not `bin/coa` — verify on install.
+  - Try `require.resolve('@coalescesoftware/coa/coa.js')` first. Bin entry per `npm view` is `coa.js` at package root, not `bin/coa` - verify on install.
   - Fallback: look up `coa` on PATH via `which` / `where` (cross-platform).
   - Capture version via `spawnSync(binaryPath, ['--version'])`; trim stderr+stdout.
   - Cache the result for process lifetime.
 - [ ] Create [src/services/coa/runner.ts](../src/services/coa/runner.ts):
   - `runCoa(args, { cwd, env, timeoutMs, parseJson })`.
   - Uses `child_process.spawn`, captures stdout/stderr, enforces timeout.
-  - Returns `{ exitCode, stdout, stderr, json? }`. Never throws on non-zero exit — return the failure so tool layer can map to a useful MCP error.
+  - Returns `{ exitCode, stdout, stderr, json? }`. Never throws on non-zero exit - return the failure so tool layer can map to a useful MCP error.
   - Sanitize env: passthrough everything except `COALESCE_*` (those are for the cloud REST client, not COA).
 - [ ] Unit tests for resolver + runner in [tests/coa/](../tests/coa/).
   - Mock `require.resolve` and `spawnSync` for resolver.
   - Runner tests: use a tiny shim script (`node -e "console.log(process.argv)"`) to validate arg pass-through, timeouts, exit-code capture.
 - [ ] Smoke test: a dev-only script `scripts/smoke-coa.mjs` that calls `resolveCoaBinary()` and `runCoa(['--version'])` and prints the result. Not wired into MCP yet.
-- [ ] Run `npm pack && ls -lh *.tgz` before/after — confirm the MCP tarball size hasn't changed (only install-time footprint should grow).
+- [ ] Run `npm pack && ls -lh *.tgz` before/after - confirm the MCP tarball size hasn't changed (only install-time footprint should grow).
 - [ ] Verify `npm install -g <packed tarball>` on a clean machine (or fresh node_modules): after global install, confirm COA resolves through `require.resolve` under the MCP's install path.
 
 ### Exit criteria for Phase 1
@@ -52,7 +52,7 @@ Goal: prove the install/resolution story end-to-end before writing tool wrappers
 - Global install smoke test passes.
 - No new MCP tools registered yet.
 
-## Phase 2 — Read-only tool wrappers
+## Phase 2 - Read-only tool wrappers
 
 Goal: expose safe COA commands as MCP tools. No warehouse writes.
 
@@ -75,7 +75,7 @@ Each tool takes a required `projectPath` and validates it contains `data.yml` be
 
 ### Tasks
 
-- [ ] Write `validateProjectPath(path)` helper in [src/services/coa/project.ts](../src/services/coa/project.ts) — checks path exists, is a dir, contains `data.yml`.
+- [ ] Write `validateProjectPath(path)` helper in [src/services/coa/project.ts](../src/services/coa/project.ts) - checks path exists, is a dir, contains `data.yml`.
 - [ ] Add tool definitions in [src/mcp/coa.ts](../src/mcp/coa.ts) using the same pattern as [src/mcp/workspaces.ts](../src/mcp/workspaces.ts).
 - [ ] Register in [src/index.ts](../src/index.ts).
 - [ ] Per-tool error mapping: COA exit code → structured MCP error (project path invalid, credentials missing, validation failed, etc.).
@@ -87,7 +87,7 @@ Each tool takes a required `projectPath` and validates it contains `data.yml` be
 - All eight read-only tools callable via MCP inspector.
 - Integration test (gated behind env var) that runs `coa_doctor` against a fixture project with real Snowflake credentials.
 
-## Phase 3 — `coa describe` as MCP resources (highest leverage)
+## Phase 3 - `coa describe` as MCP resources (highest leverage)
 
 Goal: make COA's self-describing docs available to agents without leaving the MCP.
 
@@ -98,7 +98,7 @@ Goal: make COA's self-describing docs available to agents without leaving the MC
   - `fetchDescribe(topic)`: shells out, caches result to disk keyed by COA version.
   - Cache path: `~/.cache/coalesce-transform-mcp/coa-describe/<version>/<topic>.md` (fall back to `os.tmpdir()` if `~/.cache` isn't writable).
 - [ ] Expose as MCP resources with URIs like `coa://describe/selectors`.
-- [ ] Resources listed alongside existing entries in [src/resources/context/](../src/resources/context/) — decide whether to materialize them as static files (simpler, but drift risk) or serve dynamically from the cache.
+- [ ] Resources listed alongside existing entries in [src/resources/context/](../src/resources/context/) - decide whether to materialize them as static files (simpler, but drift risk) or serve dynamically from the cache.
   - **Recommendation:** dynamic serve from cache, populated on first access. Keeps resources in sync with the pinned COA version automatically.
 - [ ] Update [tests/resources.test.ts](../tests/resources.test.ts) expected resource count.
 - [ ] Add a `coa_describe` tool as a fallback for agents that prefer tools over resources (same underlying call).
@@ -108,7 +108,7 @@ Goal: make COA's self-describing docs available to agents without leaving the MC
 - All seven describe topics resolvable via MCP resource list.
 - Cache invalidates correctly on COA version bump (covered by test).
 
-## Phase 4 — Write tool wrappers (gated)
+## Phase 4 - Write tool wrappers (gated)
 
 Goal: enable actual warehouse mutations + cloud deploys via MCP, with safety rails.
 
@@ -118,7 +118,7 @@ Goal: enable actual warehouse mutations + cloud deploys via MCP, with safety rai
 |------|-------------|--------|
 | `coa_create` | `coa create --include '{ ... }'` | Requires `confirm: true`. Default is dry-run. |
 | `coa_run` | `coa run --include '{ ... }'` | Requires `confirm: true`. |
-| `coa_plan` | `coa plan --environmentID <id>` | Writes `coa-plan.json` — allowed without confirm (it's a plan, not an apply). |
+| `coa_plan` | `coa plan --environmentID <id>` | Writes `coa-plan.json` - allowed without confirm (it's a plan, not an apply). |
 | `coa_deploy` | `coa deploy --environmentID <id> --plan <path>` | Requires `confirm: true` + plan file must exist. |
 | `coa_refresh` | `coa refresh --environmentID <id> --include '{ ... }'` | Requires `confirm: true`. |
 
@@ -126,8 +126,8 @@ Goal: enable actual warehouse mutations + cloud deploys via MCP, with safety rai
 
 Encode known gotchas from the Notion guide in [src/services/coa/preflight.ts](../src/services/coa/preflight.ts):
 
-- Reject `.sql` files with double-quoted `ref("...")` — silently breaks lineage.
-- Warn on literal `UNION ALL` in `.sql` nodes — dropped by V2 parser; direct user to `insertStrategy: UNION ALL`.
+- Reject `.sql` files with double-quoted `ref("...")` - silently breaks lineage.
+- Warn on literal `UNION ALL` in `.sql` nodes - dropped by V2 parser; direct user to `insertStrategy: UNION ALL`.
 - Require `workspaces.yml` present for local commands (`create`, `run`).
 - Confirm `data.yml` has `fileVersion: 3`.
 - Detect empty `--include` selector patterns (`{ A || B }` instead of `{ A } || { B }`).
@@ -144,15 +144,15 @@ Encode known gotchas from the Notion guide in [src/services/coa/preflight.ts](..
 - Write tools callable with `confirm: true` only.
 - Preflight blocks all documented gotchas before warehouse calls.
 
-## Phase 5 — Release & maintenance process
+## Phase 5 - Release & maintenance process
 
 ### Release checklist additions
 
 Add to [RELEASES.md](./RELEASES.md):
 
-- [ ] `npm view @coalescesoftware/coa@<pinned> version` — confirm pinned version still resolves.
+- [ ] `npm view @coalescesoftware/coa@<pinned> version` - confirm pinned version still resolves.
 - [ ] Run `scripts/smoke-coa.mjs` against the packed tarball.
-- [ ] Eval suite: run `eval-pipeline-e2e` and `eval-smoke` skills — confirm no regressions from COA version.
+- [ ] Eval suite: run `eval-pipeline-e2e` and `eval-smoke` skills - confirm no regressions from COA version.
 
 ### Quarterly (or on-demand) review
 
@@ -169,7 +169,7 @@ Add to [RELEASES.md](./RELEASES.md):
 If COA integration causes problems post-release:
 
 1. Revert to prior MCP version via `npm install coalesce-transform-mcp@<prior>`.
-2. For emergency hotfix: publish a patch version with `@coalescesoftware/coa` removed from `dependencies`. MCP degrades gracefully — `coa_*` tools return "COA not available" error; cloud tools unaffected.
+2. For emergency hotfix: publish a patch version with `@coalescesoftware/coa` removed from `dependencies`. MCP degrades gracefully - `coa_*` tools return "COA not available" error; cloud tools unaffected.
 
 Key design decision that enables this: resolver is non-fatal at startup, and all `coa_*` tools check availability at invocation time.
 

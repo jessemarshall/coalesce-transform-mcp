@@ -12,8 +12,8 @@
 
 A structured report with:
 
-- **Per-field `source` markers** — `env`, `profile:<name>`, or `missing` — so you can tell at a glance whether a value came from an env var, the COA config, or isn't set
-- **Ordered `nextSteps`** — the exact actions remaining, in priority order
+- **Per-field `source` markers** - `env`, `profile:<name>`, or `missing` - so you can tell at a glance whether a value came from an env var, the COA config, or isn't set
+- **Ordered `nextSteps`** - the exact actions remaining, in priority order
 
 ## Running it
 
@@ -37,5 +37,5 @@ Typical first-run output before credentials are wired:
 
 ## Related commands
 
-- `coa_doctor` — full connectivity check (same output `diagnose_setup` uses internally when it can)
-- `/coalesce-setup` MCP prompt — interactive walkthrough built on top of `diagnose_setup`
+- `coa_doctor` - full connectivity check (same output `diagnose_setup` uses internally when it can)
+- `/coalesce-setup` MCP prompt - interactive walkthrough built on top of `diagnose_setup`
