@@ -207,9 +207,9 @@ Windsurf does **not** expand `${VAR}` - paste the literal token, or drop the `en
 
 > [!TIP]
 >
-> ### 🚀 New? Run the `/coalesce-setup` prompt after install
+> ### 🚀 Just installed?
 >
-> It walks you through anything missing.
+> Just say "help me get set up" — or run `/coalesce-setup`. Your agent will check your credentials and project setup, then walk you through fixing whatever's missing.
 
 ---
 
@@ -219,7 +219,7 @@ Windsurf does **not** expand `${VAR}` - paste the literal token, or drop the `en
 
 Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolves to default content, user-augmented content, or a full user override - see [docs/context-skills.md](docs/context-skills.md) for the resolution order and customization walkthrough.
 
-**24 skills, grouped into 6 families:**
+**25 skills, grouped into 6 families:**
 
 <details>
 
@@ -239,6 +239,7 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 - **`ecosystem-boundaries`** - Scope of this MCP vs adjacent data-engineering MCPs (Snowflake, Fivetran, dbt, Catalog)
 - **`data-engineering-principles`** - Node type selection, layered architecture, methodology detection, materialization strategies
 - **`sql-platform-selection`** - Determining the active SQL platform from project metadata
+- **`setup-guide`** - First-time MCP setup flow driven by `diagnose_setup` (pairs with the `/coalesce-setup` prompt)
 
 </details>
 

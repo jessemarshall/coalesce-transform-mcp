@@ -179,10 +179,12 @@ export interface DestructivePreview {
  */
 export function extractEntityName(value: unknown): string | undefined {
   if (!value || typeof value !== "object") return undefined;
-  const candidate = (value as Record<string, unknown>).name
-    ?? (value as Record<string, unknown>).label
-    ?? (value as Record<string, unknown>).displayName;
-  return typeof candidate === "string" && candidate.length > 0 ? candidate : undefined;
+  const record = value as Record<string, unknown>;
+  for (const key of ["name", "label", "displayName"] as const) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && candidate.length > 0) return candidate;
+  }
+  return undefined;
 }
 
 function formatPreviewForConfirmation(preview: DestructivePreview): string {

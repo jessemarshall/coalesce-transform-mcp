@@ -26,8 +26,8 @@ describe("Resources", () => {
   it("registers fixed context resources plus the cache resource template", () => {
     registerResources(server);
 
-    // 24 context resources + 10 coa_describe resources + 1 cache template = 35
-    expect(resourceSpy).toHaveBeenCalledTimes(35);
+    // 25 context resources + 10 coa_describe resources + 1 cache template = 36
+    expect(resourceSpy).toHaveBeenCalledTimes(36);
     const fixedResourceCalls = resourceSpy.mock.calls
       .filter((call) => typeof call[1] === "string")
       .map((call) => ({
@@ -130,6 +130,10 @@ describe("Resources", () => {
       {
         name: "Ecosystem Boundaries",
         uri: "coalesce://context/ecosystem-boundaries",
+      },
+      {
+        name: "Setup Guide",
+        uri: "coalesce://context/setup-guide",
       },
       {
         name: "COA Describe: Overview",

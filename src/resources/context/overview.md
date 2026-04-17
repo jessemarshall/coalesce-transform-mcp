@@ -25,6 +25,7 @@ Consult these resources for specific guidance. Load only what the current task n
 - **coalesce://context/hydrated-metadata** — Hydrated metadata structures
 - **coalesce://context/run-operations** — Start, retry, diagnose, and cancel runs
 - **coalesce://context/intelligent-node-configuration** — Intelligent config completion
+- **coalesce://context/setup-guide** — First-time MCP setup flow driven by `diagnose_setup` (load when the user is getting configured or a tool error points at missing credentials)
 
 ### Response Guidelines
 
