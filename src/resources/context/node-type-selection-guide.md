@@ -94,3 +94,4 @@ When creating pipeline nodes, choose the node type based on the actual purpose o
 | Using Dimension/Fact for GROUP BY | GROUP BY is a transform, not a dimensional model | Use Stage or Work |
 | Skipping `plan_pipeline` and guessing "Stage" | May miss better options or select an inappropriate type | Always call `plan_pipeline` with `repoPath` |
 | Using Incremental Load for small tables | Incremental overhead isn't worth it for fast full refreshes | Use Stage with full refresh |
+| Picking Persistent Stage (PSTG) because the user said "staging" | PSTG is for CDC / SCD / change tracking — not general staging. The short name `PSTG` is a false friend for `STG`. | Use Stage (STG) for general staging. Only use Persistent Stage if the human explicitly asks for CDC, change tracking, SCD, historical snapshots, or names Persistent Stage / PSTG directly. |
