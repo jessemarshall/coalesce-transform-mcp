@@ -4,30 +4,49 @@ import { resolveSnowflakeAuth } from "../services/config/credentials.js";
 
 // --- startRun / run-and-wait schemas ---
 
-export const RunDetailsSchema = z.object({
-  environmentID: z.string().describe("The environment being refreshed"),
-  includeNodesSelector: z
-    .string()
-    .optional()
-    .describe("Nodes included for an ad-hoc job"),
-  excludeNodesSelector: z
-    .string()
-    .optional()
-    .describe("Nodes excluded for an ad-hoc job"),
-  jobID: z.string().optional().describe("The ID of a job being run"),
-  parallelism: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe("Max parallel nodes to run (API default: 16)"),
-  forceIgnoreWorkspaceStatus: z
-    .boolean()
-    .optional()
-    .describe(
-      "Allow refresh even if last deploy failed (API default: false). Use with caution."
-    ),
-});
+export const RunDetailsSchema = z
+  .object({
+    environmentID: z
+      .string()
+      .optional()
+      .describe(
+        "Numeric ID of the deployed environment to run against. Provide either environmentID or workspaceID, not both."
+      ),
+    workspaceID: z
+      .string()
+      .optional()
+      .describe(
+        "Numeric ID of the workspace to run against (development run). Provide either environmentID or workspaceID, not both."
+      ),
+    includeNodesSelector: z
+      .string()
+      .optional()
+      .describe("Nodes included for an ad-hoc job"),
+    excludeNodesSelector: z
+      .string()
+      .optional()
+      .describe("Nodes excluded for an ad-hoc job"),
+    jobID: z.string().optional().describe("The ID of a job being run"),
+    parallelism: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Max parallel nodes to run (API default: 16)"),
+    forceIgnoreWorkspaceStatus: z
+      .boolean()
+      .optional()
+      .describe(
+        "Allow refresh even if last deploy failed (API default: false). Use with caution."
+      ),
+  })
+  .refine(
+    (d) => Boolean(d.environmentID) !== Boolean(d.workspaceID),
+    {
+      message:
+        "Provide exactly one of runDetails.environmentID or runDetails.workspaceID.",
+    }
+  );
 
 export const UserCredentialsSchema = z.discriminatedUnion("snowflakeAuthType", [
   z.object({
@@ -69,7 +88,7 @@ export const StartRunParams = z.object({
     .optional()
     .describe(
       "Must be set to true when no jobID, includeNodesSelector, or excludeNodesSelector is provided. " +
-      "This confirms you intend to run ALL nodes in the environment."
+      "This confirms you intend to run ALL nodes in the target."
     ),
 });
 
@@ -123,14 +142,25 @@ export function buildStartRunBody(params: StartRunInput) {
   if (!hasNodeScope && !params.confirmRunAllNodes) {
     throw new Error(
       "No jobID, includeNodesSelector, or excludeNodesSelector was provided. " +
-      "This will run ALL nodes in the environment. " +
+      "This will run ALL nodes in the target. " +
       "Set confirmRunAllNodes to true to confirm this is intentional."
     );
   }
 
+  // The Coalesce scheduler only reads `runDetails.environmentID` for routing — the
+  // field is polymorphic and accepts a workspace numeric ID there too.
+  const { workspaceID, environmentID, ...rest } = runDetails;
+  const target = environmentID ?? workspaceID;
+  if (!target || (environmentID && workspaceID)) {
+    throw new Error(
+      "Provide exactly one of runDetails.environmentID or runDetails.workspaceID."
+    );
+  }
+  const apiRunDetails = { ...rest, environmentID: target };
+
   const userCredentials = getSnowflakeCredentials();
   return {
-    runDetails,
+    runDetails: apiRunDetails,
     userCredentials,
     ...(params.parameters ? { parameters: params.parameters } : {}),
   };
