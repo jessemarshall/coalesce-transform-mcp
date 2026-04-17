@@ -1,5 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import YAML from "yaml";
+import { SETUP_HINT } from "../setup/hint.js";
 
 export type PreflightIssue = {
   level: "error" | "warning";
@@ -36,8 +38,11 @@ export function runPreflight(
   const warnings: PreflightIssue[] = [];
 
   checkDataYml(projectPath, errors, warnings);
+  checkLocationsYml(projectPath, warnings);
   if (options.requireWorkspacesYml) {
-    checkWorkspacesYml(projectPath, errors);
+    checkWorkspacesYml(projectPath, errors, warnings);
+  } else {
+    checkWorkspacesYmlShape(projectPath, warnings);
   }
   scanSqlFiles(projectPath, errors, warnings);
   for (const selector of options.selectors ?? []) {
@@ -47,12 +52,17 @@ export function runPreflight(
   return { errors, warnings };
 }
 
+/** Error codes whose fix lives in the `/coalesce-setup` flow. */
+const SETUP_LINKED_CODES = new Set(["WORKSPACES_YML_MISSING"]);
+
 export class CoaPreflightError extends Error {
   constructor(public readonly report: PreflightReport) {
-    super(
+    const body =
       `coa preflight failed with ${report.errors.length} error(s):\n` +
-        report.errors.map((e) => `  [${e.code}] ${e.message}`).join("\n")
-    );
+      report.errors.map((e) => `  [${e.code}] ${e.message}`).join("\n");
+    const hasSetupLinked = report.errors.some((e) => SETUP_LINKED_CODES.has(e.code));
+    // Paragraph break before the hint — the body is a multi-line bullet list.
+    super(hasSetupLinked ? `${body}\n\n${SETUP_HINT}` : body);
     this.name = "CoaPreflightError";
   }
 }
@@ -99,9 +109,51 @@ function checkDataYml(
   }
 }
 
+/**
+ * Warn when locations.yml exists but cannot be parsed or has an invalid shape.
+ * Without this, a malformed locations.yml silently disables the workspaces.yml
+ * cross-reference check (WORKSPACES_YML_UNKNOWN_LOCATION) because
+ * readLocationNames returns [].
+ */
+function checkLocationsYml(
+  projectPath: string,
+  warnings: PreflightIssue[]
+): void {
+  const path = join(projectPath, "locations.yml");
+  if (!existsSync(path)) return;
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch {
+    return;
+  }
+  let parsed: unknown;
+  try {
+    parsed = YAML.parse(raw);
+  } catch (err) {
+    warnings.push({
+      level: "warning",
+      code: "LOCATIONS_YML_PARSE_FAILED",
+      message: `Could not parse locations.yml: ${err instanceof Error ? err.message : String(err)}`,
+      path,
+    });
+    return;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    warnings.push({
+      level: "warning",
+      code: "LOCATIONS_YML_INVALID_SHAPE",
+      message:
+        "locations.yml should be a map of location names → config. See `coa describe schema locations`.",
+      path,
+    });
+  }
+}
+
 function checkWorkspacesYml(
   projectPath: string,
-  errors: PreflightIssue[]
+  errors: PreflightIssue[],
+  warnings: PreflightIssue[]
 ): void {
   const path = join(projectPath, "workspaces.yml");
   if (!existsSync(path)) {
@@ -112,7 +164,211 @@ function checkWorkspacesYml(
         "workspaces.yml is required for local create/run/validate. Create it in the project root with storage-location mappings. Run `coa doctor --fix` to bootstrap.",
       path,
     });
+    return;
   }
+  checkWorkspacesYmlShape(projectPath, warnings);
+}
+
+/**
+ * Parse-check an existing `workspaces.yml` for the common typos:
+ *  - top-level `workspaces:` wrapper (schema is a flat map of workspace names)
+ *  - top-level `fileVersion` (schema has none)
+ *  - `storageLocations` field (correct field is `locations`)
+ *  - workspace block missing `connection` (required)
+ *  - location keys that don't appear in locations.yml (typos / stale renames)
+ *  - file not gitignored (contains per-developer database names)
+ * Issues are warnings, not errors — `coa` itself will reject genuinely broken
+ * files, but typos silently produce confusing "workspace not found" behaviour.
+ */
+function checkWorkspacesYmlShape(
+  projectPath: string,
+  warnings: PreflightIssue[]
+): void {
+  const path = join(projectPath, "workspaces.yml");
+  if (!existsSync(path)) return;
+  checkWorkspacesYmlGitignore(projectPath, path, warnings);
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch {
+    return;
+  }
+  let parsed: unknown;
+  try {
+    parsed = YAML.parse(raw);
+  } catch (err) {
+    warnings.push({
+      level: "warning",
+      code: "WORKSPACES_YML_PARSE_FAILED",
+      message: `Could not parse workspaces.yml: ${err instanceof Error ? err.message : String(err)}`,
+      path,
+    });
+    return;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    warnings.push({
+      level: "warning",
+      code: "WORKSPACES_YML_INVALID_SHAPE",
+      message:
+        "workspaces.yml should be a map of workspace names → config. See `coa describe schema workspaces`.",
+      path,
+    });
+    return;
+  }
+  const record = parsed as Record<string, unknown>;
+  if ("fileVersion" in record) {
+    warnings.push({
+      level: "warning",
+      code: "WORKSPACES_YML_UNEXPECTED_FILEVERSION",
+      message:
+        "workspaces.yml has a `fileVersion` field, which is not in the schema. Remove it — the file is a flat map of workspace names.",
+      path,
+    });
+  }
+  if ("workspaces" in record && record.workspaces && typeof record.workspaces === "object") {
+    warnings.push({
+      level: "warning",
+      code: "WORKSPACES_YML_NESTED_WRAPPER",
+      message:
+        "workspaces.yml has a top-level `workspaces:` wrapper, but the schema expects workspace names at the top level. Remove the wrapper so your workspace keys (e.g., `dev:`) sit at the root.",
+      path,
+    });
+  }
+  // Cross-reference skips when locations.yml is missing, malformed, or empty —
+  // readLocationNames returns [] for all three. Absence of declared names is
+  // not evidence of a typo in workspaces.yml. Malformed locations.yml gets its
+  // own LOCATIONS_YML_PARSE_FAILED warning so the user isn't left in the dark.
+  const declared = readLocationNames(projectPath);
+  const declaredLocations = declared.length > 0 ? new Set(declared) : null;
+  for (const [name, value] of Object.entries(record)) {
+    if (name === "fileVersion" || name === "workspaces") continue;
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const block = value as Record<string, unknown>;
+    if ("storageLocations" in block) {
+      warnings.push({
+        level: "warning",
+        code: "WORKSPACES_YML_WRONG_LOCATIONS_KEY",
+        message: `Workspace \`${name}\` uses \`storageLocations\` — the schema field is \`locations\`. Rename to fix.`,
+        path,
+      });
+    }
+    if (!("connection" in block) || typeof block.connection !== "string" || !block.connection.trim()) {
+      warnings.push({
+        level: "warning",
+        code: "WORKSPACES_YML_MISSING_CONNECTION",
+        message: `Workspace \`${name}\` has no \`connection\` field. Each workspace requires a connection name (e.g., \`connection: snowflake\`).`,
+        path,
+      });
+    }
+    if (declaredLocations !== null && "locations" in block) {
+      const locations = block.locations;
+      if (locations && typeof locations === "object" && !Array.isArray(locations)) {
+        for (const locKey of Object.keys(locations as Record<string, unknown>)) {
+          if (!declaredLocations.has(locKey)) {
+            warnings.push({
+              level: "warning",
+              code: "WORKSPACES_YML_UNKNOWN_LOCATION",
+              message: `Workspace \`${name}\` references location \`${locKey}\`, which is not declared in locations.yml. Check for a typo or a renamed location.`,
+              path,
+            });
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Warn when workspaces.yml exists but is not listed in .gitignore. The file
+ * contains per-developer database/schema names and should not be committed.
+ * A missing .gitignore is treated as "not ignored" — flag it so the user is
+ * deliberate about one of: add .gitignore, add workspaces.yml to it, or (rare)
+ * commit the file.
+ */
+function checkWorkspacesYmlGitignore(
+  projectPath: string,
+  workspacesPath: string,
+  warnings: PreflightIssue[]
+): void {
+  const gitignorePath = join(projectPath, ".gitignore");
+  let contents: string;
+  if (!existsSync(gitignorePath)) {
+    // No .gitignore at all — can't confirm the file is ignored. Silent when the
+    // project is not a git repo; flag when it is, because an unignored
+    // workspaces.yml in a git-tracked project will end up committed.
+    if (!existsSync(join(projectPath, ".git"))) return;
+    contents = "";
+  } else {
+    try {
+      contents = readFileSync(gitignorePath, "utf8");
+    } catch {
+      return;
+    }
+  }
+  if (hasWorkspacesYmlIgnoreHint(contents)) return;
+  warnings.push({
+    level: "warning",
+    code: "WORKSPACES_YML_NOT_GITIGNORED",
+    message:
+      "No obvious workspaces.yml ignore rule detected in .gitignore. This file typically contains per-developer database/schema names and should not be committed. Add `workspaces.yml` to .gitignore, or commit deliberately if your team checks it in.",
+    path: workspacesPath,
+  });
+}
+
+/**
+ * Heuristic: does .gitignore appear to cover workspaces.yml? True if any
+ * non-negated line references the file by name, a broad *.yml/*.yaml glob, or
+ * a literal wildcard. Does not evaluate full gitignore semantics (negations in
+ * order, nested .gitignore files, `git check-ignore`) — treats negations as
+ * "can't tell" and lets the warning fire. Errs on the side of false positives
+ * (harmless advisory warning) rather than false negatives (silently allowing
+ * a committed workspaces.yml).
+ */
+function hasWorkspacesYmlIgnoreHint(gitignoreContents: string): boolean {
+  for (const rawLine of gitignoreContents.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#") || line.startsWith("!")) continue;
+    if (
+      line === "*" ||
+      line === "*.yml" ||
+      line === "*.yaml" ||
+      line === "workspaces.*" ||
+      line.endsWith("workspaces.yml") ||
+      line.endsWith("workspaces.yaml")
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Read locations.yml and return declared location names. Returns [] when the
+ * file is missing, unreadable, or malformed — callers distinguish those cases
+ * via an explicit `existsSync` check when the difference matters.
+ */
+export function readLocationNames(projectPath: string): string[] {
+  const locationsPath = join(projectPath, "locations.yml");
+  if (!existsSync(locationsPath)) return [];
+  let raw: string;
+  try {
+    raw = readFileSync(locationsPath, "utf8");
+  } catch {
+    return [];
+  }
+  let parsed: unknown;
+  try {
+    parsed = YAML.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [];
+  const record = parsed as Record<string, unknown>;
+  const source =
+    record.locations && typeof record.locations === "object" && !Array.isArray(record.locations)
+      ? (record.locations as Record<string, unknown>)
+      : record;
+  return Object.keys(source).filter((key) => key !== "fileVersion");
 }
 
 function scanSqlFiles(

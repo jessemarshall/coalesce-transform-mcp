@@ -422,7 +422,7 @@ export function defineRepoNodeTypeTools(
       repoPath: z
         .string()
         .optional()
-        .describe("Optional absolute or relative path to the local committed Coalesce repo. Falls back to COALESCE_REPO_PATH when omitted."),
+        .describe("Optional absolute or relative path to the local committed Coalesce repo. Falls back to COALESCE_REPO_PATH or `repoPath` in the active ~/.coa/config profile when omitted."),
     }),
     annotations: READ_ONLY_LOCAL_ANNOTATIONS,
   }, listRepoPackages),
@@ -434,7 +434,7 @@ export function defineRepoNodeTypeTools(
       repoPath: z
         .string()
         .optional()
-        .describe("Optional absolute or relative path to the local committed Coalesce repo. Falls back to COALESCE_REPO_PATH when omitted."),
+        .describe("Optional absolute or relative path to the local committed Coalesce repo. Falls back to COALESCE_REPO_PATH or `repoPath` in the active ~/.coa/config profile when omitted."),
       packageAlias: z
         .string()
         .optional()
@@ -454,7 +454,7 @@ export function defineRepoNodeTypeTools(
       repoPath: z
         .string()
         .optional()
-        .describe("Optional absolute or relative path to the local committed Coalesce repo. Falls back to COALESCE_REPO_PATH when omitted."),
+        .describe("Optional absolute or relative path to the local committed Coalesce repo. Falls back to COALESCE_REPO_PATH or `repoPath` in the active ~/.coa/config profile when omitted."),
       nodeType: z
         .string()
         .describe("Exact direct node type identifier or exact package-backed alias:::id value."),
@@ -473,7 +473,7 @@ export function defineRepoNodeTypeTools(
       repoPath: z
         .string()
         .optional()
-        .describe("Optional local committed repo path for repo mode. Falls back to COALESCE_REPO_PATH when omitted."),
+        .describe("Optional local committed repo path for repo mode. Falls back to COALESCE_REPO_PATH or `repoPath` in the active ~/.coa/config profile when omitted."),
       nodeType: z
         .string()
         .optional()

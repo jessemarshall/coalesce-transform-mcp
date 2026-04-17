@@ -6,6 +6,7 @@ export interface CoaProfile {
   profileName: string;
   token?: string;
   domain?: string;
+  snowflakeAccount?: string;
   snowflakeUsername?: string;
   snowflakeRole?: string;
   snowflakeWarehouse?: string;
@@ -13,6 +14,9 @@ export interface CoaProfile {
   snowflakeKeyPairPass?: string;
   snowflakeAuthType?: string;
   environmentID?: string;
+  orgID?: string;
+  repoPath?: string;
+  cacheDir?: string;
   extras: Record<string, string>;
 }
 
@@ -109,6 +113,7 @@ function toProfile(profileName: string, section: Map<string, string>): CoaProfil
   const consumed = new Set([
     "token",
     "domain",
+    "snowflakeAccount",
     "snowflakeUsername",
     "snowflakeRole",
     "snowflakeWarehouse",
@@ -116,6 +121,9 @@ function toProfile(profileName: string, section: Map<string, string>): CoaProfil
     "snowflakeKeyPairPass",
     "snowflakeAuthType",
     "environmentID",
+    "orgID",
+    "repoPath",
+    "cacheDir",
   ]);
   const extras: Record<string, string> = {};
   for (const [key, value] of section) {
@@ -125,6 +133,7 @@ function toProfile(profileName: string, section: Map<string, string>): CoaProfil
     profileName,
     token: take("token"),
     domain: take("domain"),
+    snowflakeAccount: take("snowflakeAccount"),
     snowflakeUsername: take("snowflakeUsername"),
     snowflakeRole: take("snowflakeRole"),
     snowflakeWarehouse: take("snowflakeWarehouse"),
@@ -132,6 +141,9 @@ function toProfile(profileName: string, section: Map<string, string>): CoaProfil
     snowflakeKeyPairPass: take("snowflakeKeyPairPass"),
     snowflakeAuthType: take("snowflakeAuthType"),
     environmentID: take("environmentID"),
+    orgID: take("orgID"),
+    repoPath: take("repoPath"),
+    cacheDir: take("cacheDir"),
     extras,
   };
 }

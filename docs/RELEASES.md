@@ -83,6 +83,16 @@ git push origin alpha --tags
 
 That bumps `0.5.0-alpha.0` → `0.5.0-alpha.1` → `0.5.0-alpha.2`, each publishing to `@alpha`.
 
+**Sync `develop` after every alpha, not just after stable.** Each `npm version` creates a bump commit on `alpha`, and any pre-flight fixes (audit bumps, lockfile refreshes) also land on `alpha`. To keep `develop` from diverging:
+
+```bash
+git checkout develop && git pull
+git merge alpha
+git push origin develop
+```
+
+Fast-forward merge in the normal case. If you get a conflict, it usually means someone landed a fix directly on `alpha` that conflicts with in-flight work on `develop` — resolve on `develop`.
+
 ### 4. Cut the stable release
 
 Promote `alpha` to `main`, then bump the bare version on `main`:
@@ -121,6 +131,24 @@ gh run list --workflow=release.yml --limit 1
 ```
 
 Alpha releases should show `isPrerelease: true` and **not** appear in MCP Registry searches; stable releases should show `isPrerelease: false` and land in MCP Registry within a minute of workflow completion.
+
+## How `npm version` is wired (and why)
+
+`package.json` splits the lifecycle across two hooks:
+
+```json
+"preversion": "npm run build && npm audit --omit=dev",
+"version": "node scripts/sync-version.mjs && git add server.json README.md"
+```
+
+Per npm's documented lifecycle:
+
+1. **`preversion`** runs *before* the version is bumped — right place for validation (build, audit). Never put `sync-version.mjs` here: at this point `package.json` still holds the OLD version, so the sync would write a stale `server.json`.
+2. npm writes the NEW version into `package.json`.
+3. **`version`** runs *after* the bump but *before* the commit. `sync-version.mjs` now sees the new version, rewrites `server.json` + `README.md`, and `git add` stages both. npm's subsequent commit picks them up.
+4. npm commits (package.json + server.json + README together) and creates the tag.
+
+**There is no `postversion` hook.** An earlier iteration of this repo used `postversion` to `git commit --amend` after the bump, which left the tag pointing at the *pre-amend* commit (with stale `server.json`) while the branch tip was the amended commit. Alpha releases hid the bug because they skip the MCP Registry; the first stable would have published wrong metadata. If you're tempted to add `postversion` back to "fix something" — don't. Put the behavior in `version` instead.
 
 ### 6. (Optional) Move the `@alpha` tag forward
 

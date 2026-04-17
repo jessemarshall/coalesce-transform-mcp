@@ -231,8 +231,27 @@ export function registerPrompts(server: McpServer): void {
               "   - If the user doesn't use run tools today, they can skip this step — read-only Cloud REST tools work fine without Snowflake creds.\n\n" +
               "3. Repo path (optional). Only needed for repo-backed node-type lookup and local coa_* tools (coa_doctor, coa_validate, coa_create, coa_run, coa_plan).\n" +
               "   - Skip this if repoPath.status is already 'ok' or the user doesn't need those tools yet.\n" +
-              "   - Otherwise: ask for the project's git URL (list_git_accounts may help). Tell them to `git clone <url> <target>`, then add `\"COALESCE_REPO_PATH\": \"<absolute-path>\"` to their MCP client env block, restart the MCP client, and re-run diagnose_setup.\n" +
-              "   - Target state: repoPath.isCoaProject === true and coaDoctor.status === 'ok' (or 'skipped' if the project doesn't yet have workspaces.yml).\n\n" +
+              "   - Otherwise: ask for the project's git URL (list_git_accounts may help). Tell them to `git clone <url> <target>`, then either add `\"COALESCE_REPO_PATH\": \"<absolute-path>\"` to their MCP client env block OR add `repoPath=<absolute-path>` to their profile in ~/.coa/config, restart the MCP client, and re-run diagnose_setup.\n" +
+              "   - Target state: repoPath.isCoaProject === true.\n\n" +
+              "4. workspaces.yml (REQUIRED for coa_create / coa_run / coa_dry_run_*; skip only if the user will not run warehouse-touching COA tools). Do not skip this step silently — if nextSteps mentions `workspaces.yml` or coaDoctor.status is 'failed' with stderr referencing it, walk the user through creation.\n" +
+              "   - Detection: run coa_doctor with projectPath=<repoPath>. If the doctor output reports workspaces.yml missing (or the preflight error code is `WORKSPACES_YML_MISSING`), proceed.\n" +
+              "   - Offer two paths:\n" +
+              "     (a) Bootstrap with COA (easiest): call the `coa_bootstrap_workspaces` MCP tool (with `confirmed: true` after the user approves) — this runs `coa doctor --fix` and writes a starter `workspaces.yml` seeded from `locations.yml`. Or have the user run `npx @coalescesoftware/coa doctor --fix` in a shell. EITHER WAY: the generated file contains PLACEHOLDER `database`/`schema` values. Tell the user clearly that they MUST open it and set real values for every location before running coa_create/coa_run — otherwise warehouse ops will target the wrong (or missing) database.\n" +
+              "     (b) Hand-write it. Give them the authoritative schema below verbatim. Before pasting, read their `locations.yml` so the location keys match — never invent keys.\n" +
+              "\n" +
+              "     ```yaml\n" +
+              "     # workspaces.yml lives next to data.yml. Top-level keys are workspace names.\n" +
+              "     # `dev` is the default when --workspace is omitted. No fileVersion. No top-level `workspaces:` wrapper.\n" +
+              "     dev:\n" +
+              "       connection: snowflake          # required — name of the connection COA should use\n" +
+              "       locations:                     # optional — one entry per storage location name from locations.yml\n" +
+              "         SRC_EXAMPLE:\n" +
+              "           database: MY_DEV_DB        # required\n" +
+              "           schema: SRC_EXAMPLE        # required\n" +
+              "     ```\n" +
+              "\n" +
+              "   - Common gotchas to call out: the field is `locations`, not `storageLocations`; there is no `fileVersion`; location keys must match `locations.yml` exactly (case-sensitive); this file is typically gitignored (per-developer).\n" +
+              "   - After the user creates the file, re-run coa_doctor (no --fix) to confirm it parses and connects. Target state: coaDoctor.status === 'ok'.\n\n" +
               "RULES:\n" +
               "- Never skip diagnose_setup between steps. Actual state drifts from assumed state easily, especially across MCP-client restarts.\n" +
               "- Never write to the user's shell profile or ~/.coa/config yourself. Give them the exact text to paste; they apply it.\n" +

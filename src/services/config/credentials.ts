@@ -7,6 +7,7 @@ import {
   type CoaProfile,
   type FieldSource,
 } from "./coa-config.js";
+import { withSetupHint } from "../setup/hint.js";
 
 export type { FieldSource };
 
@@ -70,9 +71,11 @@ export function resolveCoalesceAuth(): CoalesceAuth {
 
   if (!token.value || !token.source) {
     throw new Error(
-      `No Coalesce access token found. Set COALESCE_ACCESS_TOKEN in your MCP client env, ` +
-        `or add a \`token=\` line to profile [${profileName}] in ~/.coa/config ` +
-        `(run \`coa describe config\` for the INI schema).`
+      withSetupHint(
+        `No Coalesce access token found. Set COALESCE_ACCESS_TOKEN in your MCP client env, ` +
+          `or add a \`token=\` line to profile [${profileName}] in ~/.coa/config ` +
+          `(run \`coa describe config\` for the INI schema)`
+      )
     );
   }
 

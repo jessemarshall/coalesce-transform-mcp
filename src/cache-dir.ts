@@ -1,5 +1,7 @@
 import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
 
+import { loadCoaProfile } from "./services/config/coa-config.js";
+
 /**
  * Root directory name for all MCP cache data.
  * Deliberately distinctive to avoid collisions when the server runs from a project root.
@@ -8,7 +10,12 @@ export const CACHE_DIR_NAME = "coalesce_transform_mcp_data_cache";
 export const CACHE_RESOURCE_URI_PREFIX = "coalesce://cache/";
 
 export function getCacheBaseDir(baseDir?: string): string {
-  return baseDir ?? process.env.COALESCE_CACHE_DIR ?? process.cwd();
+  if (baseDir) return baseDir;
+  const env = process.env.COALESCE_CACHE_DIR?.trim();
+  if (env) return env;
+  const profile = loadCoaProfile()?.cacheDir?.trim();
+  if (profile) return profile;
+  return process.cwd();
 }
 
 export function getCacheDir(baseDir?: string): string {

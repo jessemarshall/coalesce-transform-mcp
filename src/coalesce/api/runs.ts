@@ -1,4 +1,5 @@
 import type { CoalesceClient, QueryParams } from "../../client.js";
+import { loadCoaProfile } from "../../services/config/coa-config.js";
 import type { StartRunInput, RerunInput } from "../types.js";
 import { validatePathSegment, buildStartRunBody, buildRerunBody } from "../types.js";
 
@@ -63,10 +64,13 @@ export async function cancelRun(
 ): Promise<unknown> {
   validatePathSegment(params.runID, "runID");
   validatePathSegment(params.environmentID, "environmentID");
-  const orgID = params.orgID?.trim() || process.env.COALESCE_ORG_ID?.trim();
+  const orgID =
+    params.orgID?.trim() ||
+    process.env.COALESCE_ORG_ID?.trim() ||
+    loadCoaProfile()?.orgID?.trim();
   if (!orgID) {
     throw new Error(
-      "orgID is required for cancel-run. Provide it explicitly or set COALESCE_ORG_ID."
+      "orgID is required for cancel-run. Provide it explicitly, set COALESCE_ORG_ID, or add `orgID=` to your profile in ~/.coa/config."
     );
   }
   return client.post("/scheduler/cancelRun", {

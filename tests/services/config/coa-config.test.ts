@@ -137,6 +137,18 @@ describe("coa-config loader", () => {
     expect(loadCoaProfile()?.extras).toEqual({ customField: "hello" });
   });
 
+  it("parses orgID, repoPath, and cacheDir as first-class fields", () => {
+    writeConfig(
+      home,
+      `[default]\ntoken=T\norgID=org-123\nrepoPath=/path/to/repo\ncacheDir=/path/to/cache\n`
+    );
+    const profile = loadCoaProfile();
+    expect(profile?.orgID).toBe("org-123");
+    expect(profile?.repoPath).toBe("/path/to/repo");
+    expect(profile?.cacheDir).toBe("/path/to/cache");
+    expect(profile?.extras).toEqual({});
+  });
+
   it("lists available profiles in the status payload", () => {
     writeConfig(home, SAMPLE);
     const status = getCoaConfigStatus();

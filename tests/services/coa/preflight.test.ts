@@ -74,6 +74,168 @@ describe("runPreflight - workspaces.yml", () => {
   });
 });
 
+describe("runPreflight - workspaces.yml shape", () => {
+  it("passes a well-shaped workspaces.yml without warnings", () => {
+    writeFileSync(
+      join(projectDir, "workspaces.yml"),
+      "dev:\n  connection: snowflake\n  locations:\n    SRC_A:\n      database: DEV\n      schema: SRC_A\n"
+    );
+    const report = runPreflight(projectDir);
+    const codes = report.warnings.map((w) => w.code);
+    expect(codes).not.toContain("WORKSPACES_YML_NESTED_WRAPPER");
+    expect(codes).not.toContain("WORKSPACES_YML_WRONG_LOCATIONS_KEY");
+    expect(codes).not.toContain("WORKSPACES_YML_MISSING_CONNECTION");
+  });
+
+  it("warns on nested `workspaces:` wrapper", () => {
+    writeFileSync(
+      join(projectDir, "workspaces.yml"),
+      "workspaces:\n  dev:\n    connection: snowflake\n"
+    );
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).toContain("WORKSPACES_YML_NESTED_WRAPPER");
+  });
+
+  it("warns on `storageLocations` instead of `locations`", () => {
+    writeFileSync(
+      join(projectDir, "workspaces.yml"),
+      "dev:\n  connection: snowflake\n  storageLocations:\n    SRC_A:\n      database: DEV\n      schema: SRC_A\n"
+    );
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).toContain("WORKSPACES_YML_WRONG_LOCATIONS_KEY");
+  });
+
+  it("warns on unexpected `fileVersion`", () => {
+    writeFileSync(
+      join(projectDir, "workspaces.yml"),
+      "fileVersion: 3\ndev:\n  connection: snowflake\n"
+    );
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).toContain("WORKSPACES_YML_UNEXPECTED_FILEVERSION");
+  });
+
+  it("warns when a workspace is missing `connection`", () => {
+    writeFileSync(
+      join(projectDir, "workspaces.yml"),
+      "dev:\n  locations:\n    SRC_A:\n      database: DEV\n      schema: SRC_A\n"
+    );
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).toContain("WORKSPACES_YML_MISSING_CONNECTION");
+  });
+
+  it("warns when YAML fails to parse", () => {
+    writeFileSync(join(projectDir, "workspaces.yml"), "dev:\n  connection: [unclosed\n");
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).toContain("WORKSPACES_YML_PARSE_FAILED");
+  });
+});
+
+describe("runPreflight - workspaces.yml gitignore", () => {
+  beforeEach(() => {
+    // Pretend the project is a git repo so gitignore is evaluated.
+    mkdirSync(join(projectDir, ".git"));
+    writeFileSync(
+      join(projectDir, "workspaces.yml"),
+      "dev:\n  connection: snowflake\n"
+    );
+  });
+
+  it("warns when .gitignore is missing in a git repo", () => {
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).toContain("WORKSPACES_YML_NOT_GITIGNORED");
+  });
+
+  it("warns when .gitignore exists but does not match workspaces.yml", () => {
+    writeFileSync(join(projectDir, ".gitignore"), "node_modules/\n*.log\n");
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).toContain("WORKSPACES_YML_NOT_GITIGNORED");
+  });
+
+  it("does not warn when workspaces.yml is listed in .gitignore", () => {
+    writeFileSync(join(projectDir, ".gitignore"), "workspaces.yml\n");
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).not.toContain("WORKSPACES_YML_NOT_GITIGNORED");
+  });
+
+  it("does not warn when a broader pattern covers it (*.yml)", () => {
+    writeFileSync(join(projectDir, ".gitignore"), "*.yml\n");
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).not.toContain("WORKSPACES_YML_NOT_GITIGNORED");
+  });
+});
+
+describe("runPreflight - locations.yml shape", () => {
+  it("warns when locations.yml fails to parse", () => {
+    writeFileSync(join(projectDir, "locations.yml"), "SRC_A:\n  type: [unclosed\n");
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).toContain("LOCATIONS_YML_PARSE_FAILED");
+  });
+
+  it("warns when locations.yml parses to a non-object", () => {
+    writeFileSync(join(projectDir, "locations.yml"), "- just\n- a\n- list\n");
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).toContain("LOCATIONS_YML_INVALID_SHAPE");
+  });
+
+  it("does not warn when locations.yml is missing", () => {
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).not.toContain("LOCATIONS_YML_PARSE_FAILED");
+    expect(report.warnings.map((w) => w.code)).not.toContain("LOCATIONS_YML_INVALID_SHAPE");
+  });
+});
+
+describe("runPreflight - workspaces.yml cross-reference with locations.yml", () => {
+  it("warns when a location key is not declared in locations.yml", () => {
+    writeFileSync(
+      join(projectDir, "locations.yml"),
+      "SRC_KNOWN:\n  type: snowflake\n"
+    );
+    writeFileSync(
+      join(projectDir, "workspaces.yml"),
+      "dev:\n  connection: snowflake\n  locations:\n    SRC_UNKNOWN:\n      database: D\n      schema: S\n"
+    );
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).toContain("WORKSPACES_YML_UNKNOWN_LOCATION");
+  });
+
+  it("does not warn when all location keys match", () => {
+    writeFileSync(
+      join(projectDir, "locations.yml"),
+      "SRC_A:\n  type: snowflake\nSRC_B:\n  type: snowflake\n"
+    );
+    writeFileSync(
+      join(projectDir, "workspaces.yml"),
+      "dev:\n  connection: snowflake\n  locations:\n    SRC_A:\n      database: D\n      schema: S\n    SRC_B:\n      database: D\n      schema: S\n"
+    );
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).not.toContain("WORKSPACES_YML_UNKNOWN_LOCATION");
+  });
+
+  it("skips the cross-reference silently when locations.yml is missing or malformed", () => {
+    writeFileSync(
+      join(projectDir, "workspaces.yml"),
+      "dev:\n  connection: snowflake\n  locations:\n    SRC_ANY:\n      database: D\n      schema: S\n"
+    );
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).not.toContain("WORKSPACES_YML_UNKNOWN_LOCATION");
+  });
+});
+
+describe("CoaPreflightError setup hint", () => {
+  it("appends /coalesce-setup hint when WORKSPACES_YML_MISSING is in the report", () => {
+    const report = runPreflight(projectDir, { requireWorkspacesYml: true });
+    const err = new CoaPreflightError(report);
+    expect(err.message).toContain("/coalesce-setup");
+  });
+
+  it("does not append the hint for non-setup errors", () => {
+    withSql("X.sql", `SELECT * FROM {{ ref("SRC","A") }}\n`);
+    const report = runPreflight(projectDir);
+    const err = new CoaPreflightError(report);
+    expect(err.message).not.toContain("/coalesce-setup");
+  });
+});
+
 describe("runPreflight - SQL double-quoted ref", () => {
   it("errors on .sql files using double-quoted ref()", () => {
     withSql(

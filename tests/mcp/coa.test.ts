@@ -17,6 +17,7 @@ import {
   coaPlanHandler,
   coaDeployHandler,
   coaRefreshHandler,
+  coaBootstrapWorkspacesHandler,
 } from "../../src/mcp/coa.js";
 import { CoaPreflightError } from "../../src/services/coa/preflight.js";
 import { resetCoaDescribeMemoryCache } from "../../src/services/coa/describe.js";
@@ -88,6 +89,35 @@ describe("coa_doctor handler", () => {
       coaDoctorHandler({ projectPath: "/does/not/exist-12345" }, run)
     ).rejects.toThrow(/does not exist/);
     expect(spy.calls).toHaveLength(0);
+  });
+});
+
+describe("coa_bootstrap_workspaces handler", () => {
+  it("passes --json doctor --dir <project> --fix to coa", async () => {
+    const { spy, run } = fakeRunCoa({ stdout: "{}" });
+    await coaBootstrapWorkspacesHandler(
+      { projectPath: tmpProject, confirmed: true },
+      run
+    );
+    expect(spy.calls).toHaveLength(1);
+    expect(spy.calls[0].args).toEqual([
+      "--json",
+      "doctor",
+      "--dir",
+      tmpProject,
+      "--fix",
+    ]);
+    expect(spy.calls[0].parseJson).toBe(true);
+  });
+
+  it("threads --workspace through", async () => {
+    const { spy, run } = fakeRunCoa();
+    await coaBootstrapWorkspacesHandler(
+      { projectPath: tmpProject, workspace: "prod", confirmed: true },
+      run
+    );
+    expect(spy.calls[0].args).toContain("--workspace");
+    expect(spy.calls[0].args).toContain("prod");
   });
 });
 
