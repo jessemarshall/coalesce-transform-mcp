@@ -6,12 +6,12 @@
     "url": "https://github.com/jessemarshall/coalesce-transform-mcp",
     "source": "github"
   },
-  "version": "0.5.2-alpha.0",
+  "version": "0.5.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "coalesce-transform-mcp",
-      "version": "0.5.2-alpha.0",
+      "version": "0.5.2",
       "transport": {
         "type": "stdio"
       },
