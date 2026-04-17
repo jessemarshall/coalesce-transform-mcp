@@ -21,7 +21,6 @@ MCP server for [Coalesce](https://coalesce.io/). Built for **Snowflake [Cortex C
 | 🔑 | Authenticate (env var or `~/.coa/config`) | [Credentials](#credentials) |
 | 🌐 | Run against multiple Coalesce environments | [Multiple environments](#multiple-environments) |
 | 🔒 | Lock prod down to read-only | [Safety model](docs/safety-model.md) |
-| 🧰 | Use the `coa` CLI tools | [Using the COA CLI tools](#using-the-coa-cli-tools) |
 | 🧪 | Try a prerelease build | [Prerelease channel](docs/prerelease.md) |
 | 🩺 | Debug "why isn't auth working?" | [Diagnosing setup](docs/diagnosing-setup.md) |
 
@@ -206,8 +205,13 @@ Windsurf does **not** expand `${VAR}` - paste the literal token, or drop the `en
 
 </details>
 
+<br>
+
 > [!TIP]
-> New? Run the `/coalesce-setup` prompt after install - it walks you through anything missing.
+>
+> ### 🚀 New? Run the `/coalesce-setup` prompt after install
+>
+> It walks you through anything missing.
 
 ---
 
@@ -260,7 +264,10 @@ The `/coalesce-setup` prompt detects a missing `workspaces.yml` and walks you th
   > [!WARNING]
   > **The generated file contains placeholder values.** The bootstrap tool seeds `database`/`schema` with defaults that won't match your real warehouse. Ask the agent to open the file with you and replace every placeholder before calling `coa_create` / `coa_run` - otherwise the generated DDL/DML will target the wrong (or non-existent) database.
 
-- **Hand-write it.** Ask the agent to fetch the authoritative schema via the `coa_describe` tool (`topic: "schema"`, `subtopic: "workspaces"`) - no top-level wrapper, no `fileVersion`:
+- **Hand-write it.** Ask the agent to fetch the authoritative schema via the `coa_describe` tool (`topic: "schema"`, `subtopic: "workspaces"`) - no top-level wrapper, no `fileVersion`.
+
+  <details>
+  <summary><b>Example <code>workspaces.yml</code></b></summary>
 
   ```yaml
   # workspaces.yml - keys are workspace names; `dev` is the default if --workspace is omitted
@@ -277,6 +284,8 @@ The `/coalesce-setup` prompt detects a missing `workspaces.yml` and walks you th
         database: JESSE_DEV
         schema: ANALYTICS
   ```
+
+  </details>
 
 Ask your agent to verify the setup - e.g. *"Run `coa_doctor` on my project and summarize the results."* It checks `data.yml`, `workspaces.yml`, credentials, and warehouse connectivity end to end.
 
@@ -336,24 +345,15 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 
 **24 skills, grouped into 6 families:**
 
-|     | Family | Skills | Covers |
-| --- | ------ | :----: | ------ |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/book-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/book-light.png"><img src="docs/icons/book-light.png" width="20" height="20" alt="book"></picture> | **Foundations** | 7 | Core concepts, tool usage, ID discovery, storage mappings, ecosystem scope |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/file-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/file-light.png"><img src="docs/icons/file-light.png" width="20" height="20" alt="file"></picture> | **SQL platform rules** | 3 | Per-warehouse conventions for node SQL (Snowflake, Databricks, BigQuery) |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/git-commit-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/git-commit-light.png"><img src="docs/icons/git-commit-light.png" width="20" height="20" alt="git-commit"></picture> | **Node editing & payloads** | 6 | Decision tree, payload shape, hydrated metadata, joins, config completion |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/repo-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/repo-light.png"><img src="docs/icons/repo-light.png" width="20" height="20" alt="repo"></picture> | **Node type selection** | 2 | When to use Stage/Work vs Dimension/Fact vs specialized node types |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/workflow-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/workflow-light.png"><img src="docs/icons/workflow-light.png" width="20" height="20" alt="workflow"></picture> | **Pipeline workflows** | 4 | End-to-end pipeline building, intent, review, and workshop patterns |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/beaker-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/beaker-light.png"><img src="docs/icons/beaker-light.png" width="20" height="20" alt="beaker"></picture> | **Run operations** | 2 | Starting, retrying, polling, diagnosing, and canceling runs |
-
 <details>
 
 <summary>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/icons/book-dark.png">
     <source media="(prefers-color-scheme: light)" srcset="docs/icons/book-light.png">
-    <img src="docs/icons/book-light.png" width="20" height="20" alt="book">
+    <img src="docs/icons/book-light.png" width="28" height="28" alt="book">
   </picture>
-  &nbsp;<b>Foundations</b> &mdash; the shared context every agent starts with
+  <b>Foundations &mdash; the shared context every agent starts with</b>
 </summary>
 
 - **`overview`** - General Coalesce concepts, response guidelines, and operational constraints
@@ -372,9 +372,9 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/icons/file-dark.png">
     <source media="(prefers-color-scheme: light)" srcset="docs/icons/file-light.png">
-    <img src="docs/icons/file-light.png" width="20" height="20" alt="file">
+    <img src="docs/icons/file-light.png" width="28" height="28" alt="file">
   </picture>
-  &nbsp;<b>SQL platform rules</b> &mdash; per-warehouse conventions for node SQL
+  <b>SQL platform rules &mdash; per-warehouse conventions for node SQL</b>
 </summary>
 
 - **`sql-snowflake`** - Snowflake-specific SQL conventions for node SQL
@@ -389,9 +389,9 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/icons/git-commit-dark.png">
     <source media="(prefers-color-scheme: light)" srcset="docs/icons/git-commit-light.png">
-    <img src="docs/icons/git-commit-light.png" width="20" height="20" alt="git-commit">
+    <img src="docs/icons/git-commit-light.png" width="28" height="28" alt="git-commit">
   </picture>
-  &nbsp;<b>Node editing &amp; payloads</b> &mdash; how the agent reasons about node bodies
+  <b>Node editing &amp; payloads &mdash; how the agent reasons about node bodies</b>
 </summary>
 
 - **`node-creation-decision-tree`** - Choosing between predecessor-based creation, updates, and full replacements
@@ -409,9 +409,9 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/icons/repo-dark.png">
     <source media="(prefers-color-scheme: light)" srcset="docs/icons/repo-light.png">
-    <img src="docs/icons/repo-light.png" width="20" height="20" alt="repo">
+    <img src="docs/icons/repo-light.png" width="28" height="28" alt="repo">
   </picture>
-  &nbsp;<b>Node type selection</b> &mdash; picking the right node type for each step
+  <b>Node type selection &mdash; picking the right node type for each step</b>
 </summary>
 
 - **`node-type-selection-guide`** - When to use each Coalesce node type (Stage/Work vs Dimension/Fact vs specialized)
@@ -425,9 +425,9 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/icons/workflow-dark.png">
     <source media="(prefers-color-scheme: light)" srcset="docs/icons/workflow-light.png">
-    <img src="docs/icons/workflow-light.png" width="20" height="20" alt="workflow">
+    <img src="docs/icons/workflow-light.png" width="28" height="28" alt="workflow">
   </picture>
-  &nbsp;<b>Pipeline workflows</b> &mdash; end-to-end pipeline building
+  <b>Pipeline workflows &mdash; end-to-end pipeline building</b>
 </summary>
 
 - **`pipeline-workflows`** - Building pipelines end-to-end: node type selection, multi-node sequences, execution
@@ -443,9 +443,9 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/icons/beaker-dark.png">
     <source media="(prefers-color-scheme: light)" srcset="docs/icons/beaker-light.png">
-    <img src="docs/icons/beaker-light.png" width="20" height="20" alt="beaker">
+    <img src="docs/icons/beaker-light.png" width="28" height="28" alt="beaker">
   </picture>
-  &nbsp;<b>Run operations</b> &mdash; starting, retrying, diagnosing runs
+  <b>Run operations &mdash; starting, retrying, diagnosing runs</b>
 </summary>
 
 - **`run-operations`** - Starting, retrying, polling, diagnosing, and canceling Coalesce runs
@@ -454,21 +454,23 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 </details>
 
 
-> [!TIP]
-> **Companion resources:** 10 topics under `coalesce://coa/describe/*` surface the bundled COA CLI's self-describing documentation, version-pinned to the shipping CLI. Topics: `overview`, `commands`, `selectors`, `schemas`, `workflow`, `structure`, `concepts`, `sql-format`, `node-types`, `config`. Use the `coa_describe` tool for parameterized variants.
-
 ---
 
 ## Tools
 
 > [!NOTE]
-> **Legend.** ⚠️ = Destructive (requires `confirmed: true`). 🧰 = Runs the bundled `coa` CLI locally (needs a `projectPath` pointing at a project with `data.yml`; destructive 🧰 tools run preflight validation - see [Safety model](docs/safety-model.md)).
+>
+> ### Legend
+>
+> - ⚠️ **Destructive** - the tool needs `confirmed: true` before it will run.
+> - 🧰 **Bundled `coa` CLI** - runs locally against a project directory. The tool needs a `projectPath` pointing at a folder that contains `data.yml`.
+> - **Preflight validation** - destructive 🧰 tools run a safety check before shelling out. See [Safety model](docs/safety-model.md).
 
 <!-- start of tool reference -->
 
 <details>
 
-<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/project-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/project-light.png"><img src="docs/icons/project-light.png" width="20" height="20" alt="project"></picture> Discovery</summary>
+<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/project-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/project-light.png"><img src="docs/icons/project-light.png" width="28" height="28" alt="project"></picture> <b>Discovery</b> &mdash; list, get, and search across workspaces, nodes, jobs, and runs</summary>
 
 **Environments, workspaces, projects**
 
@@ -515,7 +517,7 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 
 <details>
 
-<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/workflow-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/workflow-light.png"><img src="docs/icons/workflow-light.png" width="20" height="20" alt="workflow"></picture> Pipeline building</summary>
+<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/workflow-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/workflow-light.png"><img src="docs/icons/workflow-light.png" width="28" height="28" alt="workflow"></picture> <b>Pipeline building</b> &mdash; plan, create, and iterate on multi-node pipelines</summary>
 
 **Plan & build**
 
@@ -543,7 +545,7 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 
 <details>
 
-<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/git-commit-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/git-commit-light.png"><img src="docs/icons/git-commit-light.png" width="20" height="20" alt="git-commit"></picture> Node editing</summary>
+<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/git-commit-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/git-commit-light.png"><img src="docs/icons/git-commit-light.png" width="28" height="28" alt="git-commit"></picture> <b>Node editing</b> &mdash; create, update, delete, and configure workspace nodes</summary>
 
 **Create**
 
@@ -577,7 +579,7 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 
 <details>
 
-<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/beaker-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/beaker-light.png"><img src="docs/icons/beaker-light.png" width="20" height="20" alt="beaker"></picture> Runs & execution</summary>
+<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/beaker-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/beaker-light.png"><img src="docs/icons/beaker-light.png" width="28" height="28" alt="beaker"></picture> <b>Runs & execution</b> &mdash; start, retry, poll, diagnose, and cancel runs</summary>
 
 - **`start_run`** - Start a new run; requires Snowflake auth
 - **`run_and_wait`** - Start a run and poll until completion
@@ -602,7 +604,7 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 
 <details>
 
-<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/git-branch-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/git-branch-light.png"><img src="docs/icons/git-branch-light.png" width="20" height="20" alt="git-branch"></picture> Lineage & impact</summary>
+<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/git-branch-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/git-branch-light.png"><img src="docs/icons/git-branch-light.png" width="28" height="28" alt="git-branch"></picture> <b>Lineage & impact</b> &mdash; trace dependencies, analyze impact, propagate column changes</summary>
 
 - **`get_upstream_nodes`** - Walk the full upstream dependency graph for a node
 - **`get_downstream_nodes`** - Walk the full downstream dependency graph for a node
@@ -614,7 +616,7 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 
 <details>
 
-<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/repo-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/repo-light.png"><img src="docs/icons/repo-light.png" width="20" height="20" alt="repo"></picture> Repo-backed node types</summary>
+<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/repo-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/repo-light.png"><img src="docs/icons/repo-light.png" width="28" height="28" alt="repo"></picture> <b>Repo-backed node types</b> &mdash; inspect committed node-type definitions, variants, and templates</summary>
 
 - **`list_repo_packages`** - List package aliases and enabled node-type coverage from a committed Coalesce repo
 - **`list_repo_node_types`** - List exact resolvable committed node-type identifiers from `nodeTypes/`
@@ -628,7 +630,7 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 
 <details>
 
-<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/file-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/file-light.png"><img src="docs/icons/file-light.png" width="20" height="20" alt="file"></picture> Projects, environments & git accounts</summary>
+<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/file-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/file-light.png"><img src="docs/icons/file-light.png" width="28" height="28" alt="file"></picture> <b>Projects, environments & git accounts</b> &mdash; admin CRUD for top-level resources</summary>
 
 - **`create_environment`** - Create a new environment within a project
 - **`delete_environment`** - Delete an environment ⚠️
@@ -645,7 +647,7 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 
 <details>
 
-<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/shield-lock-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/shield-lock-light.png"><img src="docs/icons/shield-lock-light.png" width="20" height="20" alt="shield-lock"></picture> Users & roles</summary>
+<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/shield-lock-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/shield-lock-light.png"><img src="docs/icons/shield-lock-light.png" width="28" height="28" alt="shield-lock"></picture> <b>Users & roles</b> &mdash; assign and remove org, project, and environment roles</summary>
 
 - **`list_org_users`** - List all organization users
 - **`get_user_roles`** - Get roles for a specific user
@@ -660,7 +662,7 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 
 <details>
 
-<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/book-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/book-light.png"><img src="docs/icons/book-light.png" width="20" height="20" alt="book"></picture> Cache, skills & setup</summary>
+<summary><picture><source media="(prefers-color-scheme: dark)" srcset="docs/icons/book-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/icons/book-light.png"><img src="docs/icons/book-light.png" width="28" height="28" alt="book"></picture> <b>Cache, skills & setup</b> &mdash; local snapshots, customizable skills, and setup diagnostics</summary>
 
 **Cache snapshots**
 
@@ -824,15 +826,6 @@ Why this pattern:
 Skip this pattern if you only use one environment - a single registration is simpler. For 2–3 environments it's worth the extra config; beyond that, each server is a separate Node process, so consider whether you actually need them all loaded at once.
 
 </details>
-
-### Using the COA CLI tools
-
-COA is bundled - no extra install. Usage notes:
-
-- **Local commands** (`coa_doctor`, `coa_validate`, `coa_dry_run_create`, `coa_dry_run_run`, `coa_create`, `coa_run`, `coa_plan`) need a COA project directory (one that contains `data.yml`). Pass the path via the `projectPath` tool argument.
-- **Cloud commands** (`coa_list_environments`, `coa_list_environment_nodes`, `coa_list_runs`, `coa_deploy`, `coa_refresh`) read credentials from `~/.coa/config` - the same file the MCP uses. Populate it once and both surfaces agree.
-- **Profile resolution.** Cloud tools accept an optional `profile` arg. When omitted, they fall back to `COALESCE_PROFILE`, then to COA's own `[default]` - so you don't have to pass it on every call.
-- **Warehouse-touching commands** (`coa_create`, `coa_run`) need a valid `workspaces.yml` in the project root with storage-location mappings. Preflight catches a missing file before execution.
 
 ### Safety model
 
