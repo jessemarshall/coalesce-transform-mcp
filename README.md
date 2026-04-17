@@ -6,7 +6,7 @@
 [![Install in Cursor](https://img.shields.io/badge/Cursor-Install_MCP-000?style=flat&logo=cursor)](https://cursor.com/install-mcp?name=coalesce-transform&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJjb2FsZXNjZS10cmFuc2Zvcm0tbWNwIl19)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-MCP server for [Coalesce](https://coalesce.io/). Built for **Snowflake [Cortex Code](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code-cli) (CoCo)** - with first-class support for every other MCP client (Claude Code, Claude Desktop, Cursor, VS Code, Windsurf). Manage nodes, pipelines, environments, jobs, and runs, and drive the local-first [`coa`](https://www.npmjs.com/package/@coalescesoftware/coa) CLI from the same server: validate a project, preview DDL/DML, plan a deployment, and apply it to a cloud environment.
+MCP server for [Coalesce](https://coalesce.io/). Built for **Snowflake [Cortex Code](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code-cli) (CoCo)** - with first-class support for every other MCP client (Claude Code, Claude Desktop, Cursor, VS Code, Windsurf). Manage nodes, pipelines, environments, jobs, and runs, and drive the local-first Coalesce CLI from the same server: validate a project, preview DDL/DML, plan a deployment, and apply it to a cloud environment.
 
 ---
 
@@ -14,15 +14,13 @@ MCP server for [Coalesce](https://coalesce.io/). Built for **Snowflake [Cortex C
 
 |     | Task | Jump to |
 | :-: | ---- | ------- |
-| 🚀 | Get running in 2 minutes | [Installation](#installation) |
-| 📦 | Install for my AI client | [Quick Start](#quick-start) |
+| 🚀 | Get running in 2 minutes | [Quick Start](#quick-start) |
 | 🎛️ | Customize agent behavior | [Skills](#skills) |
 | 🔍 | Find a specific tool | [Tools](#tools) |
+| 📦 | Walk through the full setup | [Full Installation](#full-installation) |
 | 🔑 | Authenticate (env var or `~/.coa/config`) | [Credentials](#credentials) |
 | 🌐 | Run against multiple Coalesce environments | [Multiple environments](#multiple-environments) |
 | 🔒 | Lock prod down to read-only | [Safety model](docs/safety-model.md) |
-| 🧪 | Try a prerelease build | [Prerelease channel](docs/prerelease.md) |
-| 🩺 | Debug "why isn't auth working?" | [Diagnosing setup](docs/diagnosing-setup.md) |
 
 ---
 
@@ -212,128 +210,6 @@ Windsurf does **not** expand `${VAR}` - paste the literal token, or drop the `en
 > ### 🚀 New? Run the `/coalesce-setup` prompt after install
 >
 > It walks you through anything missing.
-
----
-
-## Installation
-
-**Requirements:**
-
-- [Node.js](https://nodejs.org/) 22+
-- A [Coalesce](https://coalesce.io/) account with a workspace
-- An MCP-compatible AI client (see [Quick Start](#quick-start))
-- Snowflake credentials - only if you plan to use run tools or `coa_create`/`coa_run` (see [Credentials](#credentials))
-- Install footprint is ~76 MB unpacked (the bundled `@coalescesoftware/coa` CLI ships its own runtime; the MCP tarball itself is under 1 MB)
-
-**1. Clone your project.** If your team already has a Coalesce project in Git, clone it locally - the bundled `coa` CLI operates on a project directory, so most local create/run tools require one on disk:
-
-```bash
-git clone <your-coalesce-project-repo-url>
-cd my-project
-```
-
-Don't have a Git-linked project yet? In the Coalesce UI, open your workspace → **Settings → Git** and connect a repo (or create one via your Git provider and paste the URL). Coalesce will commit the project skeleton on first push; clone that repo locally once it's populated.
-
-<details>
-<summary><b>What's in a Coalesce project directory?</b></summary>
-
-```text
-my-project/
-├── data.yml                 # Root metadata (fileVersion, platformKind)
-├── locations.yml            # Storage location manifest
-├── nodes/                   # Pipeline nodes (.yml for V1, .sql for V2)
-├── nodeTypes/               # Node type definitions with templates
-├── environments/            # Environment configs with storage mappings
-├── macros/                  # Reusable SQL macros
-├── jobs/                    # Job definitions
-└── subgraphs/               # Subgraph definitions
-```
-
-**V1 vs V2** - the format is pinned by `fileVersion` in `data.yml`. **V1** (`fileVersion: 1` or `2`) stores each node as a single YAML file with columns, transforms, and config inline. **V2** (`fileVersion: 3`) is SQL-first: the node body lives in a `.sql` file using `@id` / `@nodeType` annotations and `{{ ref() }}` references, with YAML retained for config. New projects default to V2; existing V1 projects keep working unchanged.
-
-</details>
-
-Point the MCP at this directory by setting `repoPath` in `~/.coa/config` or `COALESCE_REPO_PATH` in your env block.
-
-**2. Create `workspaces.yml`.** This file is **required** for `coa_create` / `coa_run` and their dry-run variants. It maps each storage location declared in `locations.yml` to a physical database + schema for local development. It's typically gitignored (per-developer), so cloning the project does not give it to you - you have to create it.
-
-The `/coalesce-setup` prompt detects a missing `workspaces.yml` and walks you through it. If you'd rather do it directly, pick one of:
-
-- **Ask your agent to bootstrap it** (easiest): prompt the agent to call the `coa_bootstrap_workspaces` tool (it needs `confirmed: true`, so the agent will ask before running).
-
-  > [!WARNING]
-  > **The generated file contains placeholder values.** The bootstrap tool seeds `database`/`schema` with defaults that won't match your real warehouse. Ask the agent to open the file with you and replace every placeholder before calling `coa_create` / `coa_run` - otherwise the generated DDL/DML will target the wrong (or non-existent) database.
-
-- **Hand-write it.** Ask the agent to fetch the authoritative schema via the `coa_describe` tool (`topic: "schema"`, `subtopic: "workspaces"`) - no top-level wrapper, no `fileVersion`.
-
-  <details>
-  <summary><b>Example <code>workspaces.yml</code></b></summary>
-
-  ```yaml
-  # workspaces.yml - keys are workspace names; `dev` is the default if --workspace is omitted
-  dev:
-    connection: snowflake          # required - name of the connection block COA should use
-    locations:                     # optional - one entry per storage location name from locations.yml
-      SRC_INGEST_TASTY_BITES:
-        database: JESSE_DEV        # required
-        schema: INGEST_TASTY_BITES # required
-      ETL_STAGE:
-        database: JESSE_DEV
-        schema: ETL_STAGE
-      ANALYTICS:
-        database: JESSE_DEV
-        schema: ANALYTICS
-  ```
-
-  </details>
-
-Ask your agent to verify the setup - e.g. *"Run `coa_doctor` on my project and summarize the results."* It checks `data.yml`, `workspaces.yml`, credentials, and warehouse connectivity end to end.
-
-**3. Pick an auth path:**
-
-<table>
-<tr>
-<th>Option A - env var</th>
-<th>Option B - reuse <code>~/.coa/config</code></th>
-</tr>
-<tr valign="top">
-<td>
-
-Simplest for first-time MCP users. Generate a `COALESCE_ACCESS_TOKEN` from Coalesce → Deploy → User Settings, then include it in your client config:
-
-```json
-{
-  "env": {
-    "COALESCE_ACCESS_TOKEN": "<YOUR_TOKEN>"
-  }
-}
-```
-
-</td>
-<td>
-
-Best if you already use the `coa` CLI - the server reads the same profile file, so nothing to duplicate. Drop the `env` block entirely:
-
-```json
-{
-  "command": "npx",
-  "args": ["coalesce-transform-mcp"]
-}
-```
-
-See [Credentials](#credentials) for the profile schema.
-
-</td>
-</tr>
-</table>
-
-When both sources set a field, the env var wins.
-
-**4. Install the server** via one of the [Quick Start](#quick-start) paths above.
-
-**5. Restart your client,** then run the `/coalesce-setup` prompt to verify everything is wired up.
-
-If you have more than one Coalesce environment to manage, see [Multiple environments](#multiple-environments).
 
 ---
 
@@ -685,7 +561,125 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 
 ---
 
-## Configuration
+## Full Installation
+
+**Requirements:**
+
+- [Node.js](https://nodejs.org/) 22+
+- A [Coalesce](https://coalesce.io/) account with a workspace
+- An MCP-compatible AI client (see [Quick Start](#quick-start))
+- Snowflake credentials - only if you plan to use run tools or `coa_create`/`coa_run` (see [Credentials](#credentials))
+- Install footprint is ~76 MB unpacked (the bundled `@coalescesoftware/coa` CLI ships its own runtime; the MCP tarball itself is under 1 MB)
+
+**1. Clone your project.** If your team already has a Coalesce project in Git, clone it locally - the bundled `coa` CLI operates on a project directory, so most local create/run tools require one on disk:
+
+```bash
+git clone <your-coalesce-project-repo-url>
+cd my-project
+```
+
+Don't have a Git-linked project yet? In the Coalesce UI, open your workspace → **Settings → Git** and connect a repo (or create one via your Git provider and paste the URL). Coalesce will commit the project skeleton on first push; clone that repo locally once it's populated.
+
+<details>
+<summary><b>What's in a Coalesce project directory?</b></summary>
+
+```text
+my-project/
+├── data.yml                 # Root metadata (fileVersion, platformKind)
+├── locations.yml            # Storage location manifest
+├── nodes/                   # Pipeline nodes (.yml for V1, .sql for V2)
+├── nodeTypes/               # Node type definitions with templates
+├── environments/            # Environment configs with storage mappings
+├── macros/                  # Reusable SQL macros
+├── jobs/                    # Job definitions
+└── subgraphs/               # Subgraph definitions
+```
+
+**V1 vs V2** - the format is pinned by `fileVersion` in `data.yml`. **V1** (`fileVersion: 1` or `2`) stores each node as a single YAML file with columns, transforms, and config inline. **V2** (`fileVersion: 3`) is SQL-first: the node body lives in a `.sql` file using `@id` / `@nodeType` annotations and `{{ ref() }}` references, with YAML retained for config. New projects default to V2; existing V1 projects keep working unchanged.
+
+</details>
+
+Point the MCP at this directory by setting `repoPath` in `~/.coa/config` or `COALESCE_REPO_PATH` in your env block.
+
+**2. Create `workspaces.yml`.** This file is **required** for `coa_create` / `coa_run` and their dry-run variants. It maps each storage location declared in `locations.yml` to a physical database + schema for local development. It's typically gitignored (per-developer), so cloning the project does not give it to you - you have to create it.
+
+The `/coalesce-setup` prompt detects a missing `workspaces.yml` and walks you through it. If you'd rather do it directly, pick one of:
+
+- **Ask your agent to bootstrap it** (easiest): prompt the agent to call the `coa_bootstrap_workspaces` tool (it needs `confirmed: true`, so the agent will ask before running).
+
+  > [!WARNING]
+  > **The generated file contains placeholder values.** The bootstrap tool seeds `database`/`schema` with defaults that won't match your real warehouse. Ask the agent to open the file with you and replace every placeholder before calling `coa_create` / `coa_run` - otherwise the generated DDL/DML will target the wrong (or non-existent) database.
+
+- **Hand-write it.** Ask the agent to fetch the authoritative schema via the `coa_describe` tool (`topic: "schema"`, `subtopic: "workspaces"`) - no top-level wrapper, no `fileVersion`.
+
+  <details>
+  <summary><b>Example <code>workspaces.yml</code></b></summary>
+
+  ```yaml
+  # workspaces.yml - keys are workspace names; `dev` is the default if --workspace is omitted
+  dev:
+    connection: snowflake          # required - name of the connection block COA should use
+    locations:                     # optional - one entry per storage location name from locations.yml
+      SRC_INGEST_TASTY_BITES:
+        database: JESSE_DEV        # required
+        schema: INGEST_TASTY_BITES # required
+      ETL_STAGE:
+        database: JESSE_DEV
+        schema: ETL_STAGE
+      ANALYTICS:
+        database: JESSE_DEV
+        schema: ANALYTICS
+  ```
+
+  </details>
+
+Ask your agent to verify the setup - e.g. *"Run `coa_doctor` on my project and summarize the results."* It checks `data.yml`, `workspaces.yml`, credentials, and warehouse connectivity end to end.
+
+**3. Pick an auth path:**
+
+<table>
+<tr>
+<th>Option A - env var</th>
+<th>Option B - reuse <code>~/.coa/config</code></th>
+</tr>
+<tr valign="top">
+<td>
+
+Simplest for first-time MCP users. Generate a `COALESCE_ACCESS_TOKEN` from Coalesce → Deploy → User Settings, then include it in your client config:
+
+```json
+{
+  "env": {
+    "COALESCE_ACCESS_TOKEN": "<YOUR_TOKEN>"
+  }
+}
+```
+
+</td>
+<td>
+
+Best if you already use the `coa` CLI - the server reads the same profile file, so nothing to duplicate. Drop the `env` block entirely:
+
+```json
+{
+  "command": "npx",
+  "args": ["coalesce-transform-mcp"]
+}
+```
+
+See [Credentials](#credentials) for the profile schema.
+
+</td>
+</tr>
+</table>
+
+When both sources set a field, the env var wins.
+
+**4. Install the server** via one of the [Quick Start](#quick-start) paths above.
+
+**5. Restart your client,** then run the `/coalesce-setup` prompt to verify everything is wired up.
+
+If you have more than one Coalesce environment to manage, see [Multiple environments](#multiple-environments).
 
 ### Credentials
 
