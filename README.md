@@ -887,7 +887,7 @@ All local tools accept a `projectPath` argument and validate that it contains `d
 - **SQL override is disallowed.** Nodes are built via YAML/config (columns, transforms, join conditions), not raw SQL. Template generation strips `overrideSQLToggle`, and write helpers reject `overrideSQL` fields.
 - **Caching.** Large responses are auto-cached to disk. Use `cache_workspace_nodes` and siblings when you want a reusable snapshot. Configure the threshold with `COALESCE_MCP_AUTO_CACHE_MAX_BYTES`.
 - **Repo-backed tools.** Set `COALESCE_REPO_PATH` (or add `repoPath=` to your ~/.coa/config profile) to your local Coalesce repo root (containing `nodeTypes/`, `nodes/`, `packages/`), or pass `repoPath` on individual tool calls. The server does not clone repos or install packages.
-- **COA CLI versioning.** The bundled COA CLI is pinned to an exact alpha version - *not* a floating `@next` tag. Every release of this MCP ships with a known-good COA build. Changelog and bump policy: [docs/RELEASES.md](docs/RELEASES.md).
+- **COA CLI versioning.** The bundled COA CLI is pinned to an exact alpha version - *not* a floating `@next` tag. Every release of this MCP ships with a known-good COA build.
 - **COA describe cache.** COA describe output is cached under `~/.cache/coalesce-transform-mcp/coa-describe/<coa-version>/` after first access. Cache is version-keyed - upgrading the MCP automatically invalidates stale content.
 
 ---
@@ -906,7 +906,7 @@ All local tools accept a `projectPath` argument and validate that it contains `d
 
 ## Contributing
 
-Issues and PRs welcome. Before opening a PR, please run the preflight checks described in [docs/RELEASES.md](docs/RELEASES.md).
+Issues and PRs welcome.
 
 - 🐛 **Bug reports** - [open an issue](https://github.com/coalesceio/coalesce-transform-mcp/issues/new?labels=bug)
 - 💡 **Feature requests** - [start a discussion](https://github.com/coalesceio/coalesce-transform-mcp/discussions)
