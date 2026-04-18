@@ -111,6 +111,127 @@ describe("buildJsonToolResponse auto-cache behaviour", () => {
     expect(readdirSync(getAutoCacheDir(baseDir, "ws-b")).filter((f) => f.endsWith(".json"))).toHaveLength(1);
   });
 
+  // ─── Workspace bucket sanitization (path traversal + collision defense) ──
+
+  it("sanitizes path-traversal workspace IDs so the file stays under the cache root", () => {
+    const baseDir = makeTempDir();
+    buildJsonToolResponse("test_tool", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+      workspaceID: "../../etc",
+    });
+
+    const cacheRoot = join(baseDir, CACHE_DIR_NAME);
+    const buckets = readdirSync(cacheRoot);
+    // There must be exactly one bucket created, and it must sit directly under the cache root
+    expect(buckets).toHaveLength(1);
+    // The bucket name must not escape: no leading dots, no slashes
+    expect(buckets[0]).not.toMatch(/^\.+$/);
+    expect(buckets[0]).not.toMatch(/[/\\]/);
+    // File must be addressable from within the sanitized bucket
+    const files = readdirSync(join(cacheRoot, buckets[0], "auto-cache")).filter((f) =>
+      f.endsWith(".json")
+    );
+    expect(files).toHaveLength(1);
+  });
+
+  it("sanitizes absolute-path workspace IDs into a safe segment", () => {
+    const baseDir = makeTempDir();
+    buildJsonToolResponse("test_tool", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+      workspaceID: "/abs/path",
+    });
+
+    const cacheRoot = join(baseDir, CACHE_DIR_NAME);
+    const buckets = readdirSync(cacheRoot);
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0]).not.toMatch(/^[-./]/);
+    expect(buckets[0]).not.toMatch(/[/\\]/);
+  });
+
+  it("collapses workspace IDs that sanitize to empty into the _global bucket", () => {
+    const baseDir = makeTempDir();
+    // "!!!" → all chars replaced by "-" → leading/trailing "-" stripped → empty → _global
+    buildJsonToolResponse("test_tool", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+      workspaceID: "!!!",
+    });
+
+    const files = readdirSync(getAutoCacheDir(baseDir)).filter((f) => f.endsWith(".json"));
+    expect(files).toHaveLength(1);
+  });
+
+  it("collapses '.' and '..' workspace IDs into the _global bucket", () => {
+    const baseDir = makeTempDir();
+    buildJsonToolResponse("test_tool_a", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+      workspaceID: ".",
+    });
+    buildJsonToolResponse("test_tool_b", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+      workspaceID: "..",
+    });
+
+    const cacheRoot = join(baseDir, CACHE_DIR_NAME);
+    // Both responses must land in _global — not in any "." or ".." bucket
+    expect(readdirSync(cacheRoot)).toEqual(["_global"]);
+    const files = readdirSync(getAutoCacheDir(baseDir)).filter((f) => f.endsWith(".json"));
+    expect(files).toHaveLength(2);
+  });
+
+  it("routes a literal '_global' workspaceID to the shared _global bucket without collision", () => {
+    const baseDir = makeTempDir();
+    // Caller with workspaceID="_global" and caller without workspaceID must both land in
+    // the same bucket — no silent shadowing or duplicate-directory creation.
+    buildJsonToolResponse("workspace_tool", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+      workspaceID: "_global",
+    });
+    buildJsonToolResponse("unscoped_tool", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+    });
+
+    const cacheRoot = join(baseDir, CACHE_DIR_NAME);
+    expect(readdirSync(cacheRoot)).toEqual(["_global"]);
+    const files = readdirSync(getAutoCacheDir(baseDir)).filter((f) => f.endsWith(".json"));
+    expect(files).toHaveLength(2);
+  });
+
+  it("replaces null bytes and control characters in workspace IDs", () => {
+    const baseDir = makeTempDir();
+    buildJsonToolResponse("test_tool", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+      workspaceID: "ws\x00null\tbyte",
+    });
+
+    const cacheRoot = join(baseDir, CACHE_DIR_NAME);
+    const buckets = readdirSync(cacheRoot);
+    expect(buckets).toHaveLength(1);
+    // No control characters should survive into the bucket name
+    expect(buckets[0]).not.toMatch(/[\x00-\x1f]/);
+    expect(buckets[0]).toMatch(/^[a-zA-Z0-9._-]+$/);
+  });
+
+  it("preserves safe workspace IDs unchanged (alphanumerics, dots, dashes, underscores)", () => {
+    const baseDir = makeTempDir();
+    const safeID = "team-alpha.prod_2025";
+    buildJsonToolResponse("test_tool", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+      workspaceID: safeID,
+    });
+
+    const files = readdirSync(getAutoCacheDir(baseDir, safeID)).filter((f) => f.endsWith(".json"));
+    expect(files).toHaveLength(1);
+  });
+
   it("auto-caches when payload exceeds maxInlineBytes", () => {
     const baseDir = makeTempDir();
     const result = buildJsonToolResponse("test_tool", largePayload(200), {
