@@ -283,7 +283,7 @@ export async function propagateColumnChange(
     const resolvedBase = getCacheBaseDir(baseDir);
     const snapshotDir = join(resolvedBase, CACHE_DIR_NAME, "propagation-snapshots");
     mkdirSync(snapshotDir, { recursive: true });
-    const fileName = `propagation-${workspaceID}-${snapshotTimestamp.replace(/[:.]/g, "-")}.json`;
+    const fileName = `propagation-${safeWorkspaceID}-${snapshotTimestamp.replace(/[:.]/g, "-")}.json`;
     snapshotPath = join(snapshotDir, fileName);
     const diskSnapshot = {
       workspaceID,

@@ -382,6 +382,66 @@ describe("propagateColumnChange", () => {
       expect(diskData.entries[0].nodeBody.metadata.columns).toHaveLength(1);
     });
 
+    it("rejects workspaceID with path separators before writing snapshot", async () => {
+      const client = createMockClient();
+      const cache = buildFakeCache({
+        n1: { name: "SRC_RAW", nodeType: "Source", columns: [{ id: "c1", name: "col_a" }] },
+      });
+
+      vi.mocked(walkColumnLineage).mockReturnValue([]);
+
+      await expect(
+        propagateColumnChange(
+          client as never,
+          cache,
+          "../escape",
+          "n1",
+          "c1",
+          { columnName: "renamed_col" },
+          undefined,
+          testDir,
+        ),
+      ).rejects.toThrow(/Invalid workspaceID/);
+
+      // Directory must not exist — validatePathSegment should throw before any disk work
+      const snapshotDir = join(testDir, ".coalesce-transform-mcp-cache", "propagation-snapshots");
+      expect(existsSync(snapshotDir)).toBe(false);
+    });
+
+    it("uses the validated workspaceID in the snapshot filename", async () => {
+      const client = createMockClient();
+      const cache = buildFakeCache({
+        n1: { name: "SRC_RAW", nodeType: "Source", columns: [{ id: "c1", name: "col_a" }] },
+        n2: { name: "STG_A", nodeType: "Stage", columns: [{ id: "c2", name: "col_a" }] },
+      });
+
+      vi.mocked(walkColumnLineage).mockReturnValue([
+        { nodeID: "n2", nodeName: "STG_A", nodeType: "Stage", columnID: "c2", columnName: "col_a", direction: "downstream" as const, depth: 1 },
+      ]);
+
+      client.get.mockResolvedValue({
+        id: "n2", name: "STG_A",
+        metadata: { columns: [{ id: "c2", columnID: "c2", name: "col_a", dataType: "VARCHAR" }] },
+      });
+      vi.mocked(setWorkspaceNode).mockResolvedValue(undefined as never);
+
+      const result = await propagateColumnChange(
+        client as never,
+        cache,
+        "ws-safe-id",
+        "n1",
+        "c1",
+        { columnName: "renamed_col" },
+        undefined,
+        testDir,
+      );
+
+      expect(result.snapshotPath).toBeDefined();
+      // The filename must come from safeWorkspaceID (validated), not a raw string that
+      // could contain path-traversal characters in a future refactor.
+      expect(result.snapshotPath).toMatch(/propagation-ws-safe-id-/);
+    });
+
     it("does not fail propagation when disk write fails", async () => {
       const client = createMockClient();
       const cache = buildFakeCache({
