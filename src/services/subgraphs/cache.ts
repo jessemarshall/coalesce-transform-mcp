@@ -38,8 +38,14 @@ function readCacheFile(baseDir?: string): CacheFile {
     ) {
       return parsed as CacheFile;
     }
-  } catch {
-    // Corrupt cache is non-fatal — treat as empty so we can rewrite it.
+    process.stderr.write(
+      `[subgraph-cache] Ignoring cache at ${path}: unexpected shape — treating as empty\n`
+    );
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    process.stderr.write(
+      `[subgraph-cache] Corrupt cache at ${path}: ${reason} — treating as empty\n`
+    );
   }
   return { version: 1, entries: [] };
 }

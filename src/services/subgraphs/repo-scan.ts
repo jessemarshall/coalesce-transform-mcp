@@ -13,7 +13,15 @@ export type RepoSubgraph = {
 
 function listYamlFiles(dir: string): string[] {
   const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[subgraphs] Failed to list ${dir}: ${reason}\n`);
+    return out;
+  }
+  for (const entry of entries) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...listYamlFiles(full));
