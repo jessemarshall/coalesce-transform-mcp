@@ -183,6 +183,30 @@ describe("repo subgraph scan", () => {
     // still just the 2 valid entries
     expect(subgraphs).toHaveLength(2);
   });
+
+  it("logs a diagnostic to stderr when a YAML file fails to parse", () => {
+    const writes: string[] = [];
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    process.stderr.write = ((chunk: any) => {
+      writes.push(typeof chunk === "string" ? chunk : String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+    writeFileSync(
+      join(repoDir, "subgraphs", "broken.yml"),
+      `id: sg-broken\nname: Broken\nsteps:\n  - n-1\n  -- invalid: syntax\n`
+    );
+    try {
+      const subgraphs = scanRepoSubgraphs(repoDir);
+      expect(subgraphs.map((s) => s.name).sort()).toEqual(["Marts", "Staging"]);
+      const joined = writes.join("");
+      expect(joined).toContain("[subgraphs]");
+      expect(joined).toContain("broken.yml");
+      expect(joined).toContain("YAML parse error");
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+  });
 });
 
 describe("resolveSubgraphByName", () => {
