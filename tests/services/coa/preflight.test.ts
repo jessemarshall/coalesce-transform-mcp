@@ -396,6 +396,17 @@ describe("detectV2Artifacts + V2_ALPHA_DETECTED", () => {
     expect(report.warnings.map((w) => w.code)).not.toContain("V2_ALPHA_DETECTED");
   });
 
+  // When the `.sql` node scan hits MAX_SQL_FILES_SCANNED, `detectV2Artifacts`
+  // must treat that as a scan failure, not a clean V1 count — otherwise large
+  // projects bypass the V2 hard guard silently.
+  it("fires V2_SCAN_FAILED when the .sql node scan hits the file cap", () => {
+    for (let i = 0; i < 501; i++) {
+      withSql(`STAGE-${i.toString().padStart(4, "0")}.sql`, "SELECT 1");
+    }
+    const issues = detectV2Artifacts(projectDir);
+    expect(codesOf(issues)).toContain("V2_SCAN_FAILED");
+  });
+
   // POSIX `chmod 0` removes read/exec on the dir so readdir throws EACCES.
   // Skipped on Windows (chmod no-op) and when running as root (root bypasses
   // POSIX DAC). Using `it.skipIf` so vitest reports this as skipped, not

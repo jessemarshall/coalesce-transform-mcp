@@ -143,6 +143,8 @@ jobs:
 
           if [ "$HIGHER" = "$CURRENT_BASE" ] && [ "$CURRENT_BASE" != "$STABLE" ]; then
             echo "::notice ::@alpha (${CURRENT_ALPHA}) is on a newer base than ${STABLE}; leaving it alone."
+          elif [ "$CURRENT_ALPHA" = "$STABLE" ]; then
+            echo "::notice ::@alpha is already at ${STABLE}; no-op."
           else
             echo "::notice ::Advancing @alpha from ${CURRENT_ALPHA} to ${STABLE}."
             npm dist-tag add "${PKG}@${STABLE}" alpha

@@ -57,9 +57,14 @@ export function extractResultScope(value: unknown): {
     }
   }
 
+  // Two passes so workspace always wins over environment even when the
+  // environmentID lives at the top level and the workspaceID is nested under
+  // `status`. Matches the precedence documented on extractCacheScope.
   for (const candidate of candidates) {
     const ws = candidate.workspaceID;
     if (typeof ws === "string" && ws.length > 0) return { workspaceID: ws };
+  }
+  for (const candidate of candidates) {
     const env = candidate.environmentID;
     if (typeof env === "string" && env.length > 0) return { environmentID: env };
   }

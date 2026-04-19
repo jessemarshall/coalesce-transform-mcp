@@ -404,6 +404,48 @@ describe("buildJsonToolResponse auto-cache behaviour", () => {
     expect(remaining.length).toBe(1);
   });
 
+  // Regression: phase 2 hard-cap eviction used to gate on the pre-cleanup
+  // count (`files.length`) then slice on `currentFiles.length - MAX`. Once
+  // phase 1 dropped the bucket below the cap and the drop wasn't the whole
+  // bucket, `slice(0, length - MAX)` with negative `length - MAX` could still
+  // resolve to a positive slice end and evict current-session files.
+  it("does not evict current-session files when phase 1 drops count below the cap", () => {
+    const baseDir = makeTempDir();
+    const autoCacheDir = getAutoCacheDir(baseDir);
+    mkdirSync(autoCacheDir, { recursive: true });
+
+    // 110 stale files (pre-session timestamp) — will be removed by phase 1.
+    for (let i = 0; i < 110; i++) {
+      const name = `2020-01-01T00-00-00-${String(i).padStart(3, "0")}Z-old-tool-${i}.json`;
+      writeFileSync(join(autoCacheDir, name), "{}");
+    }
+    // 100 "current" files (future timestamp, safely after any reasonable
+    // session start). Phase 1 must NOT delete these.
+    const currentFiles: string[] = [];
+    for (let i = 0; i < 100; i++) {
+      const name = `9999-12-31T23-59-${String(i).padStart(2, "0")}-000Z-live-tool-${i}.json`;
+      currentFiles.push(name);
+      writeFileSync(join(autoCacheDir, name), "{}");
+    }
+
+    // Trigger a write → 211 files on readdir. Phase 1 deletes 110 stale,
+    // leaving 101. files.length (211) > 200 gates phase 2 ON.
+    // currentFiles.length (101) - 200 = -99 → pre-fix `slice(0, -99)` would
+    // have evicted the first 2 current files (101 - 99 = 2 items).
+    buildJsonToolResponse("test_tool", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+    });
+
+    const remaining = readdirSync(autoCacheDir).filter((f) => f.endsWith(".json"));
+    // All 100 "current" files plus the one we just wrote — 101 files,
+    // all current-session. None should have been evicted.
+    for (const name of currentFiles) {
+      expect(remaining).toContain(name);
+    }
+    expect(remaining.length).toBe(101);
+  });
+
   // ─── File name slugification ─────────────────────────────────────────────
 
   it("sanitizes tool names with special characters in cached file names", () => {
