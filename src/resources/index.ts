@@ -13,238 +13,227 @@ import { registerCoaDescribeResources } from "./coa-describe.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Resource URIs
-const RESOURCES = {
-  OVERVIEW: "coalesce://context/overview",
-  SQL_PLATFORM_SELECTION: "coalesce://context/sql-platform-selection",
-  SQL_SNOWFLAKE: "coalesce://context/sql-snowflake",
-  SQL_DATABRICKS: "coalesce://context/sql-databricks",
-  SQL_BIGQUERY: "coalesce://context/sql-bigquery",
-  DATA_ENGINEERING_PRINCIPLES: "coalesce://context/data-engineering-principles",
-  STORAGE_MAPPINGS: "coalesce://context/storage-mappings",
-  TOOL_USAGE: "coalesce://context/tool-usage",
-  ID_DISCOVERY: "coalesce://context/id-discovery",
-  NODE_CREATION_DECISION_TREE:
-    "coalesce://context/node-creation-decision-tree",
-  NODE_PAYLOADS: "coalesce://context/node-payloads",
-  HYDRATED_METADATA: "coalesce://context/hydrated-metadata",
-  RUN_OPERATIONS: "coalesce://context/run-operations",
-  NODE_TYPE_CORPUS: "coalesce://context/node-type-corpus",
-  AGGREGATION_PATTERNS: "coalesce://context/aggregation-patterns",
-  INTELLIGENT_NODE_CONFIGURATION:
-    "coalesce://context/intelligent-node-configuration",
-  PIPELINE_WORKFLOWS: "coalesce://context/pipeline-workflows",
-  NODE_OPERATIONS: "coalesce://context/node-operations",
-  NODE_TYPE_SELECTION_GUIDE:
-    "coalesce://context/node-type-selection-guide",
-  INTENT_PIPELINE_GUIDE:
-    "coalesce://context/intent-pipeline-guide",
-  RUN_DIAGNOSTICS_GUIDE:
-    "coalesce://context/run-diagnostics-guide",
-  PIPELINE_REVIEW_GUIDE:
-    "coalesce://context/pipeline-review-guide",
-  PIPELINE_WORKSHOP_GUIDE:
-    "coalesce://context/pipeline-workshop-guide",
-  ECOSYSTEM_BOUNDARIES:
-    "coalesce://context/ecosystem-boundaries",
-  SETUP_GUIDE:
-    "coalesce://context/setup-guide",
-} as const;
-
-// Map URIs to file paths
-export const RESOURCE_FILES: Record<string, string> = {
-  [RESOURCES.OVERVIEW]: "context/overview.md",
-  [RESOURCES.SQL_PLATFORM_SELECTION]: "context/sql-platform-selection.md",
-  [RESOURCES.SQL_SNOWFLAKE]: "context/sql-snowflake.md",
-  [RESOURCES.SQL_DATABRICKS]: "context/sql-databricks.md",
-  [RESOURCES.SQL_BIGQUERY]: "context/sql-bigquery.md",
-  [RESOURCES.DATA_ENGINEERING_PRINCIPLES]: "context/data-engineering-principles.md",
-  [RESOURCES.STORAGE_MAPPINGS]: "context/storage-mappings.md",
-  [RESOURCES.TOOL_USAGE]: "context/tool-usage.md",
-  [RESOURCES.ID_DISCOVERY]: "context/id-discovery.md",
-  [RESOURCES.NODE_CREATION_DECISION_TREE]:
-    "context/node-creation-decision-tree.md",
-  [RESOURCES.NODE_PAYLOADS]: "context/node-payloads.md",
-  [RESOURCES.HYDRATED_METADATA]: "context/hydrated-metadata.md",
-  [RESOURCES.RUN_OPERATIONS]: "context/run-operations.md",
-  [RESOURCES.NODE_TYPE_CORPUS]: "context/node-type-corpus.md",
-  [RESOURCES.AGGREGATION_PATTERNS]: "context/aggregation-patterns.md",
-  [RESOURCES.INTELLIGENT_NODE_CONFIGURATION]:
-    "context/intelligent-node-configuration.md",
-  [RESOURCES.PIPELINE_WORKFLOWS]: "context/pipeline-workflows.md",
-  [RESOURCES.NODE_OPERATIONS]: "context/node-operations.md",
-  [RESOURCES.NODE_TYPE_SELECTION_GUIDE]:
-    "context/node-type-selection-guide.md",
-  [RESOURCES.INTENT_PIPELINE_GUIDE]:
-    "context/intent-pipeline-guide.md",
-  [RESOURCES.RUN_DIAGNOSTICS_GUIDE]:
-    "context/run-diagnostics-guide.md",
-  [RESOURCES.PIPELINE_REVIEW_GUIDE]:
-    "context/pipeline-review-guide.md",
-  [RESOURCES.PIPELINE_WORKSHOP_GUIDE]:
-    "context/pipeline-workshop-guide.md",
-  [RESOURCES.ECOSYSTEM_BOUNDARIES]:
-    "context/ecosystem-boundaries.md",
-  [RESOURCES.SETUP_GUIDE]:
-    "context/setup-guide.md",
+/**
+ * Single source of truth for the bundled Coalesce context resources.
+ *
+ * Adding a resource: append a row here and ship the .md file at `path`. The
+ * registered URI, file path, display name, description, and test fixture all
+ * derive from this array — no separate maps to keep in sync.
+ *
+ * All entries currently serve markdown; `mimeType` defaults to `text/markdown`
+ * unless an entry overrides it.
+ */
+type ContextResource = {
+  uri: string;
+  path: string;
+  name: string;
+  description: string;
+  mimeType?: string;
 };
 
-// Resource metadata
-const RESOURCE_METADATA: Record<
-  string,
-  { name: string; description: string; mimeType: string }
-> = {
-  [RESOURCES.OVERVIEW]: {
+const CONTEXT_RESOURCES: readonly ContextResource[] = [
+  {
+    uri: "coalesce://context/overview",
+    path: "context/overview.md",
     name: "Coalesce Overview",
     description:
       "General Coalesce concepts, response guidelines, and operational constraints for AI assistants",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.SQL_PLATFORM_SELECTION]: {
+  {
+    uri: "coalesce://context/sql-platform-selection",
+    path: "context/sql-platform-selection.md",
     name: "SQL Platform Selection",
     description:
       "How to determine the active SQL platform from project metadata and existing node SQL before choosing a dialect-specific resource",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.SQL_SNOWFLAKE]: {
+  {
+    uri: "coalesce://context/sql-snowflake",
+    path: "context/sql-snowflake.md",
     name: "SQL Rules: Snowflake",
-    description:
-      "Snowflake-specific SQL conventions for Coalesce node SQL",
-    mimeType: "text/markdown",
+    description: "Snowflake-specific SQL conventions for Coalesce node SQL",
   },
-  [RESOURCES.SQL_DATABRICKS]: {
+  {
+    uri: "coalesce://context/sql-databricks",
+    path: "context/sql-databricks.md",
     name: "SQL Rules: Databricks",
-    description:
-      "Databricks-specific SQL conventions for Coalesce node SQL",
-    mimeType: "text/markdown",
+    description: "Databricks-specific SQL conventions for Coalesce node SQL",
   },
-  [RESOURCES.SQL_BIGQUERY]: {
+  {
+    uri: "coalesce://context/sql-bigquery",
+    path: "context/sql-bigquery.md",
     name: "SQL Rules: BigQuery",
-    description:
-      "BigQuery-specific SQL conventions for Coalesce node SQL",
-    mimeType: "text/markdown",
+    description: "BigQuery-specific SQL conventions for Coalesce node SQL",
   },
-  [RESOURCES.DATA_ENGINEERING_PRINCIPLES]: {
+  {
+    uri: "coalesce://context/data-engineering-principles",
+    path: "context/data-engineering-principles.md",
     name: "Data Engineering Principles",
     description:
       "Data engineering best practices for node type selection, layered architecture, methodology detection, materialization strategies, and dependency management",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.STORAGE_MAPPINGS]: {
+  {
+    uri: "coalesce://context/storage-mappings",
+    path: "context/storage-mappings.md",
     name: "Storage Locations and References",
     description:
       "Storage location concepts, {{ ref() }} syntax, and reference patterns in Coalesce SQL",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.TOOL_USAGE]: {
+  {
+    uri: "coalesce://context/tool-usage",
+    path: "context/tool-usage.md",
     name: "Tool Usage Patterns",
     description:
       "Best practices for tool batching, parallelization, SQL conversion, and node operations",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.ID_DISCOVERY]: {
+  {
+    uri: "coalesce://context/id-discovery",
+    path: "context/id-discovery.md",
     name: "ID Discovery",
     description:
       "How to resolve project, workspace, environment, job, run, node, and org IDs before calling Coalesce tools",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.NODE_CREATION_DECISION_TREE]: {
+  {
+    uri: "coalesce://context/node-creation-decision-tree",
+    path: "context/node-creation-decision-tree.md",
     name: "Node Creation Decision Tree",
     description:
       "How to choose between predecessor-based creation, updates, and full replacements for workspace nodes",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.NODE_PAYLOADS]: {
+  {
+    uri: "coalesce://context/node-payloads",
+    path: "context/node-payloads.md",
     name: "Node Payloads",
     description:
       "Practical guidance for working with workspace node bodies, including top-level fields, metadata, config, and array-replacement risks",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.HYDRATED_METADATA]: {
+  {
+    uri: "coalesce://context/hydrated-metadata",
+    path: "context/hydrated-metadata.md",
     name: "Hydrated Metadata",
     description:
       "Practical summary of Coalesce hydrated metadata structures for advanced node payload editing",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.RUN_OPERATIONS]: {
+  {
+    uri: "coalesce://context/run-operations",
+    path: "context/run-operations.md",
     name: "Run Operations",
     description:
       "Guidance for starting, retrying, polling, diagnosing, and canceling Coalesce runs",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.NODE_TYPE_CORPUS]: {
+  {
+    uri: "coalesce://context/node-type-corpus",
+    path: "context/node-type-corpus.md",
     name: "Node Type Corpus",
     description:
       "Node type discovery, corpus search, metadata patterns (consult BEFORE creating or editing nodes)",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.AGGREGATION_PATTERNS]: {
+  {
+    uri: "coalesce://context/aggregation-patterns",
+    path: "context/aggregation-patterns.md",
     name: "Aggregation Patterns",
     description:
       "Automatic JOIN ON generation, GROUP BY detection, datatype inference, and patterns for converting joins to aggregations",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.INTELLIGENT_NODE_CONFIGURATION]: {
+  {
+    uri: "coalesce://context/intelligent-node-configuration",
+    path: "context/intelligent-node-configuration.md",
     name: "Intelligent Node Configuration",
     description:
       "How intelligent config completion works for workspace nodes, including schema resolution, intelligence rules, and automatic field detection",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.PIPELINE_WORKFLOWS]: {
+  {
+    uri: "coalesce://context/pipeline-workflows",
+    path: "context/pipeline-workflows.md",
     name: "Pipeline Workflows",
     description:
       "Building pipelines end-to-end: node type selection, multi-node sequences, incremental setup, and pipeline execution",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.NODE_OPERATIONS]: {
+  {
+    uri: "coalesce://context/node-operations",
+    path: "context/node-operations.md",
     name: "Node Operations",
     description:
       "Editing existing nodes: join conditions, column operations, config fields, rename safety, SQL-to-graph conversion, and debugging",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.NODE_TYPE_SELECTION_GUIDE]: {
+  {
+    uri: "coalesce://context/node-type-selection-guide",
+    path: "context/node-type-selection-guide.md",
     name: "Node Type Selection Guide",
     description:
       "When to use each Coalesce node type: Stage/Work for general transforms, Dimension/Fact only for dimensional modeling, and when to avoid Dynamic Tables, Incremental Loads, and other specialized patterns",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.INTENT_PIPELINE_GUIDE]: {
+  {
+    uri: "coalesce://context/intent-pipeline-guide",
+    path: "context/intent-pipeline-guide.md",
     name: "Intent Pipeline Guide",
     description:
       "How to use build_pipeline_from_intent to create pipelines from natural language descriptions, including entity resolution, operation detection, and the clarification flow",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.RUN_DIAGNOSTICS_GUIDE]: {
+  {
+    uri: "coalesce://context/run-diagnostics-guide",
+    path: "context/run-diagnostics-guide.md",
     name: "Run Diagnostics Guide",
     description:
       "How to use diagnose_run_failure to analyze failed runs, classify node-level errors, and determine actionable fixes",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.PIPELINE_REVIEW_GUIDE]: {
+  {
+    uri: "coalesce://context/pipeline-review-guide",
+    path: "context/pipeline-review-guide.md",
     name: "Pipeline Review Guide",
     description:
       "How to use review_pipeline to analyze existing pipelines for redundant nodes, missing joins, layer violations, naming issues, and optimization opportunities",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.PIPELINE_WORKSHOP_GUIDE]: {
+  {
+    uri: "coalesce://context/pipeline-workshop-guide",
+    path: "context/pipeline-workshop-guide.md",
     name: "Pipeline Workshop Guide",
     description:
       "How to use the pipeline workshop tools for iterative, conversational pipeline building with session state",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.ECOSYSTEM_BOUNDARIES]: {
+  {
+    uri: "coalesce://context/ecosystem-boundaries",
+    path: "context/ecosystem-boundaries.md",
     name: "Ecosystem Boundaries",
     description:
       "Scope of this MCP vs adjacent data engineering MCPs (Snowflake, Fivetran, dbt, Catalog) with cross-server workflow patterns",
-    mimeType: "text/markdown",
   },
-  [RESOURCES.SETUP_GUIDE]: {
+  {
+    uri: "coalesce://context/setup-guide",
+    path: "context/setup-guide.md",
     name: "Setup Guide",
     description:
       "How to walk a user through first-time Coalesce MCP setup conversationally — driven by diagnose_setup output. Load when the user is getting configured for the first time or a tool error points at missing credentials/profile/repo path.",
-    mimeType: "text/markdown",
   },
-};
+  {
+    uri: "coalesce://context/sql-node-v2-policy",
+    path: "context/sql-node-v2-policy.md",
+    name: "SQL Node V1 vs V2 Policy",
+    description:
+      "Default-V1 policy for local COA project authoring. Covers how to detect project shape, when V2 is permitted (explicit user ask + alpha warning), and the full V2 node-type + .sql file setup. Load before editing anything in a COA project on disk.",
+  },
+];
+
+const DEFAULT_MIME_TYPE = "text/markdown";
+
+// Derived lookup: URI → relative path. Exported for skills-dir seeding.
+export const RESOURCE_FILES: Record<string, string> = Object.fromEntries(
+  CONTEXT_RESOURCES.map((r) => [r.uri, r.path])
+);
+
+// Derived lookup: URI → display metadata.
+const RESOURCE_METADATA: Record<
+  string,
+  { name: string; description: string; mimeType: string }
+> = Object.fromEntries(
+  CONTEXT_RESOURCES.map((r) => [
+    r.uri,
+    {
+      name: r.name,
+      description: r.description,
+      mimeType: r.mimeType ?? DEFAULT_MIME_TYPE,
+    },
+  ])
+);
 
 export const OVERRIDE_MARKER = "<!-- OVERRIDE -->";
 const STUB_MARKER = "<!-- STUB -->";

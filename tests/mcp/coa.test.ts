@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -86,6 +86,30 @@ describe("coa_doctor handler", () => {
       coaDoctorHandler({ projectPath: "/does/not/exist-12345" }, run)
     ).rejects.toThrow(/does not exist/);
     expect(spy.calls).toHaveLength(0);
+  });
+
+  it("attaches V2_ALPHA_DETECTED preflight warning when V2 artifacts are present", async () => {
+    const v2Project = mkdtempSync(join(tmpdir(), "coa-mcp-v2-"));
+    try {
+      writeFileSync(join(v2Project, "data.yml"), "fileVersion: 3\n");
+      mkdirSync(join(v2Project, "nodeTypes", "Stage-abc"), { recursive: true });
+      writeFileSync(
+        join(v2Project, "nodeTypes", "Stage-abc", "definition.yml"),
+        "fileVersion: 2\nid: abc\n"
+      );
+      const { run } = fakeRunCoa({ stdout: '{"ok":true}' });
+      const result = await coaDoctorHandler({ projectPath: v2Project }, run);
+      const codes = (result.preflightWarnings ?? []).map((w) => w.code);
+      expect(codes).toContain("V2_ALPHA_DETECTED");
+    } finally {
+      rmSync(v2Project, { recursive: true, force: true });
+    }
+  });
+
+  it("does not attach preflight warnings for pure V1 projects", async () => {
+    const { run } = fakeRunCoa({ stdout: '{"ok":true}' });
+    const result = await coaDoctorHandler({ projectPath: tmpProject }, run);
+    expect(result.preflightWarnings).toBeUndefined();
   });
 });
 
@@ -316,8 +340,10 @@ describe("coa_create handler (destructive)", () => {
       `SELECT 1\nUNION ALL\nSELECT 2`
     );
     const { run } = fakeRunCoa();
+    // The .sql file also triggers V2_ALPHA_DETECTED (hard guard) — acknowledge
+    // to let execution proceed so we can assert UNION ALL still surfaces.
     const result = await coaCreateHandler(
-      { projectPath: projectWithWarn, confirmed: true },
+      { projectPath: projectWithWarn, confirmed: true, v2Acknowledged: true },
       run
     );
     expect(result.preflightWarnings?.map((w) => w.code)).toContain(
@@ -325,6 +351,66 @@ describe("coa_create handler (destructive)", () => {
     );
     rmSync(projectWithWarn, { recursive: true, force: true });
   });
+
+  it("blocks execution when V2 artifacts present and v2Acknowledged is not set", async () => {
+    const v2Project = mkdtempSync(join(tmpdir(), "coa-create-v2-guard-"));
+    mkdirSync(join(v2Project, "nodes"));
+    writeFileSync(join(v2Project, "data.yml"), "fileVersion: 3\n");
+    writeFileSync(join(v2Project, "workspaces.yml"), "[default]\n");
+    writeFileSync(join(v2Project, "nodes", "STG.sql"), "SELECT 1");
+    const { spy, run } = fakeRunCoa();
+    await expect(
+      coaCreateHandler({ projectPath: v2Project, confirmed: true }, run)
+    ).rejects.toThrow(/V2_ALPHA_NOT_ACKNOWLEDGED/);
+    expect(spy.calls).toHaveLength(0);
+    rmSync(v2Project, { recursive: true, force: true });
+  });
+
+  it("proceeds when V2 artifacts present and v2Acknowledged: true is set", async () => {
+    const v2Project = mkdtempSync(join(tmpdir(), "coa-create-v2-ack-"));
+    mkdirSync(join(v2Project, "nodes"));
+    writeFileSync(join(v2Project, "data.yml"), "fileVersion: 3\n");
+    writeFileSync(join(v2Project, "workspaces.yml"), "[default]\n");
+    writeFileSync(join(v2Project, "nodes", "STG.sql"), "SELECT 1");
+    const { spy, run } = fakeRunCoa();
+    const result = await coaCreateHandler(
+      { projectPath: v2Project, confirmed: true, v2Acknowledged: true },
+      run
+    );
+    expect(spy.calls).toHaveLength(1);
+    expect(result.preflightWarnings?.map((w) => w.code)).toContain(
+      "V2_ALPHA_DETECTED"
+    );
+    rmSync(v2Project, { recursive: true, force: true });
+  });
+
+  // V2_SCAN_FAILED must also trigger the hard guard — a partial scan that
+  // comes back empty because `readdir` refused is indistinguishable from a
+  // clean V1 project. Gated to POSIX non-root where chmod 0 denies readdir.
+  const canTestFsPermissionDenial =
+    process.platform !== "win32" && process.getuid?.() !== 0;
+  it.skipIf(!canTestFsPermissionDenial)(
+    "blocks execution on V2_SCAN_FAILED when v2Acknowledged is not set",
+    async () => {
+      const scanProject = mkdtempSync(join(tmpdir(), "coa-create-v2-scan-"));
+      mkdirSync(join(scanProject, "nodes"));
+      writeFileSync(join(scanProject, "data.yml"), "fileVersion: 3\n");
+      writeFileSync(join(scanProject, "workspaces.yml"), "[default]\n");
+      const locked = join(scanProject, "nodes", "locked");
+      mkdirSync(locked);
+      chmodSync(locked, 0o000);
+      const { spy, run } = fakeRunCoa();
+      try {
+        await expect(
+          coaCreateHandler({ projectPath: scanProject, confirmed: true }, run)
+        ).rejects.toThrow(/V2_ALPHA_NOT_ACKNOWLEDGED/);
+        expect(spy.calls).toHaveLength(0);
+      } finally {
+        chmodSync(locked, 0o700);
+        rmSync(scanProject, { recursive: true, force: true });
+      }
+    }
+  );
 });
 
 describe("coa_run handler (destructive)", () => {
@@ -348,6 +434,38 @@ describe("coa_run handler (destructive)", () => {
       )
     ).rejects.toThrow(/SELECTOR_COMBINED_OR/);
     expect(spy.calls).toHaveLength(0);
+  });
+
+  it("blocks execution when V2 artifacts present and v2Acknowledged is not set", async () => {
+    const v2Project = mkdtempSync(join(tmpdir(), "coa-run-v2-guard-"));
+    mkdirSync(join(v2Project, "nodes"));
+    writeFileSync(join(v2Project, "data.yml"), "fileVersion: 3\n");
+    writeFileSync(join(v2Project, "workspaces.yml"), "[default]\n");
+    writeFileSync(join(v2Project, "nodes", "STG.sql"), "SELECT 1");
+    const { spy, run } = fakeRunCoa();
+    await expect(
+      coaRunHandler({ projectPath: v2Project, confirmed: true }, run)
+    ).rejects.toThrow(/V2_ALPHA_NOT_ACKNOWLEDGED/);
+    expect(spy.calls).toHaveLength(0);
+    rmSync(v2Project, { recursive: true, force: true });
+  });
+
+  it("proceeds when V2 artifacts present and v2Acknowledged: true is set", async () => {
+    const v2Project = mkdtempSync(join(tmpdir(), "coa-run-v2-ack-"));
+    mkdirSync(join(v2Project, "nodes"));
+    writeFileSync(join(v2Project, "data.yml"), "fileVersion: 3\n");
+    writeFileSync(join(v2Project, "workspaces.yml"), "[default]\n");
+    writeFileSync(join(v2Project, "nodes", "STG.sql"), "SELECT 1");
+    const { spy, run } = fakeRunCoa();
+    const result = await coaRunHandler(
+      { projectPath: v2Project, confirmed: true, v2Acknowledged: true },
+      run
+    );
+    expect(spy.calls).toHaveLength(1);
+    expect(result.preflightWarnings?.map((w) => w.code)).toContain(
+      "V2_ALPHA_DETECTED"
+    );
+    rmSync(v2Project, { recursive: true, force: true });
   });
 });
 

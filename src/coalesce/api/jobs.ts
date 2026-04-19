@@ -14,6 +14,18 @@ export async function listEnvironmentJobs(
   );
 }
 
+export async function listWorkspaceJobs(
+  client: CoalesceClient,
+  params: { workspaceID: string; limit?: number | string }
+): Promise<unknown> {
+  const wid = validatePathSegment(params.workspaceID, "workspaceID");
+  return scanResourcesByID(
+    client,
+    `/api/v1/workspaces/${wid}/jobs`,
+    params.limit ? Number(params.limit) : undefined
+  );
+}
+
 export async function createWorkspaceJob(
   client: CoalesceClient,
   params: {

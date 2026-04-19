@@ -13,12 +13,29 @@ function createMockClient() {
   };
 }
 
-// 104 via registerTool + 3 via registerToolTask (start_run, run_and_wait, retry_and_wait).
-// 104 = 91 pre-COA + 5 read-only coa_* (Phase 2) + 1 coa_describe (Phase 3)
-//       + 6 write/destructive coa_* (Phase 4, includes coa_bootstrap_workspaces)
-//       + 1 diagnose_setup (setup helper).
-const REGISTER_TOOL_COUNT = 104;
+/**
+ * Task-based tools are registered via `registerToolTask`, which the
+ * `registerTool` spy does not catch — we assert them separately from the
+ * registered-tool snapshot below.
+ */
 const TASK_TOOL_NAMES = ["start_run", "run_and_wait", "retry_and_wait"];
+
+/**
+ * Tools whose prior presence we want to guard against regressions for — they
+ * were removed deliberately and should not silently reappear. Kept as an
+ * explicit negative list so the snapshot doesn't have to justify absences.
+ */
+const FORBIDDEN_TOOL_NAMES = [
+  // Cloud-facing coa_list_* were removed in favor of first-class REST tools.
+  "coa_list_environments",
+  "coa_list_environment_nodes",
+  "coa_list_runs",
+  // Cortex tools removed — users go via the cortex CLI directly.
+  "explore_data_source",
+  "query_snowflake",
+  "search_snowflake_objects",
+  "list_snowflake_connections",
+];
 
 describe("Tool Registration", () => {
   let server: McpServer;
@@ -36,112 +53,44 @@ describe("Tool Registration", () => {
     toolSpy = vi.spyOn(server, "registerTool");
   });
 
-  it("registers all tools", async () => {
+  it("registers the expected set of tools (snapshot)", async () => {
     const client = createMockClient();
     registerServerSurface(server, client as any);
 
-    const toolNames = toolSpy.mock.calls.map(
-      (call: unknown[]) => call[0] as string
-    );
+    const toolNames = toolSpy.mock.calls
+      .map((call: unknown[]) => call[0] as string)
+      .sort();
 
-    expect(toolSpy).toHaveBeenCalledTimes(REGISTER_TOOL_COUNT);
+    // Snapshot of the full registered-tool set. Adding or removing a tool will
+    // fail this test with a clear diff — update via `vitest -u` once the
+    // addition/removal is intentional. Prefers a snapshot over a hardcoded
+    // count so we catch silent tool-set drift, not just total count changes.
+    expect(toolNames).toMatchSnapshot("registered tool names");
 
-    // Task-based tools registered via registerToolTask (not counted by registerTool spy)
+    // Task-based tools live outside the registerTool spy path.
     const registeredTools = (server as any)._registeredTools;
     const allToolNames = Object.keys(registeredTools);
     for (const name of TASK_TOOL_NAMES) {
       expect(allToolNames).toContain(name);
     }
 
-    // Core tools present
-    expect(toolNames).toContain("list_workspaces");
-    expect(toolNames).toContain("get_workspace");
-    expect(toolNames).toContain("list_environment_jobs");
-    expect(toolNames).toContain("list_environment_jobs");
-    expect(toolNames).toContain("list_workspace_subgraphs");
-    expect(toolNames).toContain("delete_environment");
-    expect(toolNames).toContain("get_environment_job");
-    expect(toolNames).toContain("list_environments");
-    expect(toolNames).toContain("get_environment");
-    expect(toolNames).toContain("list_environment_nodes");
-    expect(toolNames).toContain("update_workspace_node");
-    expect(toolNames).toContain("create_workspace_node_from_scratch");
-    expect(toolNames).toContain("create_workspace_node_from_predecessor");
-    expect(toolNames).toContain("apply_join_condition");
-    expect(toolNames).toContain("plan_pipeline");
-    expect(toolNames).toContain("create_pipeline_from_plan");
-    expect(toolNames).toContain("build_pipeline_from_intent");
-    expect(toolNames).toContain("cancel_run");
-    expect(toolNames).toContain("get_run_details");
-    expect(toolNames).toContain("delete_project");
-    expect(toolNames).toContain("set_org_role");
-    expect(toolNames).toContain("delete_git_account");
-    expect(toolNames).toContain("search_node_type_variants");
-    expect(toolNames).toContain("generate_set_workspace_node_template_from_variant");
-    expect(toolNames).toContain("list_repo_packages");
-    expect(toolNames).toContain("list_repo_node_types");
-    expect(toolNames).toContain("get_repo_node_type_definition");
-    expect(toolNames).toContain("generate_set_workspace_node_template");
-    expect(toolNames).toContain("cache_workspace_nodes");
-    expect(toolNames).toContain("cache_environment_nodes");
-    expect(toolNames).toContain("cache_runs");
-    expect(toolNames).toContain("cache_org_users");
-    expect(toolNames).toContain("clear_data_cache");
-    expect(toolNames).toContain("analyze_workspace_patterns");
-    expect(toolNames).toContain("diagnose_run_failure");
-    expect(toolNames).toContain("review_pipeline");
-    expect(toolNames).toContain("pipeline_workshop_open");
-    expect(toolNames).toContain("pipeline_workshop_instruct");
-    expect(toolNames).toContain("get_pipeline_workshop_status");
-    expect(toolNames).toContain("pipeline_workshop_close");
-    expect(toolNames).toContain("list_workspace_node_types");
-    expect(toolNames).toContain("complete_node_configuration");
-    expect(toolNames).toContain("get_upstream_nodes");
-    expect(toolNames).toContain("get_downstream_nodes");
-    expect(toolNames).toContain("get_column_lineage");
-    expect(toolNames).toContain("analyze_impact");
-    expect(toolNames).toContain("propagate_column_change");
-    expect(toolNames).toContain("audit_documentation_coverage");
+    // Regression guards: tools that were removed on purpose should stay gone.
+    for (const name of FORBIDDEN_TOOL_NAMES) {
+      expect(toolNames).not.toContain(name);
+    }
 
-    // COA CLI tools (Phase 2 of COA integration)
-    expect(toolNames).toContain("coa_doctor");
-    expect(toolNames).toContain("coa_validate");
-    expect(toolNames).toContain("coa_list_project_nodes");
-    expect(toolNames).toContain("coa_dry_run_create");
-    expect(toolNames).toContain("coa_dry_run_run");
-    expect(toolNames).toContain("coa_describe");
-    // The cloud-facing coa_list_* tools (environments, environment_nodes,
-    // runs) were removed in favor of the first-class list_environments /
-    // list_environment_nodes / list_runs REST tools.
-    expect(toolNames).not.toContain("coa_list_environments");
-    expect(toolNames).not.toContain("coa_list_environment_nodes");
-    expect(toolNames).not.toContain("coa_list_runs");
-
-    // COA CLI write + destructive tools (Phase 4)
-    expect(toolNames).toContain("coa_create");
-    expect(toolNames).toContain("coa_run");
-    expect(toolNames).toContain("coa_plan");
-    expect(toolNames).toContain("coa_deploy");
-    expect(toolNames).toContain("coa_refresh");
-
-    // Setup helper (paired with the coalesce-setup prompt)
-    expect(toolNames).toContain("diagnose_setup");
-
-    // Cortex tools NOT registered (removed — use cortex CLI directly)
-    expect(toolNames).not.toContain("explore_data_source");
-    expect(toolNames).not.toContain("query_snowflake");
-    expect(toolNames).not.toContain("search_snowflake_objects");
-    expect(toolNames).not.toContain("list_snowflake_connections");
-
+    // Narrow annotation check — `clear_data_cache` is the canonical example of
+    // a destructive, non-idempotent local tool. If this shape drifts, the tool
+    // helper wiring has changed in a way the snapshot won't catch.
     const clearCacheCall = toolSpy.mock.calls.find(
       (call: unknown[]) => call[0] === "clear_data_cache"
     );
     expect(clearCacheCall).toBeDefined();
     expect(clearCacheCall?.[1]).toMatchObject({
       annotations: {
-      readOnlyHint: false,
-      idempotentHint: false,
-      destructiveHint: true,
+        readOnlyHint: false,
+        idempotentHint: false,
+        destructiveHint: true,
       },
     });
   });

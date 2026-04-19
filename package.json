@@ -18,7 +18,8 @@
     "import:node-type-corpus": "node scripts/import-node-type-corpus.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "preversion": "npm run build && npm audit --omit=dev",
+    "release:doctor": "node scripts/release-doctor.mjs",
+    "preversion": "npm run build && npm audit --omit=dev && npm run release:doctor",
     "version": "node scripts/sync-version.mjs && git add server.json README.md",
     "prepublishOnly": "npm run build",
     "prepare": "husky"

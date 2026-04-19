@@ -26,8 +26,8 @@ describe("Resources", () => {
   it("registers fixed context resources plus the cache resource template", () => {
     registerResources(server);
 
-    // 25 context resources + 10 coa_describe resources + 1 cache template = 36
-    expect(resourceSpy).toHaveBeenCalledTimes(36);
+    // 26 context resources + 10 coa_describe resources + 1 cache template = 37
+    expect(resourceSpy).toHaveBeenCalledTimes(37);
     const fixedResourceCalls = resourceSpy.mock.calls
       .filter((call) => typeof call[1] === "string")
       .map((call) => ({
@@ -134,6 +134,10 @@ describe("Resources", () => {
       {
         name: "Setup Guide",
         uri: "coalesce://context/setup-guide",
+      },
+      {
+        name: "SQL Node V1 vs V2 Policy",
+        uri: "coalesce://context/sql-node-v2-policy",
       },
       {
         name: "COA Describe: Overview",

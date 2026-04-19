@@ -2,6 +2,12 @@
 
 Use this resource when reading or writing full workspace node bodies.
 
+## Related resources
+
+- [`node-operations`](coalesce://context/node-operations) — task-shaped edit flows (joins, columns, renames) that call these APIs
+- [`hydrated-metadata`](coalesce://context/hydrated-metadata) — deeper metadata field reference for advanced edits
+- [`intelligent-node-configuration`](coalesce://context/intelligent-node-configuration) — automatic config completion details
+
 ## Core Rule
 
 Treat workspace node bodies as structured objects with important differences between top-level fields, `metadata`, `config`, and arrays.

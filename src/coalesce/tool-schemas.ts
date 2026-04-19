@@ -273,6 +273,39 @@ const PipelinePlanOutputSchema = z.object({
   instruction: z.string().optional(),
 }).passthrough();
 
+const JobNodeSummarySchema = z.object({
+  id: z.string().optional(),
+  name: z.string().optional(),
+  location: z.string().nullable().optional(),
+  nodeType: z.string().nullable().optional(),
+}).passthrough();
+
+const JobNodesOutputSchema = z.object({
+  job: z.object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    includeSelector: z.string().optional(),
+    excludeSelector: z.string().optional(),
+  }).passthrough().optional(),
+  summary: z.object({
+    totalNodes: z.number().optional(),
+    subgraphCount: z.number().optional(),
+    unattachedCount: z.number().optional(),
+    unresolvedCount: z.number().optional(),
+    warnings: z.array(z.string()).optional(),
+  }).passthrough().optional(),
+  nodesBySubgraph: z.array(z.object({
+    subgraphID: z.string().optional(),
+    subgraphName: z.string().optional(),
+    nodes: z.array(JobNodeSummarySchema).optional(),
+  }).passthrough()).optional(),
+  unattached: z.array(JobNodeSummarySchema).optional(),
+  unresolved: z.array(z.object({
+    term: z.unknown().optional(),
+    reason: z.string().optional(),
+  }).passthrough()).optional(),
+}).passthrough();
+
 const LineageTraversalOutputSchema = z.object({
   nodeID: z.string().optional(),
   nodeName: z.string().optional(),
@@ -700,6 +733,8 @@ export function getToolOutputSchema(toolName: string) {
       return WorkshopInstructOutputSchema;
     case "pipeline_workshop_close":
       return WorkshopCloseOutputSchema;
+    case "list_job_nodes":
+      return JobNodesOutputSchema;
     case "get_upstream_nodes":
     case "get_downstream_nodes":
       return LineageTraversalOutputSchema;

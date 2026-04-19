@@ -2,6 +2,14 @@
 
 Use this resource before creating or heavily editing workspace nodes.
 
+## Related resources
+
+- [`node-type-selection-guide`](coalesce://context/node-type-selection-guide) — when you know you need a new node but aren't sure which type fits
+- [`node-type-corpus`](coalesce://context/node-type-corpus) — repo/corpus discovery for available node types
+- [`node-operations`](coalesce://context/node-operations) — editing an **existing** node (joins, columns, renames)
+- [`pipeline-workflows`](coalesce://context/pipeline-workflows) — end-to-end multi-node builds
+- [`node-payloads`](coalesce://context/node-payloads) — body-shape rules once the tool is chosen
+
 ## Before You Start
 
 **Always check observed node types first:**

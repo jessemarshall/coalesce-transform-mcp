@@ -19,6 +19,7 @@ import {
 } from "../services/coa/describe.js";
 import {
   runPreflight,
+  detectV2Artifacts,
   CoaPreflightError,
   pathExists,
   type PreflightReport,
@@ -161,7 +162,10 @@ export async function coaDoctorHandler(
   const args = ["--json", "doctor", "--dir", cwd];
   pushIf(args, "--workspace", params.workspace);
   const result = await runCoaFn(args, { cwd, parseJson: true });
-  return buildResult(args, redactDoctorRun(result));
+  const toolResult = buildResult(args, redactDoctorRun(result));
+  const v2Issues = detectV2Artifacts(cwd);
+  if (v2Issues.length > 0) toolResult.preflightWarnings = v2Issues;
+  return toolResult;
 }
 
 /**
@@ -314,6 +318,12 @@ const ExecuteSelectorParams = SelectorParams.extend({
     .describe(
       "Set to true after the user explicitly confirms. Without this, the tool returns a STOP_AND_CONFIRM response instead of executing."
     ),
+  v2Acknowledged: z
+    .boolean()
+    .optional()
+    .describe(
+      "Required when the project contains V2 artifacts (fileVersion: 2 node types or .sql nodes). V2 is alpha — set to true only AFTER telling the user V2 is alpha, surfacing the known rough edges, and getting explicit confirmation. See coalesce://context/sql-node-v2-policy."
+    ),
 });
 
 function attachPreflightWarnings(
@@ -328,6 +338,42 @@ function runOrThrow(report: PreflightReport): void {
   if (report.errors.length > 0) throw new CoaPreflightError(report);
 }
 
+/**
+ * Block execution when preflight detected V2 artifacts OR could not rule them
+ * out, and the agent did not pass `v2Acknowledged: true`. Promotes the
+ * advisory V2_ALPHA_DETECTED / V2_SCAN_FAILED warnings into a hard error
+ * (V2_ALPHA_NOT_ACKNOWLEDGED) so `coa_create` / `coa_run` do not silently
+ * execute against a potentially-alpha project after a warning the model may
+ * have ignored.
+ *
+ * V2_SCAN_FAILED counts as "potentially V2" on purpose — an unreadable
+ * `nodes/` subtree or `nodeTypes/` dir could hide V2 artifacts, and a
+ * partial-scan pass that looks clean must not bypass the guard.
+ */
+function assertV2Acknowledged(
+  report: PreflightReport,
+  v2Acknowledged: boolean | undefined
+): void {
+  if (v2Acknowledged) return;
+  const trigger = report.warnings.find(
+    (w) => w.code === "V2_ALPHA_DETECTED" || w.code === "V2_SCAN_FAILED"
+  );
+  if (!trigger) return;
+  const retryHint =
+    "Tell the user V2 is alpha, surface the known rough edges, get explicit confirmation, then retry with v2Acknowledged: true.";
+  throw new CoaPreflightError({
+    errors: [
+      {
+        level: "error",
+        code: "V2_ALPHA_NOT_ACKNOWLEDGED",
+        message: `${trigger.message} ${retryHint}`,
+        path: trigger.path,
+      },
+    ],
+    warnings: report.warnings.filter((w) => w !== trigger),
+  });
+}
+
 export async function coaCreateHandler(
   params: z.infer<typeof ExecuteSelectorParams>,
   runCoaFn: RunCoaFn = runCoa
@@ -338,6 +384,7 @@ export async function coaCreateHandler(
     selectors: [params.include, params.exclude],
   });
   runOrThrow(report);
+  assertV2Acknowledged(report, params.v2Acknowledged);
   const args = ["create", "--dir", cwd];
   pushIf(args, "--workspace", params.workspace);
   pushIf(args, "--include", params.include);
@@ -356,6 +403,7 @@ export async function coaRunHandler(
     selectors: [params.include, params.exclude],
   });
   runOrThrow(report);
+  assertV2Acknowledged(report, params.v2Acknowledged);
   const args = ["run", "--dir", cwd];
   pushIf(args, "--workspace", params.workspace);
   pushIf(args, "--include", params.include);
@@ -482,7 +530,7 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       {
         title: "COA Doctor",
         description:
-          "Run `coa doctor` against a local COA project — checks data.yml, workspaces.yml, credentials, and warehouse connectivity.\n\nArgs:\n  - projectPath (string, required): Path to the COA project root (directory with data.yml)\n  - workspace (string, optional): workspaces.yml workspace name (default: dev)\n\nReturns:\n  { command, exitCode, stdout, stderr, timedOut, json?, coaVersion }",
+          "Run `coa doctor` against a local COA project — checks data.yml, workspaces.yml, credentials, and warehouse connectivity.\n\nKNOWN ISSUE (CD-16983): doctor reports the profile selected via `workspaces.yml` / `--workspace`, but `coa_plan` / `coa_deploy` / `coa_refresh` resolve profile differently — they fall through to the `[default]` profile in `~/.coa/config` unless `--profile` or `COALESCE_PROFILE` is set. A green doctor result does NOT guarantee that plan/deploy will authenticate against the same cloud account. When a user reports plan/deploy auth mismatches, suspect profile divergence before blaming credentials. Platform fix approach still under discussion.\n\nArgs:\n  - projectPath (string, required): Path to the COA project root (directory with data.yml)\n  - workspace (string, optional): workspaces.yml workspace name (default: dev)\n\nReturns:\n  { command, exitCode, stdout, stderr, timedOut, json?, coaVersion, preflightWarnings? }",
         inputSchema: ProjectPathParam,
         annotations: READ_ONLY_LOCAL_ANNOTATIONS,
       },
@@ -495,7 +543,7 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       {
         title: "COA Bootstrap workspaces.yml (doctor --fix)",
         description:
-          "Run `coa doctor --fix` — writes a starter `workspaces.yml` in the project root, seeded from `locations.yml`. Safe to re-run; coa will not overwrite a valid existing file.\n\nIMPORTANT: the generated file contains placeholder database/schema values. The user MUST open it and set real values before running coa_create / coa_run — otherwise warehouse operations will target non-existent databases.\n\nDESTRUCTIVE: writes a new file to the project directory. Requires confirmed=true after explicit user approval.\n\nArgs:\n  - projectPath (string, required): Path to the COA project root (directory with data.yml)\n  - workspace (string, optional): workspaces.yml workspace name (default: dev)\n  - confirmed (boolean): must be true to execute\n\nReturns:\n  { command, exitCode, stdout, stderr, json?, coaVersion }",
+          "Run `coa doctor --fix` — writes a starter `workspaces.yml` in the project root, seeded from `locations.yml`. Safe to re-run; coa will not overwrite a valid existing file.\n\nIMPORTANT: the generated file contains placeholder database/schema values. The user MUST open it and set real values before running coa_create / coa_run — otherwise warehouse operations will target non-existent databases.\n\nKNOWN ISSUE (CD-16983): the `workspaces.yml` profile controls `coa create/run`, but `coa plan/deploy/refresh` fall through to `[default]` in `~/.coa/config`. After bootstrap, check that the two profiles point at the same cloud account before relying on plan/deploy results.\n\nDESTRUCTIVE: writes a new file to the project directory. Requires confirmed=true after explicit user approval.\n\nArgs:\n  - projectPath (string, required): Path to the COA project root (directory with data.yml)\n  - workspace (string, optional): workspaces.yml workspace name (default: dev)\n  - confirmed (boolean): must be true to execute\n\nReturns:\n  { command, exitCode, stdout, stderr, json?, coaVersion }",
         inputSchema: BootstrapWorkspacesParams,
         annotations: DESTRUCTIVE_ANNOTATIONS,
         confirmMessage: (params) =>
@@ -533,7 +581,7 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       {
         title: "COA Dry Run Create (DDL preview)",
         description:
-          "Preview the DDL that `coa create` would execute, without hitting the warehouse. Forces --dry-run --verbose.\n\nRuns entirely offline against local project files — no Coalesce cloud authentication or API calls. `coa create` (and `coa run`) are the offline local-dev commands; do not confuse with the scheduler-aware `coa deploy` / `coa plan` / `coa refresh` which target cloud environments.\n\nCheck the stdout: table names should resolve (not blank), column types should not be UNKNOWN (indicates broken ref() targets), and SQL should look correct.\n\nLIMITATION: dry-run only exercises the SQL generator. It does NOT validate that referenced columns or types exist in the actual warehouse — a dry-run can succeed with column references that will fail at run-time with 'invalid identifier'. Use cortex or another Snowflake-capable MCP to confirm the schema when that matters.\n\nArgs:\n  - projectPath (string, required)\n  - workspace (string, optional)\n  - include / exclude (string, optional): Node selector\n\nReturns:\n  { command, exitCode, stdout, stderr, coaVersion }",
+          "Preview the DDL that `coa create` would execute, without hitting the warehouse. Forces --dry-run --verbose.\n\nRuns entirely offline against local project files — no Coalesce cloud authentication or API calls. `coa create` (and `coa run`) are the offline local-dev commands; do not confuse with the scheduler-aware `coa deploy` / `coa plan` / `coa refresh` which target cloud environments.\n\nOUTPUT SHAPE (CD-16959+): dry-run reports pass/fail for every selected node rather than stopping at the first template error. Scan the full stdout — a non-zero exit code means one or more nodes failed, but successful nodes still render their generated SQL above/below the failures. Do not assume early output implies all-clear.\n\nCheck the stdout: table names should resolve (not blank), column types should not be UNKNOWN (indicates broken ref() targets), and SQL should look correct.\n\nLIMITATION: dry-run only exercises the SQL generator. It does NOT validate that referenced columns or types exist in the actual warehouse — a dry-run can succeed with column references that will fail at run-time with 'invalid identifier'. Use cortex or another Snowflake-capable MCP to confirm the schema when that matters.\n\nArgs:\n  - projectPath (string, required)\n  - workspace (string, optional)\n  - include / exclude (string, optional): Node selector\n\nReturns:\n  { command, exitCode, stdout, stderr, coaVersion }",
         inputSchema: DryRunParams,
         annotations: READ_ONLY_LOCAL_ANNOTATIONS,
       },
@@ -545,7 +593,7 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       {
         title: "COA Dry Run Run (DML preview)",
         description:
-          "Preview the DML that `coa run` would execute, without hitting the warehouse. Forces --dry-run --verbose.\n\nRuns entirely offline against local project files — no Coalesce cloud authentication or API calls. `coa run` (and `coa create`) are the offline local-dev commands; do not confuse with the scheduler-aware `coa deploy` / `coa plan` / `coa refresh` which target cloud environments.\n\nLIMITATION: dry-run only exercises the SQL generator. It does NOT validate that referenced columns or types exist in the actual warehouse — a dry-run can succeed with column references that will fail at run-time with 'invalid identifier'. Use cortex or another Snowflake-capable MCP to confirm the schema when that matters.\n\nArgs:\n  - projectPath (string, required)\n  - workspace (string, optional)\n  - include / exclude (string, optional): Node selector\n\nReturns:\n  { command, exitCode, stdout, stderr, coaVersion }",
+          "Preview the DML that `coa run` would execute, without hitting the warehouse. Forces --dry-run --verbose.\n\nRuns entirely offline against local project files — no Coalesce cloud authentication or API calls. `coa run` (and `coa create`) are the offline local-dev commands; do not confuse with the scheduler-aware `coa deploy` / `coa plan` / `coa refresh` which target cloud environments.\n\nOUTPUT SHAPE (CD-16959+): dry-run reports pass/fail for every selected node rather than stopping at the first template error. Scan the full stdout — a non-zero exit code means one or more nodes failed, but successful nodes still render their generated SQL above/below the failures.\n\nLIMITATION: dry-run only exercises the SQL generator. It does NOT validate that referenced columns or types exist in the actual warehouse — a dry-run can succeed with column references that will fail at run-time with 'invalid identifier'. Use cortex or another Snowflake-capable MCP to confirm the schema when that matters.\n\nArgs:\n  - projectPath (string, required)\n  - workspace (string, optional)\n  - include / exclude (string, optional): Node selector\n\nReturns:\n  { command, exitCode, stdout, stderr, coaVersion }",
         inputSchema: DryRunParams,
         annotations: READ_ONLY_LOCAL_ANNOTATIONS,
       },
@@ -558,11 +606,11 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       {
         title: "COA Create (DDL)",
         description:
-          "Execute `coa create` — runs DDL (CREATE/REPLACE) for the selected nodes against the configured warehouse.\n\nDESTRUCTIVE: modifies warehouse schema. Requires confirmed=true after explicit user approval.\n\nPre-flight checks run before execution (double-quoted refs, missing workspaces.yml, bad selector patterns). Errors block execution; warnings are returned alongside the result.\n\nArgs:\n  - projectPath (string, required)\n  - workspace, include, exclude (optional)\n  - confirmed (boolean): must be true to execute\n\nReturns:\n  { command, exitCode, stdout, stderr, preflightWarnings?, coaVersion }",
+          "Execute `coa create` — runs DDL (CREATE/REPLACE) for the selected nodes against the configured warehouse.\n\nDESTRUCTIVE: modifies warehouse schema. Requires confirmed=true after explicit user approval.\n\nPre-flight checks run before execution (double-quoted refs, missing workspaces.yml, bad selector patterns). Errors block execution; warnings are returned alongside the result.\n\nV2 HARD GUARD: if the project contains V2 artifacts (fileVersion: 2 node types or .sql nodes), the tool refuses to execute unless `v2Acknowledged: true` is passed. V2 is alpha — set this flag ONLY after telling the user V2 is alpha, surfacing the known rough edges, and getting explicit confirmation. See coalesce://context/sql-node-v2-policy.\n\nArgs:\n  - projectPath (string, required)\n  - workspace, include, exclude (optional)\n  - confirmed (boolean): must be true to execute\n  - v2Acknowledged (boolean, optional): required when V2 artifacts are detected\n\nReturns:\n  { command, exitCode, stdout, stderr, preflightWarnings?, coaVersion }",
         inputSchema: ExecuteSelectorParams,
         annotations: DESTRUCTIVE_ANNOTATIONS,
         confirmMessage: (params) =>
-          `coa_create will execute DDL against the warehouse for project ${params.projectPath}${params.include ? ` (selector: ${params.include})` : " (all nodes)"}. This modifies schema and cannot be trivially rolled back.`,
+          `coa_create will execute DDL against the warehouse for project ${params.projectPath}${params.include ? ` (selector: ${params.include})` : " (all nodes)"}. This modifies schema and cannot be trivially rolled back.${params.v2Acknowledged ? " V2 alpha artifacts have been acknowledged." : ""}`,
       },
       coaCreateHandler
     ),
@@ -573,11 +621,11 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       {
         title: "COA Run (DML)",
         description:
-          "Execute `coa run` — runs DML (INSERT/MERGE) to populate the selected nodes.\n\nDESTRUCTIVE: modifies warehouse data. Requires confirmed=true.\n\nSame pre-flight checks as coa_create. Uses a 30-minute timeout.\n\nArgs:\n  - projectPath (string, required)\n  - workspace, include, exclude (optional)\n  - confirmed (boolean): must be true to execute\n\nReturns:\n  { command, exitCode, stdout, stderr, preflightWarnings?, coaVersion }",
+          "Execute `coa run` — runs DML (INSERT/MERGE) to populate the selected nodes.\n\nDESTRUCTIVE: modifies warehouse data. Requires confirmed=true.\n\nSame pre-flight checks and V2 HARD GUARD as coa_create — when V2 artifacts are present, `v2Acknowledged: true` is required and should only be set after the user has been told V2 is alpha. Uses a 30-minute timeout.\n\nArgs:\n  - projectPath (string, required)\n  - workspace, include, exclude (optional)\n  - confirmed (boolean): must be true to execute\n  - v2Acknowledged (boolean, optional): required when V2 artifacts are detected\n\nReturns:\n  { command, exitCode, stdout, stderr, preflightWarnings?, coaVersion }",
         inputSchema: ExecuteSelectorParams,
         annotations: DESTRUCTIVE_ANNOTATIONS,
         confirmMessage: (params) =>
-          `coa_run will execute DML against the warehouse for project ${params.projectPath}${params.include ? ` (selector: ${params.include})` : " (all nodes)"}. Tables will be truncated/inserted/merged per node config.`,
+          `coa_run will execute DML against the warehouse for project ${params.projectPath}${params.include ? ` (selector: ${params.include})` : " (all nodes)"}. Tables will be truncated/inserted/merged per node config.${params.v2Acknowledged ? " V2 alpha artifacts have been acknowledged." : ""}`,
       },
       coaRunHandler
     ),
