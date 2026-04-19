@@ -115,3 +115,37 @@ jobs:
           gh release create "${{ github.ref_name }}" "${ARGS[@]}"
         env:
           GH_TOKEN: ${{ github.token }}
+
+      # --- stable-only: keep @alpha dist-tag at least as new as @latest ---
+      # Implements "Option A" from docs/RELEASES.md after every stable ship:
+      # keep @alpha at a version at least as new as @latest so users pinning
+      # `coalesce-transform-mcp@alpha` for testing don't end up on a version
+      # strictly behind stable. Skipped when the current @alpha is on a
+      # strictly newer base version (0.N+1 cycle already in flight). The
+      # NPM_TOKEN automation token bypasses 2FA so no passkey/OTP dance.
+      - name: Advance @alpha dist-tag to stable (if no newer cycle in flight)
+        if: steps.channel.outputs.channel == 'stable'
+        run: |
+          PKG=$(node -p "require('./package.json').name")
+          STABLE="${{ steps.channel.outputs.version }}"
+          CURRENT_ALPHA=$(npm view "$PKG" dist-tags.alpha 2>/dev/null || true)
+
+          if [ -z "$CURRENT_ALPHA" ]; then
+            echo "::notice ::No @alpha dist-tag set. Pointing it at ${STABLE}."
+            npm dist-tag add "${PKG}@${STABLE}" alpha
+            exit 0
+          fi
+
+          # Strip any prerelease suffix and compare base versions via sort -V
+          # (numeric-aware, so 0.10.0 orders correctly after 0.9.0).
+          CURRENT_BASE=${CURRENT_ALPHA%%-*}
+          HIGHER=$(printf '%s\n%s\n' "$CURRENT_BASE" "$STABLE" | sort -V | tail -n 1)
+
+          if [ "$HIGHER" = "$CURRENT_BASE" ] && [ "$CURRENT_BASE" != "$STABLE" ]; then
+            echo "::notice ::@alpha (${CURRENT_ALPHA}) is on a newer base than ${STABLE}; leaving it alone."
+          else
+            echo "::notice ::Advancing @alpha from ${CURRENT_ALPHA} to ${STABLE}."
+            npm dist-tag add "${PKG}@${STABLE}" alpha
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
