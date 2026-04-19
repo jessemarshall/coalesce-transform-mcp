@@ -61,6 +61,48 @@ export function resetCoaDescribeMemoryCache(): void {
 }
 
 /**
+ * Correction banner prepended to `sql-format` output when the upstream CLI
+ * text references dbt's `source()` macro. CD-16981 tracks the upstream fix;
+ * until it ships, agents reading our `coa_describe` output get `source()`
+ * inline in example SQL and cite it back to users. We prepend a banner (never
+ * mutate the CLI output) so the correction is visible at the top of context.
+ * Exported for tests.
+ */
+export const SQL_FORMAT_DBT_SOURCE_BANNER = [
+  "> **Coalesce uses `ref()`, not dbt's `source()`.** The COA CLI output below",
+  "> currently mentions `source(...)` in examples — that is an upstream bug",
+  "> (CD-16981). In Coalesce SQL nodes, reference external tables via",
+  "> `{{ ref('LOCATION', 'NAME') }}` (single-quoted). Do not author or suggest",
+  "> `source()` — it is not a Coalesce concept.",
+  "",
+  "",
+].join("\n");
+
+/**
+ * Apply Coalesce-specific corrections to raw `coa describe` output. Runs at
+ * read time (not cache-write time) so updates to the correction logic take
+ * effect without invalidating disk caches.
+ *
+ * Exported for tests.
+ */
+export function applyCoalesceCorrections(topic: string, content: string): string {
+  // Case-insensitive `source(` match — upstream stylistic shifts (e.g.,
+  // `Source(`, markdown wrappers) should not silently drop the banner. Widening
+  // here reduces the chance of a silent correction failure if CD-16981 reshapes
+  // the CLI text before fully removing the dbt macro references.
+  if (topic === "sql-format" && /\bsource\s*\(/i.test(content)) {
+    return SQL_FORMAT_DBT_SOURCE_BANNER + content;
+  }
+  return content;
+}
+
+function withCorrections(result: FetchDescribeResult): FetchDescribeResult {
+  const corrected = applyCoalesceCorrections(result.topic, result.content);
+  if (corrected === result.content) return result;
+  return { ...result, content: corrected };
+}
+
+/**
  * Fetch a `coa describe <topic> [<subtopic>]` section. Caches results on disk
  * (keyed by COA version) and in memory.
  *
@@ -80,7 +122,7 @@ export async function fetchDescribeTopic(
 
   if (!options.refresh) {
     const memHit = memoryCache.get(cacheKey);
-    if (memHit) return { ...memHit, source: "memory" };
+    if (memHit) return withCorrections({ ...memHit, source: "memory" });
   }
 
   const diskPath = coaVersion
@@ -98,7 +140,7 @@ export async function fetchDescribeTopic(
         coaVersion,
       };
       memoryCache.set(cacheKey, result);
-      return result;
+      return withCorrections(result);
     } catch {
       // Unreadable cache entry — fall through to COA fetch.
     }
@@ -133,7 +175,7 @@ export async function fetchDescribeTopic(
     }
   }
 
-  return result;
+  return withCorrections(result);
 }
 
 function defaultGetVersion(): string | null {

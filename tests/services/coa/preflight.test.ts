@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
+  chmodSync,
   mkdtempSync,
   mkdirSync,
+  readdirSync,
   writeFileSync,
   rmSync,
 } from "node:fs";
@@ -10,6 +12,7 @@ import { join } from "node:path";
 import {
   runPreflight,
   CoaPreflightError,
+  detectV2Artifacts,
   summarizePreflight,
 } from "../../../src/services/coa/preflight.js";
 
@@ -335,6 +338,98 @@ describe("runPreflight - scan truncation", () => {
     const report = runPreflight(projectDir);
     expect(report.warnings.map((w) => w.code)).not.toContain("PREFLIGHT_SCAN_TRUNCATED");
   });
+});
+
+describe("detectV2Artifacts + V2_ALPHA_DETECTED", () => {
+  function withV2NodeType(name: string, version: number): void {
+    const dir = join(projectDir, "nodeTypes", name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "definition.yml"), `fileVersion: ${version}\nid: x\n`);
+  }
+
+  function codesOf(issues: ReturnType<typeof detectV2Artifacts>): string[] {
+    return issues.map((i) => i.code);
+  }
+
+  it("returns an empty array when neither .sql nodes nor fileVersion: 2 node types exist", () => {
+    expect(detectV2Artifacts(projectDir)).toEqual([]);
+  });
+
+  it("returns a warning when .sql nodes exist", () => {
+    withSql("TARGET-STG.sql", "SELECT 1");
+    const issues = detectV2Artifacts(projectDir);
+    expect(codesOf(issues)).toEqual(["V2_ALPHA_DETECTED"]);
+    expect(issues[0].message).toContain("1 `.sql` node");
+  });
+
+  it("returns a warning when fileVersion: 2 node types exist", () => {
+    withV2NodeType("Stage-abc", 2);
+    const issues = detectV2Artifacts(projectDir);
+    expect(codesOf(issues)).toEqual(["V2_ALPHA_DETECTED"]);
+    expect(issues[0].message).toContain("1 `fileVersion: 2` node type");
+  });
+
+  it("ignores fileVersion: 1 node types", () => {
+    withV2NodeType("Stage-v1", 1);
+    expect(detectV2Artifacts(projectDir)).toEqual([]);
+  });
+
+  it("reports both counts when both are present", () => {
+    withV2NodeType("Stage-abc", 2);
+    withSql("A.sql", "SELECT 1");
+    withSql("B.sql", "SELECT 2");
+    const issues = detectV2Artifacts(projectDir);
+    const alpha = issues.find((i) => i.code === "V2_ALPHA_DETECTED");
+    expect(alpha?.message).toContain("1 `fileVersion: 2` node type");
+    expect(alpha?.message).toContain("2 `.sql` nodes");
+    expect(alpha?.message).toContain("coalesce://context/sql-node-v2-policy");
+  });
+
+  it("is surfaced through runPreflight warnings", () => {
+    withSql("TARGET-STG.sql", "SELECT 1");
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).toContain("V2_ALPHA_DETECTED");
+  });
+
+  it("is not surfaced for pure V1 projects", () => {
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).not.toContain("V2_ALPHA_DETECTED");
+  });
+
+  // POSIX `chmod 0` removes read/exec on the dir so readdir throws EACCES.
+  // Skipped on Windows (chmod no-op) and when running as root (root bypasses
+  // POSIX DAC). Using `it.skipIf` so vitest reports this as skipped, not
+  // silently "passed" when the environment can't exercise the branch.
+  const canTestFsPermissionDenial =
+    process.platform !== "win32" && process.getuid?.() !== 0;
+
+  it.skipIf(!canTestFsPermissionDenial)(
+    "emits V2_SCAN_FAILED when a nested nodes/ dir cannot be read",
+    () => {
+      const locked = join(projectDir, "nodes", "locked");
+      mkdirSync(locked);
+      chmodSync(locked, 0o000);
+      try {
+        // Environmental sanity check: if chmod 0 doesn't actually deny readdir
+        // (e.g., overlayfs in some containers), don't assert — the branch
+        // we're testing is unreachable in this environment.
+        let canReach = false;
+        try {
+          readdirSync(locked);
+          canReach = true;
+        } catch {
+          /* expected */
+        }
+        if (canReach) return;
+        const issues = detectV2Artifacts(projectDir);
+        expect(issues.map((i) => i.code)).toContain("V2_SCAN_FAILED");
+        const scan = issues.find((i) => i.code === "V2_SCAN_FAILED");
+        expect(scan?.message).toContain("readdir failed");
+      } finally {
+        chmodSync(locked, 0o700);
+      }
+    }
+  );
 });
 
 describe("CoaPreflightError + summarizePreflight", () => {

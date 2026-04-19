@@ -32,25 +32,40 @@ type ToolDef<S extends z.ZodType> = {
 type ToolCallback = any;
 
 /**
- * Extract a workspaceID from an arbitrary tool input object so the auto-cache
- * writer can partition cached responses by workspace. Returns undefined for
- * tools whose inputs are not workspace-scoped (e.g. list_workspaces).
+ * Extract the cache scope (workspace or environment) from an arbitrary tool
+ * input object so the auto-cache writer can partition cached responses.
+ * Returns an empty object for tools whose inputs are not scoped
+ * (e.g. list_workspaces) — those fall through to the `_global` bucket.
+ *
+ * Workspace takes precedence over environment: run-task inputs can carry both,
+ * and workspace scope is the one users care about for client isolation.
  */
-function extractWorkspaceID(params: unknown): string | undefined {
+export function extractCacheScope(params: unknown): {
+  workspaceID?: string;
+  environmentID?: string;
+} {
   if (params && typeof params === "object" && !Array.isArray(params)) {
     const record = params as Record<string, unknown>;
-    const top = record.workspaceID;
-    if (typeof top === "string" && top.length > 0) return top;
+    // Workspace-scoped tools (list_workspace_nodes, get_workspace_node, etc.)
+    // carry workspaceID at the top level.
+    const topWs = record.workspaceID;
+    if (typeof topWs === "string" && topWs.length > 0) return { workspaceID: topWs };
+    // Environment-scoped tools (list_environment_nodes, get_environment_node,
+    // cancel_run, list_environment_jobs, …) carry environmentID at the top
+    // level and have no workspace to fall back to.
+    const topEnv = record.environmentID;
+    if (typeof topEnv === "string" && topEnv.length > 0) return { environmentID: topEnv };
+    // Run-task inputs bundle both IDs under `runDetails`.
     const runDetails = record.runDetails;
     if (runDetails && typeof runDetails === "object" && !Array.isArray(runDetails)) {
       const rd = runDetails as Record<string, unknown>;
       const ws = rd.workspaceID;
-      if (typeof ws === "string" && ws.length > 0) return ws;
+      if (typeof ws === "string" && ws.length > 0) return { workspaceID: ws };
       const env = rd.environmentID;
-      if (typeof env === "string" && env.length > 0) return env;
+      if (typeof env === "string" && env.length > 0) return { environmentID: env };
     }
   }
-  return undefined;
+  return {};
 }
 
 /**
@@ -76,7 +91,7 @@ export function defineSimpleTool<S extends z.ZodType>(
       try {
         const result = await apiFunc(client, params);
         return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result, {
-          workspaceID: extractWorkspaceID(params),
+          ...extractCacheScope(params),
         });
       } catch (error) {
         return handleToolError(error);
@@ -108,7 +123,7 @@ export function defineLocalTool<S extends z.ZodType>(
       try {
         const result = await handler(params);
         return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result, {
-          workspaceID: extractWorkspaceID(params),
+          ...extractCacheScope(params),
         });
       } catch (error) {
         return handleToolError(error);
@@ -149,7 +164,7 @@ export function defineDestructiveLocalTool<S extends z.ZodType>(
 
         const result = await handler(params);
         return buildJsonToolResponse(name, def.sanitize ? sanitizeResponse(result) : result, {
-          workspaceID: extractWorkspaceID(params),
+          ...extractCacheScope(params),
         });
       } catch (error) {
         return handleToolError(error);
@@ -263,7 +278,7 @@ export function defineDestructiveTool<S extends z.ZodType>(
           ? { ...(body as Record<string, unknown>), resolvedTargets: preview }
           : body;
         return buildJsonToolResponse(name, enriched, {
-          workspaceID: extractWorkspaceID(params),
+          ...extractCacheScope(params),
         });
       } catch (error) {
         return handleToolError(error);

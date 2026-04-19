@@ -13,7 +13,15 @@ export type RepoSubgraph = {
 
 function listYamlFiles(dir: string): string[] {
   const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[subgraphs] Failed to list ${dir}: ${reason}\n`);
+    return out;
+  }
+  for (const entry of entries) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...listYamlFiles(full));
@@ -25,10 +33,25 @@ function listYamlFiles(dir: string): string[] {
 }
 
 function parseSubgraphFile(filePath: string): RepoSubgraph | null {
+  let raw: string;
+  try {
+    raw = readFileSync(filePath, "utf8");
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[subgraphs] Failed to read ${filePath}: ${reason}\n`);
+    return null;
+  }
   let parsed: unknown;
   try {
-    parsed = YAML.parse(readFileSync(filePath, "utf8"));
-  } catch {
+    parsed = YAML.parse(raw);
+  } catch (err) {
+    // Surface YAML parse failures so users can see why a file was skipped —
+    // previously these were dropped silently and the missing subgraph was
+    // indistinguishable from a file that never existed.
+    const reason = err instanceof Error ? err.message : String(err);
+    process.stderr.write(
+      `[subgraphs] Skipping ${filePath}: YAML parse error — ${reason}\n`
+    );
     return null;
   }
   if (!isPlainObject(parsed)) return null;

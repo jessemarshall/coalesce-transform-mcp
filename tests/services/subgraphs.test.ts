@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -123,6 +123,42 @@ describe("subgraph cache", () => {
     removeSubgraphFromCache({ workspaceID: "ws-1", id: "sg-1" });
     expect(findSubgraphInCache({ workspaceID: "ws-1", name: "Staging" })).toBeNull();
   });
+
+  it("logs a diagnostic to stderr when the cache file is corrupt", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    // Seed a valid cache so the on-disk directory + file exist, then corrupt the file.
+    saveSubgraphToCache({ workspaceID: "ws-1", id: "sg-1", name: "Seed", steps: [] });
+    const cachePath = join(tmpCacheDir, "coalesce_transform_mcp_data_cache", "subgraphs.json");
+    writeFileSync(cachePath, "{not valid json");
+    try {
+      expect(findSubgraphInCache({ workspaceID: "ws-1", name: "Seed" })).toBeNull();
+      const joined = stderrSpy.mock.calls
+        .map((c) => (typeof c[0] === "string" ? c[0] : String(c[0])))
+        .join("");
+      expect(joined).toContain("[subgraph-cache]");
+      expect(joined).toContain("Corrupt cache");
+      expect(joined).toContain("treating as empty");
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("logs a diagnostic to stderr when the cache file has an unexpected shape", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    saveSubgraphToCache({ workspaceID: "ws-1", id: "sg-1", name: "Seed", steps: [] });
+    const cachePath = join(tmpCacheDir, "coalesce_transform_mcp_data_cache", "subgraphs.json");
+    writeFileSync(cachePath, JSON.stringify({ version: 2, entries: [] }));
+    try {
+      expect(findSubgraphInCache({ workspaceID: "ws-1", name: "Seed" })).toBeNull();
+      const joined = stderrSpy.mock.calls
+        .map((c) => (typeof c[0] === "string" ? c[0] : String(c[0])))
+        .join("");
+      expect(joined).toContain("[subgraph-cache]");
+      expect(joined).toContain("unexpected shape");
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
 });
 
 describe("repo subgraph scan", () => {
@@ -183,6 +219,88 @@ describe("repo subgraph scan", () => {
     // still just the 2 valid entries
     expect(subgraphs).toHaveLength(2);
   });
+
+  it("logs a diagnostic to stderr when a YAML file fails to parse", () => {
+    const writes: string[] = [];
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    process.stderr.write = ((chunk: any) => {
+      writes.push(typeof chunk === "string" ? chunk : String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+    writeFileSync(
+      join(repoDir, "subgraphs", "broken.yml"),
+      `id: sg-broken\nname: Broken\nsteps:\n  - n-1\n  -- invalid: syntax\n`
+    );
+    try {
+      const subgraphs = scanRepoSubgraphs(repoDir);
+      expect(subgraphs.map((s) => s.name).sort()).toEqual(["Marts", "Staging"]);
+      const joined = writes.join("");
+      expect(joined).toContain("[subgraphs]");
+      expect(joined).toContain("broken.yml");
+      expect(joined).toContain("YAML parse error");
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+  });
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "logs a diagnostic to stderr when a YAML file cannot be read",
+    () => {
+      const writes: string[] = [];
+      const originalWrite = process.stderr.write.bind(process.stderr);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      process.stderr.write = ((chunk: any) => {
+        writes.push(typeof chunk === "string" ? chunk : String(chunk));
+        return true;
+      }) as typeof process.stderr.write;
+      const unreadable = join(repoDir, "subgraphs", "unreadable.yml");
+      writeFileSync(unreadable, `id: sg-u\nname: U\nsteps: []\n`);
+      chmodSync(unreadable, 0o000);
+      try {
+        const subgraphs = scanRepoSubgraphs(repoDir);
+        expect(subgraphs.map((s) => s.name).sort()).toEqual(["Marts", "Staging"]);
+        const joined = writes.join("");
+        expect(joined).toContain("[subgraphs]");
+        expect(joined).toContain("unreadable.yml");
+        expect(joined).toContain("Failed to read");
+      } finally {
+        chmodSync(unreadable, 0o600);
+        process.stderr.write = originalWrite;
+      }
+    }
+  );
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "logs a diagnostic and keeps scanning when a subdirectory cannot be listed",
+    () => {
+      const writes: string[] = [];
+      const originalWrite = process.stderr.write.bind(process.stderr);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      process.stderr.write = ((chunk: any) => {
+        writes.push(typeof chunk === "string" ? chunk : String(chunk));
+        return true;
+      }) as typeof process.stderr.write;
+      const lockedDir = join(repoDir, "subgraphs", "locked");
+      mkdirSync(lockedDir);
+      writeFileSync(
+        join(lockedDir, "hidden.yml"),
+        `id: sg-hidden\nname: Hidden\nsteps: []\n`
+      );
+      chmodSync(lockedDir, 0o000);
+      try {
+        const subgraphs = scanRepoSubgraphs(repoDir);
+        expect(subgraphs.map((s) => s.name).sort()).toEqual(["Marts", "Staging"]);
+        const joined = writes.join("");
+        expect(joined).toContain("[subgraphs]");
+        expect(joined).toContain("locked");
+        expect(joined).toContain("Failed to list");
+      } finally {
+        chmodSync(lockedDir, 0o700);
+        process.stderr.write = originalWrite;
+      }
+    }
+  );
 });
 
 describe("resolveSubgraphByName", () => {

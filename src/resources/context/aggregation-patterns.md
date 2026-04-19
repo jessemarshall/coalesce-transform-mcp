@@ -1,5 +1,11 @@
 # Aggregation and GROUP BY Patterns
 
+## Related resources
+
+- [`node-operations`](coalesce://context/node-operations) — edit-level flows that call `convert_join_to_aggregation` / `apply_join_condition`
+- [`pipeline-workflows`](coalesce://context/pipeline-workflows) — where aggregation fits in a multi-step build
+- [`node-payloads`](coalesce://context/node-payloads) — metadata shape for `sourceMapping.join` / `columns[].transform`
+
 ## Automatic JOIN ON Generation
 
 When creating or converting multi-predecessor nodes, the system analyzes common columns between predecessors and generates JOIN ON clauses.

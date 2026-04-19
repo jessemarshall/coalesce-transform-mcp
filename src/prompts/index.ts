@@ -257,7 +257,7 @@ export function registerPrompts(server: McpServer): void {
               "- Never write to the user's shell profile or ~/.coa/config yourself. Give them the exact text to paste; they apply it.\n" +
               "- Never ask the user for their token, PAT, or passphrase in chat. Secrets belong in ~/.coa/config or the MCP client env block — never in the conversation transcript.\n" +
               "- Each restart of the MCP client ends this conversation's access to the new values. The user may need to /coalesce-setup again after each restart; diagnose_setup will confirm which step they're resuming.\n" +
-              "- COA cloud commands (coa_list_environments, coa_deploy, coa_refresh) read the same ~/.coa/config. If the user has a populated profile, those tools work automatically; pass `profile` as a tool arg only when they want a non-default one.\n" +
+              "- COA cloud commands (coa_plan, coa_deploy, coa_refresh) read the same ~/.coa/config. If the user has a populated profile, those tools work automatically; pass `profile` as a tool arg only when they want a non-default one.\n" +
               "- Read coalesce://context/overview for broader context if the user asks.\n\n" +
               "Start now by calling diagnose_setup.",
           },

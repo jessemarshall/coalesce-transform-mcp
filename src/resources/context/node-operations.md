@@ -2,6 +2,13 @@
 
 How to edit existing workspace nodes: join conditions, columns, config, renames, and SQL conversion.
 
+## Related resources
+
+- [`node-creation-decision-tree`](coalesce://context/node-creation-decision-tree) — creating a new node (use this when the target doesn't exist yet)
+- [`node-payloads`](coalesce://context/node-payloads) — full body-shape rules for reads/writes
+- [`aggregation-patterns`](coalesce://context/aggregation-patterns) — automatic JOIN ON generation and GROUP BY mechanics
+- [`hydrated-metadata`](coalesce://context/hydrated-metadata) — deeper metadata field reference
+
 ## Applying Join Conditions
 
 When `create_workspace_node_from_predecessor` returns `joinSuggestions` for a multi-predecessor node, you MUST set the join condition — without it the node fails at compile time.

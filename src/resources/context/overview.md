@@ -26,6 +26,7 @@ Consult these resources for specific guidance. Load only what the current task n
 - **coalesce://context/run-operations** — Start, retry, diagnose, and cancel runs
 - **coalesce://context/intelligent-node-configuration** — Intelligent config completion
 - **coalesce://context/setup-guide** — First-time MCP setup flow driven by `diagnose_setup` (load when the user is getting configured or a tool error points at missing credentials)
+- **coalesce://context/sql-node-v2-policy** — V1-default policy + V2 setup walkthrough for local COA projects on disk. **Load before editing anything in a COA project.** V2 is alpha — never opt a user into it silently.
 
 ### Response Guidelines
 
@@ -86,6 +87,10 @@ Config completion is automatic when `repoPath` is provided — the response incl
 3. For multi-predecessor nodes: set up the join condition via `convert_join_to_aggregation` (aggregation), `apply_join_condition` (row-level joins), or `update_workspace_node` (manual)
 4. Verify the final node with `get_workspace_node` — confirm columns, joinCondition, and config are correct
 5. Follow naming conventions: STG_ for staging, DIM_ for dimensions, FACT_ for facts, INT_ for intermediate (e.g., `STG_LOCATION`, `FACT_ORDERS`). Default to UPPERCASE for Snowflake, but **respect the user's chosen casing**
+
+**Anti-pattern — converting V1 projects/nodes to V2 uninvited:**
+
+When working in a local COA project on disk, default to V1. Do not change `data.yml` `fileVersion`, do not add `fileVersion: 2` node types, and do not rewrite `.yml` nodes as `.sql`. V2 is alpha — only proceed when the user explicitly asks AND has been warned. See `coalesce://context/sql-node-v2-policy`.
 
 **Anti-pattern — writing SQL and passing it to the planner:**
 

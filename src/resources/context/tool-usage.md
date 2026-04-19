@@ -28,7 +28,7 @@
 
 - Large list endpoints may be paginated. Do not assume one page is complete if `next` or paging cursors are present.
 - Prefer discovery first, then targeted reads.
-- Large JSON responses may be auto-cached to `coalesce_transform_mcp_data_cache/_global/auto-cache/` or a workspace-specific auto-cache bucket; the tool returns cache metadata plus a `coalesce://cache/...` resource URI and `resource_link` instead of the full payload.
+- Large JSON responses may be auto-cached under `coalesce_transform_mcp_data_cache/workspace-<id>/auto-cache/` (workspace-scoped), `coalesce_transform_mcp_data_cache/environment-<id>/auto-cache/` (environment-scoped run tasks), or `coalesce_transform_mcp_data_cache/_global/auto-cache/` (tenant-level calls like `list_workspaces`). When a tool input supplies both a workspace and an environment ID, workspace scope takes precedence. Tools return cache metadata plus a `coalesce://cache/...` resource URI and `resource_link` instead of the full payload.
 - Use explicit cache tools for large lists: `cache_workspace_nodes`, `cache_environment_nodes`, `cache_runs`, `cache_org_users`.
 
 ### Large Workspace Analysis

@@ -1,5 +1,15 @@
 # Pipeline Building Workflows
 
+End-to-end guidance for assembling multi-node pipelines.
+
+## Related resources
+
+- [`node-creation-decision-tree`](coalesce://context/node-creation-decision-tree) — per-node creation routing within a pipeline
+- [`node-type-selection-guide`](coalesce://context/node-type-selection-guide) — choosing the right node type at each step
+- [`intent-pipeline-guide`](coalesce://context/intent-pipeline-guide) — building from natural-language intent (`build_pipeline_from_intent`)
+- [`aggregation-patterns`](coalesce://context/aggregation-patterns) — GROUP BY detection + automatic JOIN ON
+- [`pipeline-review-guide`](coalesce://context/pipeline-review-guide) — auditing/reviewing an existing pipeline
+
 ## Quick Reference
 
 | User says | Node type | Action |

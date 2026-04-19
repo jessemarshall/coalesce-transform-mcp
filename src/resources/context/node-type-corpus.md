@@ -1,5 +1,13 @@
 # Node Type Discovery and Corpus
 
+Reference data for discovering which node types exist and what their configs look like.
+
+## Related resources
+
+- [`node-type-selection-guide`](coalesce://context/node-type-selection-guide) — prescriptive guidance on **which** type fits a given use case (this doc is the raw inventory)
+- [`node-creation-decision-tree`](coalesce://context/node-creation-decision-tree) — how to create a node once the type is picked
+- [`intelligent-node-configuration`](coalesce://context/intelligent-node-configuration) — how config completion uses this corpus
+
 ## Prefer Repo-Backed Discovery First
 
 **BEFORE creating or editing nodes:**

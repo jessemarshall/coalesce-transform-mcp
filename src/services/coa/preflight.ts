@@ -45,11 +45,152 @@ export function runPreflight(
     checkWorkspacesYmlShape(projectPath, warnings);
   }
   scanSqlFiles(projectPath, errors, warnings);
+  warnings.push(...detectV2Artifacts(projectPath));
   for (const selector of options.selectors ?? []) {
     checkSelector(selector, errors);
   }
 
   return { errors, warnings };
+}
+
+/**
+ * Scan for V2 artifacts (fileVersion: 2 node types, .sql nodes) and return the
+ * warnings to append. V2 is currently in the `@next` COA alpha channel — the
+ * warning points the agent at the policy resource before it edits or executes
+ * anything in a V2 project.
+ *
+ * Returns an empty array when the project is confirmed V1 (scan completed, no
+ * V2 artifacts found). Returns a `V2_SCAN_FAILED` warning when a scan failure
+ * made the counts unreliable — "couldn't read" is not the same as "nothing
+ * there," and the hard guard in coa_create/coa_run depends on this distinction.
+ *
+ * Exported so coa_doctor can attach the same warnings without running the full
+ * preflight.
+ */
+export function detectV2Artifacts(projectPath: string): PreflightIssue[] {
+  const nodeTypesResult = countV2NodeTypes(projectPath);
+  const sqlNodesResult = countSqlNodes(projectPath);
+
+  const scanErrors = [...nodeTypesResult.errors, ...sqlNodesResult.errors];
+  const totalCount = nodeTypesResult.count + sqlNodesResult.count;
+
+  const out: PreflightIssue[] = [];
+
+  if (totalCount > 0) {
+    const parts: string[] = [];
+    if (nodeTypesResult.count > 0) {
+      parts.push(
+        `${nodeTypesResult.count} \`fileVersion: 2\` node type${nodeTypesResult.count === 1 ? "" : "s"}`
+      );
+    }
+    if (sqlNodesResult.count > 0) {
+      parts.push(
+        `${sqlNodesResult.count} \`.sql\` node${sqlNodesResult.count === 1 ? "" : "s"}`
+      );
+    }
+    out.push({
+      level: "warning",
+      code: "V2_ALPHA_DETECTED",
+      message:
+        `V2 artifacts detected (${parts.join(", ")}). V2 SQL nodes + fileVersion: 2 node types ship in the \`@next\` COA channel and are not yet GA — known rough edges include silent validate false positives, UNION ALL dropped from the body, and UI/CLI divergence on required config fields. Surface this to the user before editing or executing anything V2-related. See \`coalesce://context/sql-node-v2-policy\`.`,
+      path: projectPath,
+    });
+  }
+
+  // Surface scan failures even when count > 0 — partial reads can undercount,
+  // and the hard guard should not treat a partial scan that found nothing as
+  // indistinguishable from a clean V1 project.
+  if (scanErrors.length > 0) {
+    out.push({
+      level: "warning",
+      code: "V2_SCAN_FAILED",
+      message:
+        `Could not fully scan for V2 artifacts (${scanErrors.join("; ")}). Counts may be under-reported; treat this project as potentially V2 until re-scanned. Investigate the filesystem error (permissions, broken symlink, etc.) before running coa_create / coa_run.`,
+      path: projectPath,
+    });
+  }
+
+  return out;
+}
+
+type CountResult = { count: number; errors: string[] };
+
+function countV2NodeTypes(projectPath: string): CountResult {
+  const nodeTypesDir = join(projectPath, "nodeTypes");
+  if (!existsSync(nodeTypesDir)) return { count: 0, errors: [] };
+  let entries: string[];
+  try {
+    entries = readdirSync(nodeTypesDir);
+  } catch (err) {
+    return {
+      count: 0,
+      errors: [
+        `nodeTypes/ readdir failed: ${err instanceof Error ? err.message : String(err)}`,
+      ],
+    };
+  }
+  let count = 0;
+  const errors: string[] = [];
+  for (const entry of entries) {
+    const definitionPath = join(nodeTypesDir, entry, "definition.yml");
+    if (!existsSync(definitionPath)) continue;
+    let raw: string;
+    try {
+      raw = readFileSync(definitionPath, "utf8");
+    } catch (err) {
+      errors.push(
+        `nodeTypes/${entry}/definition.yml read failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+      continue;
+    }
+    if (/^\s*fileVersion\s*:\s*2\s*$/m.test(raw)) count += 1;
+  }
+  return { count, errors };
+}
+
+function countSqlNodes(projectPath: string): CountResult {
+  const nodesDir = join(projectPath, "nodes");
+  if (!existsSync(nodesDir)) return { count: 0, errors: [] };
+  const files: string[] = [];
+  const errors: string[] = [];
+  collectSqlFilesWithErrors(nodesDir, files, errors);
+  return { count: files.length, errors };
+}
+
+function collectSqlFilesWithErrors(
+  directory: string,
+  out: string[],
+  errors: string[]
+): boolean {
+  if (out.length >= MAX_SQL_FILES_SCANNED) return true;
+  let names: string[];
+  try {
+    names = readdirSync(directory);
+  } catch (err) {
+    errors.push(
+      `${directory} readdir failed: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return false;
+  }
+  for (const name of names) {
+    if (out.length >= MAX_SQL_FILES_SCANNED) return true;
+    const entryPath = join(directory, name);
+    let stat: ReturnType<typeof statSync>;
+    try {
+      stat = statSync(entryPath);
+    } catch (err) {
+      errors.push(
+        `${entryPath} stat failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+      continue;
+    }
+    if (stat.isDirectory()) {
+      if (collectSqlFilesWithErrors(entryPath, out, errors)) return true;
+    } else if (stat.isFile() && name.endsWith(".sql")) {
+      out.push(entryPath);
+    }
+  }
+  return false;
 }
 
 /** Error codes whose fix lives in the `/coalesce-setup` flow. */

@@ -35,23 +35,46 @@ type JsonToolResponseOptions = {
   maxInlineBytes?: number;
   /**
    * Workspace identifier used to partition the on-disk auto-cache.
-   * When present, responses are written under `<cache>/<workspaceID>/auto-cache/`.
-   * When absent, they are written under `<cache>/_global/auto-cache/`.
+   * When present, responses are written under `<cache>/workspace-<id>/auto-cache/`
+   * to match the snapshot cache convention in `services/cache/snapshots.ts` and
+   * `services/lineage/lineage-cache.ts`, so every file belonging to one workspace
+   * lives under a single `workspace-<id>/` directory.
    */
   workspaceID?: string;
+  /**
+   * Environment identifier, used when a tool operates on a deployed environment
+   * rather than a workspace (the run-task family). Written under
+   * `<cache>/environment-<id>/auto-cache/`. Ignored when `workspaceID` is set —
+   * workspace scope takes precedence because dev runs carry both IDs but belong
+   * to the workspace's cache namespace.
+   * Falls through to `_global` when both are absent.
+   */
+  environmentID?: string;
 };
 
 const GLOBAL_AUTO_CACHE_BUCKET = "_global";
 
-function sanitizeWorkspaceBucket(workspaceID: string | undefined): string {
-  if (!workspaceID) return GLOBAL_AUTO_CACHE_BUCKET;
-  // Mirror the segment validation used elsewhere: strip anything that isn't a
-  // safe filesystem segment. Fall back to _global on empty/invalid input.
-  const cleaned = workspaceID.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/^[-.]+|[-.]+$/g, "");
-  if (!cleaned || cleaned === "." || cleaned === ".." || cleaned === GLOBAL_AUTO_CACHE_BUCKET) {
-    return GLOBAL_AUTO_CACHE_BUCKET;
-  }
+function sanitizeIdSegment(id: string): string {
+  // Strip anything that isn't a safe filesystem segment; collapse `.`/`..`
+  // style inputs to empty so the caller can fall back to `_global`.
+  const cleaned = id.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/^[-.]+|[-.]+$/g, "");
+  if (!cleaned || cleaned === "." || cleaned === "..") return "";
   return cleaned;
+}
+
+function buildAutoCacheBucket(opts: {
+  workspaceID?: string;
+  environmentID?: string;
+}): string {
+  if (opts.workspaceID) {
+    const cleaned = sanitizeIdSegment(opts.workspaceID);
+    if (cleaned) return `workspace-${cleaned}`;
+  }
+  if (opts.environmentID) {
+    const cleaned = sanitizeIdSegment(opts.environmentID);
+    if (cleaned) return `environment-${cleaned}`;
+  }
+  return GLOBAL_AUTO_CACHE_BUCKET;
 }
 
 function slugifyFileComponent(value: string): string {
@@ -165,9 +188,9 @@ function buildAutoCacheFilePath(
   toolName: string,
   cachedAt: string,
   baseDir: string,
-  workspaceID: string | undefined
+  scope: { workspaceID?: string; environmentID?: string }
 ): string {
-  const bucket = sanitizeWorkspaceBucket(workspaceID);
+  const bucket = buildAutoCacheBucket(scope);
   const directory = join(baseDir, CACHE_DIR_NAME, bucket, "auto-cache");
   mkdirSync(directory, { recursive: true });
   const timestamp = cachedAt.replace(/[:.]/g, "-");
@@ -295,7 +318,10 @@ export function buildJsonToolResponse(
   const cachedAt = new Date().toISOString();
   let filePath: string;
   try {
-    filePath = buildAutoCacheFilePath(toolName, cachedAt, baseDir, options.workspaceID);
+    filePath = buildAutoCacheFilePath(toolName, cachedAt, baseDir, {
+      workspaceID: options.workspaceID,
+      environmentID: options.environmentID,
+    });
     writeFileSync(filePath, `${text}\n`, "utf8");
     cleanupStaleAutoCacheFiles(dirname(filePath), baseDir);
   } catch (error) {

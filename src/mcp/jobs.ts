@@ -9,6 +9,7 @@ import {
   updateWorkspaceJob,
   deleteWorkspaceJob,
 } from "../coalesce/api/jobs.js";
+import { listJobNodes } from "../services/jobs/resolve.js";
 import {
   PaginationParams,
   READ_ONLY_ANNOTATIONS,
@@ -23,6 +24,25 @@ export function defineJobTools(
   client: CoalesceClient
 ): ToolDefinition[] {
   return [
+  defineSimpleTool(client, "list_job_nodes", {
+    title: "List Job Nodes (grouped by subgraph)",
+    description:
+      "Resolve a workspace job's selectors into concrete workspace nodes, grouped by subgraph. Composes getWorkspaceJob + listWorkspaceNodes + listWorkspaceSubgraphs and evaluates the includeSelector/excludeSelector DSL (supported clauses: { subgraph: NAME } and { location: LOC name: NAME }, joined by OR).\n\nArgs:\n  - workspaceID (string, required): The workspace that owns the job\n  - jobID (string, optional): The job ID. Preferred when known.\n  - jobName (string, optional): The job name. Resolved against workspace jobs when jobID is absent.\n\nReturns:\n  {\n    job: { id, name, includeSelector, excludeSelector },\n    summary: { totalNodes, subgraphCount, unattachedCount, unresolvedCount, warnings },\n    nodesBySubgraph: [{ subgraphID, subgraphName, nodes: [{ id, name, location, nodeType }] }],\n    unattached: [...],                       // nodes matched by the job but not in any subgraph\n    unresolved: [{ term, reason }]           // selector terms that matched nothing (stale selectors)\n  }",
+    inputSchema: z
+      .object({
+        workspaceID: z.string().describe("The workspace that owns the job"),
+        jobID: z.string().optional().describe("The job ID. Preferred when known."),
+        jobName: z
+          .string()
+          .optional()
+          .describe("The job name — resolved via listWorkspaceJobs when jobID is absent."),
+      })
+      .refine((v) => Boolean(v.jobID) || Boolean(v.jobName), {
+        message: "Either jobID or jobName is required",
+      }),
+    annotations: READ_ONLY_ANNOTATIONS,
+  }, async (client, params) => listJobNodes(client, params)),
+
   defineSimpleTool(client, "list_environment_jobs", {
     title: "List Environment Jobs",
     description:

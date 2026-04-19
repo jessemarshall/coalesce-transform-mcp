@@ -8,6 +8,8 @@ import {
   resetCoaDescribeMemoryCache,
   isCoaDescribeTopic,
   CoaDescribeError,
+  applyCoalesceCorrections,
+  SQL_FORMAT_DBT_SOURCE_BANNER,
 } from "../../../src/services/coa/describe.js";
 import type { RunCoaResult } from "../../../src/services/coa/runner.js";
 
@@ -235,5 +237,62 @@ describe("fetchDescribeTopic", () => {
     });
     expect(second.source).toBe("memory");
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe("applyCoalesceCorrections - sql-format dbt source() leak", () => {
+  it("prepends the correction banner when sql-format content mentions source(", () => {
+    const raw = [
+      "# SQL format",
+      "Use `source('raw', 'orders')` to reference external tables.",
+    ].join("\n");
+    const out = applyCoalesceCorrections("sql-format", raw);
+    expect(out.startsWith(SQL_FORMAT_DBT_SOURCE_BANNER)).toBe(true);
+    expect(out).toContain("Coalesce uses `ref()`, not dbt's `source()`");
+    // Original content is preserved verbatim after the banner.
+    expect(out).toContain(raw);
+  });
+
+  it("is a no-op when sql-format content does not mention source(", () => {
+    const raw = "# SQL format\nUse `ref('SRC', 'ORDERS')`.";
+    expect(applyCoalesceCorrections("sql-format", raw)).toBe(raw);
+  });
+
+  it("does not touch other topics even if they mention source(", () => {
+    const raw = "# Concepts\nThe source() macro comes from dbt, not Coalesce.";
+    expect(applyCoalesceCorrections("concepts", raw)).toBe(raw);
+  });
+
+  it("matches case-insensitively so `Source(` still triggers the banner", () => {
+    const raw = "# SQL format\nUse `Source('raw', 'orders')` — CLI capitalisation variant.";
+    const out = applyCoalesceCorrections("sql-format", raw);
+    expect(out.startsWith(SQL_FORMAT_DBT_SOURCE_BANNER)).toBe(true);
+  });
+
+  it("is applied through fetchDescribeTopic on the coa path", async () => {
+    const { runCoaFn } = fakeRun({
+      stdout: "# sql-format\nCall `source('raw', 'orders')` to ...",
+    });
+    const result = await fetchDescribeTopic("sql-format", {
+      runCoaFn,
+      getVersion: () => "7.0.0",
+      cacheBaseDir: cacheDir,
+    });
+    expect(result.content.startsWith(SQL_FORMAT_DBT_SOURCE_BANNER)).toBe(true);
+  });
+
+  it("disk cache stores the raw CLI content — the banner is applied at read time", async () => {
+    const { runCoaFn } = fakeRun({
+      stdout: "# sql-format\nCall `source('raw', 'orders')` ...",
+    });
+    await fetchDescribeTopic("sql-format", {
+      runCoaFn,
+      getVersion: () => "7.0.0",
+      cacheBaseDir: cacheDir,
+    });
+    const diskPath = join(cacheDir, "7.0.0", "sql-format.md");
+    const onDisk = readFileSync(diskPath, "utf8");
+    expect(onDisk.startsWith(SQL_FORMAT_DBT_SOURCE_BANNER)).toBe(false);
+    expect(onDisk).toContain("source('raw', 'orders')");
   });
 });

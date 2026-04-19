@@ -8,7 +8,7 @@ import {
   sanitizeResponse,
   getToolOutputSchema,
 } from "../coalesce/types.js";
-import { retryAndWait } from "../workflows/retry-and-wait.js";
+import { retryAndWait, extractResultScope } from "../workflows/retry-and-wait.js";
 
 const RetryAndWaitTaskInput = RerunParams.extend({
   pollInterval: z
@@ -52,7 +52,7 @@ export function registerRetryAndWaitTask(
               signal: extra.signal,
             });
             const sanitized = sanitizeResponse(result);
-            const response = buildJsonToolResponse("retry_and_wait", sanitized);
+            const response = buildJsonToolResponse("retry_and_wait", sanitized, extractResultScope(sanitized));
             await extra.taskStore.storeTaskResult(
               task.taskId,
               "completed",

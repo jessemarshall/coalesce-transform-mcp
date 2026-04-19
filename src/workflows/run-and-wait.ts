@@ -63,7 +63,7 @@ export async function runAndWait(
   for (const w of [pollClamped.warning, timeoutClamped.warning]) {
     if (w) {
       if (reportProgress) await reportProgress(w);
-      else console.warn(`[run_and_wait] ${w}`);
+      else process.stderr.write(`[run_and_wait] ${w}\n`);
     }
   }
 
@@ -119,8 +119,8 @@ export function registerRunAndWait(server: McpServer, client: CoalesceClient): v
           reportProgress: progressReporter,
         });
         return buildJsonToolResponse("run_and_wait", sanitizeResponse(result), {
-          workspaceID:
-            params.runDetails?.workspaceID ?? params.runDetails?.environmentID,
+          workspaceID: params.runDetails?.workspaceID,
+          environmentID: params.runDetails?.environmentID,
         });
       } catch (error) {
         return handleToolError(error);

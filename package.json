@@ -1,6 +1,6 @@
 {
   "name": "coalesce-transform-mcp",
-  "version": "0.6.0",
+  "version": "0.7.0-alpha.0",
   "mcpName": "io.github.jessemarshall/coalesce-transform",
   "description": "MCP server for the Coalesce Transform API; run tools support Snowflake Key Pair and PAT auth",
   "main": "dist/index.js",
@@ -18,7 +18,8 @@
     "import:node-type-corpus": "node scripts/import-node-type-corpus.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "preversion": "npm run build && npm audit --omit=dev",
+    "release:doctor": "node scripts/release-doctor.mjs",
+    "preversion": "npm run build && npm audit --omit=dev && npm run release:doctor",
     "version": "node scripts/sync-version.mjs && git add server.json README.md",
     "prepublishOnly": "npm run build",
     "prepare": "husky"

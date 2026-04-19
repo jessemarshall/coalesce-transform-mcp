@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -8,9 +8,6 @@ import {
   coaListProjectNodesHandler,
   coaDryRunCreateHandler,
   coaDryRunRunHandler,
-  coaListEnvironmentsHandler,
-  coaListEnvironmentNodesHandler,
-  coaListRunsHandler,
   coaDescribeHandler,
   coaCreateHandler,
   coaRunHandler,
@@ -89,6 +86,30 @@ describe("coa_doctor handler", () => {
       coaDoctorHandler({ projectPath: "/does/not/exist-12345" }, run)
     ).rejects.toThrow(/does not exist/);
     expect(spy.calls).toHaveLength(0);
+  });
+
+  it("attaches V2_ALPHA_DETECTED preflight warning when V2 artifacts are present", async () => {
+    const v2Project = mkdtempSync(join(tmpdir(), "coa-mcp-v2-"));
+    try {
+      writeFileSync(join(v2Project, "data.yml"), "fileVersion: 3\n");
+      mkdirSync(join(v2Project, "nodeTypes", "Stage-abc"), { recursive: true });
+      writeFileSync(
+        join(v2Project, "nodeTypes", "Stage-abc", "definition.yml"),
+        "fileVersion: 2\nid: abc\n"
+      );
+      const { run } = fakeRunCoa({ stdout: '{"ok":true}' });
+      const result = await coaDoctorHandler({ projectPath: v2Project }, run);
+      const codes = (result.preflightWarnings ?? []).map((w) => w.code);
+      expect(codes).toContain("V2_ALPHA_DETECTED");
+    } finally {
+      rmSync(v2Project, { recursive: true, force: true });
+    }
+  });
+
+  it("does not attach preflight warnings for pure V1 projects", async () => {
+    const { run } = fakeRunCoa({ stdout: '{"ok":true}' });
+    const result = await coaDoctorHandler({ projectPath: tmpProject }, run);
+    expect(result.preflightWarnings).toBeUndefined();
   });
 });
 
@@ -184,153 +205,6 @@ describe("coa_dry_run_run handler", () => {
     await coaDryRunRunHandler({ projectPath: tmpProject }, run);
     expect(spy.calls[0].args).toContain("run");
     expect(spy.calls[0].args).toContain("--dry-run");
-  });
-});
-
-describe("coa_list_environments handler", () => {
-  it("uses --format json --skipConfirm and does not require a project path", async () => {
-    const { spy, run } = fakeRunCoa({ stdout: "[]" });
-    const result = await coaListEnvironmentsHandler({}, run);
-    expect(spy.calls[0].args).toEqual([
-      "environments",
-      "list",
-      "--format",
-      "json",
-      "--skipConfirm",
-    ]);
-    expect(spy.calls[0].cwd).toBeUndefined();
-    expect(spy.calls[0].parseJson).toBe(true);
-    expect(result.exitCode).toBe(0);
-  });
-
-  it("passes optional flags", async () => {
-    const { spy, run } = fakeRunCoa();
-    await coaListEnvironmentsHandler(
-      {
-        detail: true,
-        limit: 25,
-        startingFrom: "cursor-x",
-        orderBy: "name",
-        profile: "staging",
-        token: "tok",
-      },
-      run
-    );
-    const args = spy.calls[0].args;
-    expect(args).toContain("--detail");
-    expect(args).toEqual(
-      expect.arrayContaining([
-        "--limit",
-        "25",
-        "--startingFrom",
-        "cursor-x",
-        "--orderBy",
-        "name",
-        "--profile",
-        "staging",
-        "--token",
-        "tok",
-      ])
-    );
-  });
-
-  it("falls back to COALESCE_PROFILE when no profile is passed", async () => {
-    vi.stubEnv("COALESCE_PROFILE", "MEDBASE");
-    const { spy, run } = fakeRunCoa();
-    await coaListEnvironmentsHandler({}, run);
-    expect(spy.calls[0].args).toEqual(
-      expect.arrayContaining(["--profile", "MEDBASE"])
-    );
-    vi.unstubAllEnvs();
-  });
-
-  it("prefers tool input profile over COALESCE_PROFILE", async () => {
-    vi.stubEnv("COALESCE_PROFILE", "MEDBASE");
-    const { spy, run } = fakeRunCoa();
-    await coaListEnvironmentsHandler({ profile: "staging" }, run);
-    const args = spy.calls[0].args;
-    expect(args).toEqual(expect.arrayContaining(["--profile", "staging"]));
-    expect(args).not.toContain("MEDBASE");
-    vi.unstubAllEnvs();
-  });
-});
-
-describe("coa_list_environment_nodes handler", () => {
-  it("requires environmentID and passes it through", async () => {
-    const { spy, run } = fakeRunCoa({ stdout: "[]" });
-    await coaListEnvironmentNodesHandler({ environmentID: "env-42" }, run);
-    expect(spy.calls[0].args).toEqual(
-      expect.arrayContaining([
-        "nodes",
-        "list",
-        "--format",
-        "json",
-        "--skipConfirm",
-        "--environmentID",
-        "env-42",
-      ])
-    );
-  });
-
-  it("passes --skipParsing when requested", async () => {
-    const { spy, run } = fakeRunCoa();
-    await coaListEnvironmentNodesHandler(
-      { environmentID: "env-1", skipParsing: true },
-      run
-    );
-    expect(spy.calls[0].args).toContain("--skipParsing");
-  });
-});
-
-describe("coa_list_runs handler", () => {
-  it("rejects when neither environmentID nor allEnvironments is set", async () => {
-    const { spy, run } = fakeRunCoa();
-    await expect(coaListRunsHandler({}, run)).rejects.toThrow(
-      /environmentID or allEnvironments/
-    );
-    expect(spy.calls).toHaveLength(0);
-  });
-
-  it("passes allEnvironments without environmentID", async () => {
-    const { spy, run } = fakeRunCoa({ stdout: "[]" });
-    await coaListRunsHandler({ allEnvironments: true }, run);
-    const args = spy.calls[0].args;
-    expect(args).toContain("--allEnvironments");
-    expect(args).not.toContain("--environmentID");
-  });
-
-  it("passes array filters as repeated flags", async () => {
-    const { spy, run } = fakeRunCoa();
-    await coaListRunsHandler(
-      {
-        environmentID: "env-1",
-        projectID: ["p1", "p2"],
-        runType: ["scheduled"],
-        runStatus: ["failed", "running"],
-      },
-      run
-    );
-    const args = spy.calls[0].args;
-    // Count occurrences of each flag.
-    const countOf = (flag: string) => args.filter((a) => a === flag).length;
-    expect(countOf("--projectID")).toBe(2);
-    expect(countOf("--runType")).toBe(1);
-    expect(countOf("--runStatus")).toBe(2);
-    // And the values follow.
-    expect(args).toEqual(
-      expect.arrayContaining([
-        "--projectID",
-        "p1",
-        "--projectID",
-        "p2",
-        "--runType",
-        "scheduled",
-        "--runStatus",
-        "failed",
-        "--runStatus",
-        "running",
-      ])
-    );
   });
 });
 
@@ -466,8 +340,10 @@ describe("coa_create handler (destructive)", () => {
       `SELECT 1\nUNION ALL\nSELECT 2`
     );
     const { run } = fakeRunCoa();
+    // The .sql file also triggers V2_ALPHA_DETECTED (hard guard) — acknowledge
+    // to let execution proceed so we can assert UNION ALL still surfaces.
     const result = await coaCreateHandler(
-      { projectPath: projectWithWarn, confirmed: true },
+      { projectPath: projectWithWarn, confirmed: true, v2Acknowledged: true },
       run
     );
     expect(result.preflightWarnings?.map((w) => w.code)).toContain(
@@ -475,6 +351,66 @@ describe("coa_create handler (destructive)", () => {
     );
     rmSync(projectWithWarn, { recursive: true, force: true });
   });
+
+  it("blocks execution when V2 artifacts present and v2Acknowledged is not set", async () => {
+    const v2Project = mkdtempSync(join(tmpdir(), "coa-create-v2-guard-"));
+    mkdirSync(join(v2Project, "nodes"));
+    writeFileSync(join(v2Project, "data.yml"), "fileVersion: 3\n");
+    writeFileSync(join(v2Project, "workspaces.yml"), "[default]\n");
+    writeFileSync(join(v2Project, "nodes", "STG.sql"), "SELECT 1");
+    const { spy, run } = fakeRunCoa();
+    await expect(
+      coaCreateHandler({ projectPath: v2Project, confirmed: true }, run)
+    ).rejects.toThrow(/V2_ALPHA_NOT_ACKNOWLEDGED/);
+    expect(spy.calls).toHaveLength(0);
+    rmSync(v2Project, { recursive: true, force: true });
+  });
+
+  it("proceeds when V2 artifacts present and v2Acknowledged: true is set", async () => {
+    const v2Project = mkdtempSync(join(tmpdir(), "coa-create-v2-ack-"));
+    mkdirSync(join(v2Project, "nodes"));
+    writeFileSync(join(v2Project, "data.yml"), "fileVersion: 3\n");
+    writeFileSync(join(v2Project, "workspaces.yml"), "[default]\n");
+    writeFileSync(join(v2Project, "nodes", "STG.sql"), "SELECT 1");
+    const { spy, run } = fakeRunCoa();
+    const result = await coaCreateHandler(
+      { projectPath: v2Project, confirmed: true, v2Acknowledged: true },
+      run
+    );
+    expect(spy.calls).toHaveLength(1);
+    expect(result.preflightWarnings?.map((w) => w.code)).toContain(
+      "V2_ALPHA_DETECTED"
+    );
+    rmSync(v2Project, { recursive: true, force: true });
+  });
+
+  // V2_SCAN_FAILED must also trigger the hard guard — a partial scan that
+  // comes back empty because `readdir` refused is indistinguishable from a
+  // clean V1 project. Gated to POSIX non-root where chmod 0 denies readdir.
+  const canTestFsPermissionDenial =
+    process.platform !== "win32" && process.getuid?.() !== 0;
+  it.skipIf(!canTestFsPermissionDenial)(
+    "blocks execution on V2_SCAN_FAILED when v2Acknowledged is not set",
+    async () => {
+      const scanProject = mkdtempSync(join(tmpdir(), "coa-create-v2-scan-"));
+      mkdirSync(join(scanProject, "nodes"));
+      writeFileSync(join(scanProject, "data.yml"), "fileVersion: 3\n");
+      writeFileSync(join(scanProject, "workspaces.yml"), "[default]\n");
+      const locked = join(scanProject, "nodes", "locked");
+      mkdirSync(locked);
+      chmodSync(locked, 0o000);
+      const { spy, run } = fakeRunCoa();
+      try {
+        await expect(
+          coaCreateHandler({ projectPath: scanProject, confirmed: true }, run)
+        ).rejects.toThrow(/V2_ALPHA_NOT_ACKNOWLEDGED/);
+        expect(spy.calls).toHaveLength(0);
+      } finally {
+        chmodSync(locked, 0o700);
+        rmSync(scanProject, { recursive: true, force: true });
+      }
+    }
+  );
 });
 
 describe("coa_run handler (destructive)", () => {
@@ -498,6 +434,38 @@ describe("coa_run handler (destructive)", () => {
       )
     ).rejects.toThrow(/SELECTOR_COMBINED_OR/);
     expect(spy.calls).toHaveLength(0);
+  });
+
+  it("blocks execution when V2 artifacts present and v2Acknowledged is not set", async () => {
+    const v2Project = mkdtempSync(join(tmpdir(), "coa-run-v2-guard-"));
+    mkdirSync(join(v2Project, "nodes"));
+    writeFileSync(join(v2Project, "data.yml"), "fileVersion: 3\n");
+    writeFileSync(join(v2Project, "workspaces.yml"), "[default]\n");
+    writeFileSync(join(v2Project, "nodes", "STG.sql"), "SELECT 1");
+    const { spy, run } = fakeRunCoa();
+    await expect(
+      coaRunHandler({ projectPath: v2Project, confirmed: true }, run)
+    ).rejects.toThrow(/V2_ALPHA_NOT_ACKNOWLEDGED/);
+    expect(spy.calls).toHaveLength(0);
+    rmSync(v2Project, { recursive: true, force: true });
+  });
+
+  it("proceeds when V2 artifacts present and v2Acknowledged: true is set", async () => {
+    const v2Project = mkdtempSync(join(tmpdir(), "coa-run-v2-ack-"));
+    mkdirSync(join(v2Project, "nodes"));
+    writeFileSync(join(v2Project, "data.yml"), "fileVersion: 3\n");
+    writeFileSync(join(v2Project, "workspaces.yml"), "[default]\n");
+    writeFileSync(join(v2Project, "nodes", "STG.sql"), "SELECT 1");
+    const { spy, run } = fakeRunCoa();
+    const result = await coaRunHandler(
+      { projectPath: v2Project, confirmed: true, v2Acknowledged: true },
+      run
+    );
+    expect(spy.calls).toHaveLength(1);
+    expect(result.preflightWarnings?.map((w) => w.code)).toContain(
+      "V2_ALPHA_DETECTED"
+    );
+    rmSync(v2Project, { recursive: true, force: true });
   });
 });
 
@@ -623,8 +591,8 @@ describe("coa_refresh handler (destructive)", () => {
 describe("token redaction", () => {
   it("does not echo --token value back in result.command", async () => {
     const { run } = fakeRunCoa({ stdout: "[]" });
-    const result = await coaListEnvironmentsHandler(
-      { token: "SUPER-SECRET-TOKEN-12345" },
+    const result = await coaRefreshHandler(
+      { environmentID: "env-1", token: "SUPER-SECRET-TOKEN-12345", confirmed: true },
       run
     );
     expect(result.command).not.toContain("SUPER-SECRET-TOKEN-12345");
@@ -680,10 +648,13 @@ describe("result shape", () => {
       stderr: "warn-x",
       exitCode: 0,
     });
-    const result = await coaListEnvironmentsHandler({}, async (args, opts) => {
-      const r = await run(args, opts);
-      return { ...r, json: { hello: "world" } } as RunCoaResult;
-    });
+    const result = await coaListProjectNodesHandler(
+      { projectPath: tmpProject },
+      async (args, opts) => {
+        const r = await run(args, opts);
+        return { ...r, json: { hello: "world" } } as RunCoaResult;
+      }
+    );
     expect(result).toMatchObject({
       exitCode: 0,
       stdout: '{"hello":"world"}',
@@ -691,7 +662,7 @@ describe("result shape", () => {
       timedOut: false,
       json: { hello: "world" },
     });
-    expect(result.command).toContain("coa environments list");
+    expect(result.command).toContain("coa --json create");
   });
 
   it("passes jsonParseError through when COA stdout is not JSON", async () => {
@@ -702,7 +673,10 @@ describe("result shape", () => {
       stderr: "",
       jsonParseError: "Unexpected token",
     }) satisfies RunCoaResult;
-    const result = await coaListEnvironmentsHandler({}, run);
+    const result = await coaListProjectNodesHandler(
+      { projectPath: tmpProject },
+      run
+    );
     expect(result.jsonParseError).toBe("Unexpected token");
   });
 });
@@ -729,21 +703,6 @@ describe("COALESCE_PROFILE fallback — shared across all cloud handlers", () =>
     handler: (params: any, runCoaFn: any) => Promise<unknown>;
     minimalInput: () => Record<string, unknown>;
   }> = [
-    {
-      name: "coa_list_environments",
-      handler: coaListEnvironmentsHandler,
-      minimalInput: () => ({}),
-    },
-    {
-      name: "coa_list_environment_nodes",
-      handler: coaListEnvironmentNodesHandler,
-      minimalInput: () => ({ environmentID: "env-1" }),
-    },
-    {
-      name: "coa_list_runs",
-      handler: coaListRunsHandler,
-      minimalInput: () => ({ environmentID: "env-1" }),
-    },
     {
       name: "coa_plan",
       handler: coaPlanHandler,

@@ -2,6 +2,12 @@
 
 When creating pipeline nodes, choose the node type based on the actual purpose of the node — not the SQL pattern.
 
+## Related resources
+
+- [`node-type-corpus`](coalesce://context/node-type-corpus) — inventory/discovery of available node types (this doc is the prescriptive layer)
+- [`node-creation-decision-tree`](coalesce://context/node-creation-decision-tree) — how to create a node once you've chosen a type
+- [`pipeline-workflows`](coalesce://context/pipeline-workflows) — layered architecture context for multi-step pipelines
+
 ## General-Purpose Node Types (use for most transforms)
 
 ### Stage / Work
