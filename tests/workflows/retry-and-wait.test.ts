@@ -490,6 +490,15 @@ describe("extractResultScope", () => {
     ).toEqual({ workspaceID: "ws-1" });
   });
 
+  it("prefers nested workspaceID over top-level environmentID", () => {
+    expect(
+      extractResultScope({
+        environmentID: "env-top",
+        status: { workspaceID: "ws-nested" },
+      })
+    ).toEqual({ workspaceID: "ws-nested" });
+  });
+
   it("returns empty when no recognizable IDs are found", () => {
     expect(extractResultScope({ status: { runStatus: "completed" }, results: [] })).toEqual({});
     expect(extractResultScope(null)).toEqual({});

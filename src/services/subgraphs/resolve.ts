@@ -3,7 +3,7 @@ import { isPlainObject } from "../../utils.js";
 import { listWorkspaceSubgraphs } from "../../coalesce/api/subgraphs.js";
 import { resolveOptionalRepoPathInput } from "../repo/path.js";
 import { findSubgraphInCache, saveSubgraphToCache } from "./cache.js";
-import { findRepoSubgraphByName, scanRepoSubgraphs } from "./repo-scan.js";
+import { scanRepoSubgraphs } from "./repo-scan.js";
 
 export type ResolvedSubgraph = {
   id: string;
@@ -36,17 +36,19 @@ export async function resolveSubgraphByName(
   }
 
   const repoPath = resolveOptionalRepoPathInput(params.repoPath);
-  if (repoPath) {
-    const repoMatch = findRepoSubgraphByName(repoPath, params.name);
-    if (repoMatch) {
-      saveSubgraphToCache({
-        workspaceID: params.workspaceID,
-        id: repoMatch.id,
-        name: repoMatch.name,
-        steps: repoMatch.steps,
-      });
-      return { id: repoMatch.id, name: repoMatch.name, source: "repo" };
-    }
+  // Scan the repo once and reuse both for the fast-path match and the
+  // not-found error listing — avoids a second scan + duplicate stderr on
+  // corrupt/unparseable YAML files in large repos.
+  const repoMatches = repoPath ? scanRepoSubgraphs(repoPath) : [];
+  const repoMatch = repoMatches.find((s) => s.name === params.name);
+  if (repoMatch) {
+    saveSubgraphToCache({
+      workspaceID: params.workspaceID,
+      id: repoMatch.id,
+      name: repoMatch.name,
+      steps: repoMatch.steps,
+    });
+    return { id: repoMatch.id, name: repoMatch.name, source: "repo" };
   }
 
   const listResponse = await listWorkspaceSubgraphs(client, {
@@ -78,7 +80,7 @@ export async function resolveSubgraphByName(
   }
 
   const availableNames = matches.map((m) => m.name);
-  const repoNames = repoPath ? scanRepoSubgraphs(repoPath).map((s) => s.name) : [];
+  const repoNames = repoMatches.map((s) => s.name);
   const combined = Array.from(new Set([...availableNames, ...repoNames]));
   const listing = combined.length > 0
     ? `Available: ${combined.slice(0, 20).join(", ")}${combined.length > 20 ? ", ..." : ""}`

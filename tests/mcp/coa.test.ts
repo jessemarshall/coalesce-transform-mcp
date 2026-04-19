@@ -500,6 +500,22 @@ describe("coa_plan handler", () => {
     );
   });
 
+  it("blocks plan when V2 artifacts present and v2Acknowledged is not set", async () => {
+    const v2Project = mkdtempSync(join(tmpdir(), "coa-plan-v2-guard-"));
+    mkdirSync(join(v2Project, "nodes"));
+    writeFileSync(join(v2Project, "data.yml"), "fileVersion: 3\n");
+    writeFileSync(join(v2Project, "nodes", "STG.sql"), "SELECT 1");
+    const { spy, run } = fakeRunCoa();
+    await expect(
+      coaPlanHandler(
+        { projectPath: v2Project, environmentID: "env-1" },
+        run
+      )
+    ).rejects.toThrow(/V2_ALPHA_NOT_ACKNOWLEDGED/);
+    expect(spy.calls).toHaveLength(0);
+    rmSync(v2Project, { recursive: true, force: true });
+  });
+
   it("does not set --enableCache when false/unset", async () => {
     const { spy, run } = fakeRunCoa();
     await coaPlanHandler(
