@@ -28,11 +28,11 @@ jobs:
 
       - name: Determine release channel
         id: channel
-        # Routes each tag push to either the alpha or stable lane based on the
-        # package.json version string. Alpha releases (e.g. 0.5.0-alpha.2) get
-        # published to the `alpha` npm dist-tag, marked prerelease on GitHub,
-        # and skip the MCP Registry. Stable releases (e.g. 0.5.0) use the default
-        # `latest` dist-tag and publish everywhere.
+        # Routes each tag push to either the preview or stable lane based on the
+        # package.json version string. Preview releases (e.g. 0.5.0-preview.2)
+        # get published to the `preview` npm dist-tag, marked prerelease on
+        # GitHub, and skip the MCP Registry. Stable releases (e.g. 0.5.0) use
+        # the default `latest` dist-tag and publish everywhere.
         run: |
           VERSION=$(node -p "require('./package.json').version")
           TAG_VERSION="${GITHUB_REF_NAME#v}"
@@ -42,19 +42,19 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           # Whitelist exact shapes so unrecognized prerelease identifiers
-          # (e.g. -beta.1, -rc.0, typos like -alph.1) never silently ship to
+          # (e.g. -beta.1, -rc.0, typos like -prevew.1) never silently ship to
           # the stable dist-tag. Stable is MAJOR.MINOR.PATCH with no suffix;
-          # alpha is MAJOR.MINOR.PATCH-alpha.N; anything else fails the build.
+          # preview is MAJOR.MINOR.PATCH-preview.N; anything else fails the build.
           if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "channel=stable" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
             echo "npm_tag=latest" >> "$GITHUB_OUTPUT"
-          elif [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$ ]]; then
-            echo "channel=alpha" >> "$GITHUB_OUTPUT"
+          elif [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+$ ]]; then
+            echo "channel=preview" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
-            echo "npm_tag=alpha" >> "$GITHUB_OUTPUT"
+            echo "npm_tag=preview" >> "$GITHUB_OUTPUT"
           else
-            echo "::error ::Unrecognized version shape '$VERSION'. Expected X.Y.Z (stable) or X.Y.Z-alpha.N (alpha)."
+            echo "::error ::Unrecognized version shape '$VERSION'. Expected X.Y.Z (stable) or X.Y.Z-preview.N (preview)."
             exit 1
           fi
           echo "Version: $VERSION"
@@ -105,7 +105,7 @@ jobs:
         if: steps.channel.outputs.channel == 'stable'
         run: ./mcp-publisher publish
 
-      # --- both channels: GitHub Release (marked prerelease for alphas) ---
+      # --- both channels: GitHub Release (marked prerelease for previews) ---
       - name: Create GitHub Release
         run: |
           ARGS=(--title "${{ github.ref_name }}" --generate-notes)
@@ -116,38 +116,38 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      # --- stable-only: keep @alpha dist-tag at least as new as @latest ---
+      # --- stable-only: keep @preview dist-tag at least as new as @latest ---
       # Implements "Option A" from docs/RELEASES.md after every stable ship:
-      # keep @alpha at a version at least as new as @latest so users pinning
-      # `coalesce-transform-mcp@alpha` for testing don't end up on a version
-      # strictly behind stable. Skipped when the current @alpha is on a
+      # keep @preview at a version at least as new as @latest so users pinning
+      # `coalesce-transform-mcp@preview` for testing don't end up on a version
+      # strictly behind stable. Skipped when the current @preview is on a
       # strictly newer base version (0.N+1 cycle already in flight). The
       # NPM_TOKEN automation token bypasses 2FA so no passkey/OTP dance.
-      - name: Advance @alpha dist-tag to stable (if no newer cycle in flight)
+      - name: Advance @preview dist-tag to stable (if no newer cycle in flight)
         if: steps.channel.outputs.channel == 'stable'
         run: |
           PKG=$(node -p "require('./package.json').name")
           STABLE="${{ steps.channel.outputs.version }}"
-          CURRENT_ALPHA=$(npm view "$PKG" dist-tags.alpha 2>/dev/null || true)
+          CURRENT_PREVIEW=$(npm view "$PKG" dist-tags.preview 2>/dev/null || true)
 
-          if [ -z "$CURRENT_ALPHA" ]; then
-            echo "::notice ::No @alpha dist-tag set. Pointing it at ${STABLE}."
-            npm dist-tag add "${PKG}@${STABLE}" alpha
+          if [ -z "$CURRENT_PREVIEW" ]; then
+            echo "::notice ::No @preview dist-tag set. Pointing it at ${STABLE}."
+            npm dist-tag add "${PKG}@${STABLE}" preview
             exit 0
           fi
 
           # Strip any prerelease suffix and compare base versions via sort -V
           # (numeric-aware, so 0.10.0 orders correctly after 0.9.0).
-          CURRENT_BASE=${CURRENT_ALPHA%%-*}
+          CURRENT_BASE=${CURRENT_PREVIEW%%-*}
           HIGHER=$(printf '%s\n%s\n' "$CURRENT_BASE" "$STABLE" | sort -V | tail -n 1)
 
           if [ "$HIGHER" = "$CURRENT_BASE" ] && [ "$CURRENT_BASE" != "$STABLE" ]; then
-            echo "::notice ::@alpha (${CURRENT_ALPHA}) is on a newer base than ${STABLE}; leaving it alone."
-          elif [ "$CURRENT_ALPHA" = "$STABLE" ]; then
-            echo "::notice ::@alpha is already at ${STABLE}; no-op."
+            echo "::notice ::@preview (${CURRENT_PREVIEW}) is on a newer base than ${STABLE}; leaving it alone."
+          elif [ "$CURRENT_PREVIEW" = "$STABLE" ]; then
+            echo "::notice ::@preview is already at ${STABLE}; no-op."
           else
-            echo "::notice ::Advancing @alpha from ${CURRENT_ALPHA} to ${STABLE}."
-            npm dist-tag add "${PKG}@${STABLE}" alpha
+            echo "::notice ::Advancing @preview from ${CURRENT_PREVIEW} to ${STABLE}."
+            npm dist-tag add "${PKG}@${STABLE}" preview
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

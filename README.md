@@ -829,7 +829,7 @@ Three layers prevent destructive surprises. See [docs/safety-model.md](docs/safe
 
 ### More configuration
 
-- [Prerelease channel](docs/prerelease.md) - point `npx` at `@alpha` for preview builds.
+- [Prerelease channel](docs/prerelease.md) - point `npx` at `@preview` for preview builds.
 - [Diagnosing setup](docs/diagnosing-setup.md) - the `diagnose_setup` probe and `/coalesce-setup` MCP prompt.
 
 ---
