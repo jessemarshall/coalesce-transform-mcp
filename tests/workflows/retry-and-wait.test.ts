@@ -7,6 +7,7 @@ import { CoalesceApiError } from "../../src/client.js";
 import {
   retryAndWait,
   registerRetryAndWait,
+  extractResultScope,
 } from "../../src/workflows/retry-and-wait.js";
 import {
   POSTMAN_RERUN_RESPONSE,
@@ -463,5 +464,35 @@ describe("retry-and-wait workflow", () => {
     await expect(
       retryAndWait(client as any, { runDetails: { runID: "0" } })
     ).rejects.toThrow("rerun response did not include a numeric runCounter (got string)");
+  });
+});
+
+describe("extractResultScope", () => {
+  it("reads workspaceID from the nested run-status payload", () => {
+    expect(
+      extractResultScope({ status: { workspaceID: "ws-42", runStatus: "completed" }, results: [] })
+    ).toEqual({ workspaceID: "ws-42" });
+  });
+
+  it("reads environmentID from the nested run-status payload", () => {
+    expect(
+      extractResultScope({ status: { environmentID: "env-9", runStatus: "completed" }, results: [] })
+    ).toEqual({ environmentID: "env-9" });
+  });
+
+  it("reads workspaceID from the top level when the result is already flat", () => {
+    expect(extractResultScope({ workspaceID: "ws-1" })).toEqual({ workspaceID: "ws-1" });
+  });
+
+  it("prefers workspaceID over environmentID when both are present", () => {
+    expect(
+      extractResultScope({ status: { workspaceID: "ws-1", environmentID: "env-1" } })
+    ).toEqual({ workspaceID: "ws-1" });
+  });
+
+  it("returns empty when no recognizable IDs are found", () => {
+    expect(extractResultScope({ status: { runStatus: "completed" }, results: [] })).toEqual({});
+    expect(extractResultScope(null)).toEqual({});
+    expect(extractResultScope("not an object")).toEqual({});
   });
 });

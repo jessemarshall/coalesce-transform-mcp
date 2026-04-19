@@ -17,7 +17,12 @@ function createTempDir(): string {
 }
 
 function getAutoCacheDir(baseDir: string, workspaceID?: string): string {
-  return join(baseDir, CACHE_DIR_NAME, workspaceID ?? "_global", "auto-cache");
+  const bucket = workspaceID ? `workspace-${workspaceID}` : "_global";
+  return join(baseDir, CACHE_DIR_NAME, bucket, "auto-cache");
+}
+
+function getEnvAutoCacheDir(baseDir: string, environmentID: string): string {
+  return join(baseDir, CACHE_DIR_NAME, `environment-${environmentID}`, "auto-cache");
 }
 
 /** Generate a payload that exceeds the given byte threshold when JSON-serialised. */
@@ -183,10 +188,12 @@ describe("buildJsonToolResponse auto-cache behaviour", () => {
     expect(files).toHaveLength(2);
   });
 
-  it("routes a literal '_global' workspaceID to the shared _global bucket without collision", () => {
+  it("keeps a literal '_global' workspaceID distinct from the unscoped _global bucket", () => {
     const baseDir = makeTempDir();
-    // Caller with workspaceID="_global" and caller without workspaceID must both land in
-    // the same bucket — no silent shadowing or duplicate-directory creation.
+    // With the `workspace-<id>` prefix, workspaceID="_global" becomes the
+    // `workspace-_global/` bucket — structurally separate from the unscoped
+    // `_global/` bucket. Prior behavior collapsed them; prefixing makes
+    // collision impossible by construction.
     buildJsonToolResponse("workspace_tool", largePayload(200), {
       maxInlineBytes: 50,
       baseDir,
@@ -198,9 +205,36 @@ describe("buildJsonToolResponse auto-cache behaviour", () => {
     });
 
     const cacheRoot = join(baseDir, CACHE_DIR_NAME);
-    expect(readdirSync(cacheRoot)).toEqual(["_global"]);
-    const files = readdirSync(getAutoCacheDir(baseDir)).filter((f) => f.endsWith(".json"));
-    expect(files).toHaveLength(2);
+    expect(readdirSync(cacheRoot).sort()).toEqual(["_global", "workspace-_global"]);
+    expect(readdirSync(getAutoCacheDir(baseDir)).filter((f) => f.endsWith(".json"))).toHaveLength(1);
+    expect(readdirSync(getAutoCacheDir(baseDir, "_global")).filter((f) => f.endsWith(".json"))).toHaveLength(1);
+  });
+
+  // ─── Environment bucket ──────────────────────────────────────────────────
+
+  it("writes auto-cache under environment-<id>/ when only environmentID is provided", () => {
+    const baseDir = makeTempDir();
+    buildJsonToolResponse("run_tool", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+      environmentID: "env-7",
+    });
+
+    const files = readdirSync(getEnvAutoCacheDir(baseDir, "env-7")).filter((f) => f.endsWith(".json"));
+    expect(files).toHaveLength(1);
+  });
+
+  it("prefers workspace scope over environment scope when both are provided", () => {
+    const baseDir = makeTempDir();
+    buildJsonToolResponse("run_tool", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+      workspaceID: "ws-1",
+      environmentID: "env-1",
+    });
+
+    const cacheRoot = join(baseDir, CACHE_DIR_NAME);
+    expect(readdirSync(cacheRoot)).toEqual(["workspace-ws-1"]);
   });
 
   it("replaces null bytes and control characters in workspace IDs", () => {
@@ -215,6 +249,22 @@ describe("buildJsonToolResponse auto-cache behaviour", () => {
     const buckets = readdirSync(cacheRoot);
     expect(buckets).toHaveLength(1);
     // No control characters should survive into the bucket name
+    expect(buckets[0]).not.toMatch(/[\x00-\x1f]/);
+    expect(buckets[0]).toMatch(/^[a-zA-Z0-9._-]+$/);
+  });
+
+  it("replaces null bytes and control characters in environment IDs", () => {
+    const baseDir = makeTempDir();
+    buildJsonToolResponse("run_tool", largePayload(200), {
+      maxInlineBytes: 50,
+      baseDir,
+      environmentID: "env\x00null\tbyte",
+    });
+
+    const cacheRoot = join(baseDir, CACHE_DIR_NAME);
+    const buckets = readdirSync(cacheRoot);
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0]).toMatch(/^environment-/);
     expect(buckets[0]).not.toMatch(/[\x00-\x1f]/);
     expect(buckets[0]).toMatch(/^[a-zA-Z0-9._-]+$/);
   });
