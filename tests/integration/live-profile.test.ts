@@ -17,8 +17,6 @@
  * What's covered:
  *   - resolveCoalesceAuth() returns a token when ONLY the profile provides one
  *     (env vars cleared in-process).
- *   - coaListEnvironmentsHandler spawns the real coa CLI, authenticates via the
- *     profile, and returns a JSON array with exit 0.
  *
  * What's NOT covered (intentionally):
  *   - No destructive operations (coa_create/run/deploy/refresh) even though
@@ -35,7 +33,6 @@ import {
   loadCoaProfile,
   __resetForTests,
 } from "../../src/services/config/coa-config.js";
-import { coaListEnvironmentsHandler } from "../../src/mcp/coa.js";
 
 const CONFIG_PATH = join(homedir(), ".coa", "config");
 const CANDIDATE_PROFILES = ["dev_testing_workspace", "dev_testing_environment"];
@@ -86,33 +83,6 @@ describe.skipIf(ACTIVE_PROFILE === null)(
       expect(auth.sources.accessToken).toBe(`profile:${ACTIVE_PROFILE}`);
       expect(auth.baseUrl).toMatch(/^https:\/\//);
     });
-
-    it(
-      "coaListEnvironmentsHandler succeeds with profile-driven auth (spawns real coa CLI)",
-      { timeout: 90_000 },
-      async () => {
-        // No profile in tool input — must flow through the COALESCE_PROFILE
-        // env fallback. No token either — must be picked up from the profile
-        // by the coa CLI itself (COA reads ~/.coa/config independently).
-        const result = await coaListEnvironmentsHandler({});
-        expect(result.exitCode, result.stderr).toBe(0);
-        expect(result.timedOut).toBe(false);
-        // `coa environments list --format json` returns `{ data: [...] }`.
-        // We accept either a bare array or the `{data}` envelope to stay
-        // resilient to a coa shape change.
-        const body = result.json as { data?: unknown[] } | unknown[] | undefined;
-        const rows = Array.isArray(body) ? body : body?.data;
-        expect(Array.isArray(rows), `unexpected shape: ${JSON.stringify(body).slice(0, 200)}`).toBe(true);
-        // Environments list returned by the real API should be populated for a
-        // testing profile that has an environmentID=. If it's empty, the
-        // profile is pointing somewhere without environments — the profile is
-        // misconfigured, not the MCP.
-        expect(
-          rows!.length,
-          "profile must point to a workspace with at least one environment"
-        ).toBeGreaterThan(0);
-      }
-    );
   }
 );
 

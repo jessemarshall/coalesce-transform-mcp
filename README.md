@@ -386,9 +386,6 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 **Local project & cloud CLI**
 
 - 🧰 **`coa_list_project_nodes`** - List all nodes defined in a local project (pre-deploy)
-- 🧰 **`coa_list_environments`** - List deployment environments via the cloud CLI
-- 🧰 **`coa_list_environment_nodes`** - List deployed nodes in an environment via the cloud CLI
-- 🧰 **`coa_list_runs`** - List pipeline runs in a cloud environment (or across all environments)
 
 </details>
 

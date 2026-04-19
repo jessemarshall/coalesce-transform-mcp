@@ -8,9 +8,6 @@ import {
   coaListProjectNodesHandler,
   coaDryRunCreateHandler,
   coaDryRunRunHandler,
-  coaListEnvironmentsHandler,
-  coaListEnvironmentNodesHandler,
-  coaListRunsHandler,
   coaDescribeHandler,
   coaCreateHandler,
   coaRunHandler,
@@ -184,153 +181,6 @@ describe("coa_dry_run_run handler", () => {
     await coaDryRunRunHandler({ projectPath: tmpProject }, run);
     expect(spy.calls[0].args).toContain("run");
     expect(spy.calls[0].args).toContain("--dry-run");
-  });
-});
-
-describe("coa_list_environments handler", () => {
-  it("uses --format json --skipConfirm and does not require a project path", async () => {
-    const { spy, run } = fakeRunCoa({ stdout: "[]" });
-    const result = await coaListEnvironmentsHandler({}, run);
-    expect(spy.calls[0].args).toEqual([
-      "environments",
-      "list",
-      "--format",
-      "json",
-      "--skipConfirm",
-    ]);
-    expect(spy.calls[0].cwd).toBeUndefined();
-    expect(spy.calls[0].parseJson).toBe(true);
-    expect(result.exitCode).toBe(0);
-  });
-
-  it("passes optional flags", async () => {
-    const { spy, run } = fakeRunCoa();
-    await coaListEnvironmentsHandler(
-      {
-        detail: true,
-        limit: 25,
-        startingFrom: "cursor-x",
-        orderBy: "name",
-        profile: "staging",
-        token: "tok",
-      },
-      run
-    );
-    const args = spy.calls[0].args;
-    expect(args).toContain("--detail");
-    expect(args).toEqual(
-      expect.arrayContaining([
-        "--limit",
-        "25",
-        "--startingFrom",
-        "cursor-x",
-        "--orderBy",
-        "name",
-        "--profile",
-        "staging",
-        "--token",
-        "tok",
-      ])
-    );
-  });
-
-  it("falls back to COALESCE_PROFILE when no profile is passed", async () => {
-    vi.stubEnv("COALESCE_PROFILE", "MEDBASE");
-    const { spy, run } = fakeRunCoa();
-    await coaListEnvironmentsHandler({}, run);
-    expect(spy.calls[0].args).toEqual(
-      expect.arrayContaining(["--profile", "MEDBASE"])
-    );
-    vi.unstubAllEnvs();
-  });
-
-  it("prefers tool input profile over COALESCE_PROFILE", async () => {
-    vi.stubEnv("COALESCE_PROFILE", "MEDBASE");
-    const { spy, run } = fakeRunCoa();
-    await coaListEnvironmentsHandler({ profile: "staging" }, run);
-    const args = spy.calls[0].args;
-    expect(args).toEqual(expect.arrayContaining(["--profile", "staging"]));
-    expect(args).not.toContain("MEDBASE");
-    vi.unstubAllEnvs();
-  });
-});
-
-describe("coa_list_environment_nodes handler", () => {
-  it("requires environmentID and passes it through", async () => {
-    const { spy, run } = fakeRunCoa({ stdout: "[]" });
-    await coaListEnvironmentNodesHandler({ environmentID: "env-42" }, run);
-    expect(spy.calls[0].args).toEqual(
-      expect.arrayContaining([
-        "nodes",
-        "list",
-        "--format",
-        "json",
-        "--skipConfirm",
-        "--environmentID",
-        "env-42",
-      ])
-    );
-  });
-
-  it("passes --skipParsing when requested", async () => {
-    const { spy, run } = fakeRunCoa();
-    await coaListEnvironmentNodesHandler(
-      { environmentID: "env-1", skipParsing: true },
-      run
-    );
-    expect(spy.calls[0].args).toContain("--skipParsing");
-  });
-});
-
-describe("coa_list_runs handler", () => {
-  it("rejects when neither environmentID nor allEnvironments is set", async () => {
-    const { spy, run } = fakeRunCoa();
-    await expect(coaListRunsHandler({}, run)).rejects.toThrow(
-      /environmentID or allEnvironments/
-    );
-    expect(spy.calls).toHaveLength(0);
-  });
-
-  it("passes allEnvironments without environmentID", async () => {
-    const { spy, run } = fakeRunCoa({ stdout: "[]" });
-    await coaListRunsHandler({ allEnvironments: true }, run);
-    const args = spy.calls[0].args;
-    expect(args).toContain("--allEnvironments");
-    expect(args).not.toContain("--environmentID");
-  });
-
-  it("passes array filters as repeated flags", async () => {
-    const { spy, run } = fakeRunCoa();
-    await coaListRunsHandler(
-      {
-        environmentID: "env-1",
-        projectID: ["p1", "p2"],
-        runType: ["scheduled"],
-        runStatus: ["failed", "running"],
-      },
-      run
-    );
-    const args = spy.calls[0].args;
-    // Count occurrences of each flag.
-    const countOf = (flag: string) => args.filter((a) => a === flag).length;
-    expect(countOf("--projectID")).toBe(2);
-    expect(countOf("--runType")).toBe(1);
-    expect(countOf("--runStatus")).toBe(2);
-    // And the values follow.
-    expect(args).toEqual(
-      expect.arrayContaining([
-        "--projectID",
-        "p1",
-        "--projectID",
-        "p2",
-        "--runType",
-        "scheduled",
-        "--runStatus",
-        "failed",
-        "--runStatus",
-        "running",
-      ])
-    );
   });
 });
 
@@ -623,8 +473,8 @@ describe("coa_refresh handler (destructive)", () => {
 describe("token redaction", () => {
   it("does not echo --token value back in result.command", async () => {
     const { run } = fakeRunCoa({ stdout: "[]" });
-    const result = await coaListEnvironmentsHandler(
-      { token: "SUPER-SECRET-TOKEN-12345" },
+    const result = await coaRefreshHandler(
+      { environmentID: "env-1", token: "SUPER-SECRET-TOKEN-12345", confirmed: true },
       run
     );
     expect(result.command).not.toContain("SUPER-SECRET-TOKEN-12345");
@@ -680,10 +530,13 @@ describe("result shape", () => {
       stderr: "warn-x",
       exitCode: 0,
     });
-    const result = await coaListEnvironmentsHandler({}, async (args, opts) => {
-      const r = await run(args, opts);
-      return { ...r, json: { hello: "world" } } as RunCoaResult;
-    });
+    const result = await coaListProjectNodesHandler(
+      { projectPath: tmpProject },
+      async (args, opts) => {
+        const r = await run(args, opts);
+        return { ...r, json: { hello: "world" } } as RunCoaResult;
+      }
+    );
     expect(result).toMatchObject({
       exitCode: 0,
       stdout: '{"hello":"world"}',
@@ -691,7 +544,7 @@ describe("result shape", () => {
       timedOut: false,
       json: { hello: "world" },
     });
-    expect(result.command).toContain("coa environments list");
+    expect(result.command).toContain("coa --json create");
   });
 
   it("passes jsonParseError through when COA stdout is not JSON", async () => {
@@ -702,7 +555,10 @@ describe("result shape", () => {
       stderr: "",
       jsonParseError: "Unexpected token",
     }) satisfies RunCoaResult;
-    const result = await coaListEnvironmentsHandler({}, run);
+    const result = await coaListProjectNodesHandler(
+      { projectPath: tmpProject },
+      run
+    );
     expect(result.jsonParseError).toBe("Unexpected token");
   });
 });
@@ -729,21 +585,6 @@ describe("COALESCE_PROFILE fallback — shared across all cloud handlers", () =>
     handler: (params: any, runCoaFn: any) => Promise<unknown>;
     minimalInput: () => Record<string, unknown>;
   }> = [
-    {
-      name: "coa_list_environments",
-      handler: coaListEnvironmentsHandler,
-      minimalInput: () => ({}),
-    },
-    {
-      name: "coa_list_environment_nodes",
-      handler: coaListEnvironmentNodesHandler,
-      minimalInput: () => ({ environmentID: "env-1" }),
-    },
-    {
-      name: "coa_list_runs",
-      handler: coaListRunsHandler,
-      minimalInput: () => ({ environmentID: "env-1" }),
-    },
     {
       name: "coa_plan",
       handler: coaPlanHandler,

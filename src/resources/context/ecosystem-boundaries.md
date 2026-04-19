@@ -66,7 +66,7 @@ This MCP exposes **two** ways to reach Coalesce, and an agent should pick delibe
 - **Cloud REST (default):** workspace/node tools (`get_workspace_node`, `set_workspace_node`, `run_and_wait`, etc.) hit the Coalesce cloud API. Use for any workspace mutation, scheduled/cloud-executed runs, or lineage on published environments.
 - **COA CLI (`coa_*` tools):** shells out to the bundled `@coalescesoftware/coa` binary. See [src/services/coa/runner.ts](../../services/coa/runner.ts). **Not all `coa_*` tools are offline** — split them as follows:
   - **Offline-local** (project files + warehouse, no cloud API): `coa_doctor`, `coa_validate`, `coa_list_project_nodes`, `coa_dry_run_create`, `coa_dry_run_run`, `coa_describe_*`.
-  - **Cloud-authenticated** (same `~/.coa/config` token as the REST tools, hits the scheduler API): `coa_list_environments`, `coa_list_runs`. These are functionally parallel to cloud REST tools — pick based on output shape, not auth cost.
+  - **Cloud-authenticated** (same `~/.coa/config` token as the REST tools, hits the scheduler API): `coa_plan`, `coa_deploy`, `coa_refresh`. Use the first-class REST tools (`list_environments`, `list_environment_nodes`, `list_runs`) for listing — those fetch the same data without spawning the CLI.
 
 ### "Workspace" Is Overloaded
 
@@ -119,9 +119,9 @@ If a user's `~/.coa/config` specifies an OAuth auth type, `coa_dry_run_create` /
 
 ### Quick Decision Guide
 
-- **Cloud REST tools** — edit workspace node config, start a cloud run, diagnose a failed deploy, or reach an environment where the user only has OAuth-backed warehouse credentials.
+- **Cloud REST tools** — edit workspace node config, start a cloud run, diagnose a failed deploy, or reach an environment where the user only has OAuth-backed warehouse credentials. Use `list_environments`, `list_environment_nodes`, and `list_runs` for discovery/listing — those fetch the same data the CLI would, without spawning `coa`.
 - **Offline `coa_*` tools** (`coa_doctor`, `coa_validate`, `coa_list_project_nodes`, `coa_dry_run_create`, `coa_dry_run_run`, `coa_describe_*`) — validate a local COA project directory, preview generated DDL/DML offline, read `coa describe` topics, or operate on a pure-local project with no cloud workspace.
-- **Cloud-authenticated `coa_*` tools** (`coa_list_environments`, `coa_list_runs`) — same cloud token as the REST tools; pick them only when their output shape suits the question better than the REST equivalents.
+- **Cloud-authenticated `coa_*` tools** (`coa_plan`, `coa_deploy`, `coa_refresh`) — deployment orchestration that has no direct REST equivalent; the CLI owns the plan-diff/apply flow against the scheduler.
 
 ## Lineage Scope
 

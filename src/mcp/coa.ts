@@ -3,7 +3,6 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { defineLocalTool, defineDestructiveLocalTool } from "./tool-helpers.js";
 import {
   READ_ONLY_LOCAL_ANNOTATIONS,
-  READ_ONLY_ANNOTATIONS,
   WRITE_ANNOTATIONS,
   DESTRUCTIVE_ANNOTATIONS,
   type ToolDefinition,
@@ -133,12 +132,6 @@ const CloudAuthParams = z.object({
     ),
 });
 
-const CloudPaginationParams = z.object({
-  limit: z.number().int().positive().optional().describe("Max results (default 100)."),
-  startingFrom: z.string().optional().describe("Pagination cursor from a previous call."),
-  orderBy: z.string().optional().describe("Field to sort by. Defaults to 'id'."),
-});
-
 // ---------- shared arg builders ----------
 
 function pushIf(args: string[], flag: string, value: string | undefined): void {
@@ -257,103 +250,6 @@ export async function coaDryRunRunHandler(
   pushIf(args, "--include", params.include);
   pushIf(args, "--exclude", params.exclude);
   const result = await runCoaFn(args, { cwd });
-  return buildResult(args, result);
-}
-
-const ListEnvironmentsParams = CloudAuthParams.merge(CloudPaginationParams).extend({
-  detail: z.boolean().optional().describe("Return full environment detail."),
-});
-
-export async function coaListEnvironmentsHandler(
-  params: z.infer<typeof ListEnvironmentsParams>,
-  runCoaFn: RunCoaFn = runCoa
-): Promise<CoaToolResult> {
-  const args = ["environments", "list", "--format", "json", "--skipConfirm"];
-  if (params.detail) args.push("--detail");
-  pushIf(args, "--limit", params.limit?.toString());
-  pushIf(args, "--startingFrom", params.startingFrom);
-  pushIf(args, "--orderBy", params.orderBy);
-  pushIf(args, "--profile", resolveProfile(params.profile));
-  pushIf(args, "--token", params.token);
-  const result = await runCoaFn(args, { parseJson: true });
-  return buildResult(args, result);
-}
-
-const ListEnvironmentNodesParams = CloudAuthParams.merge(CloudPaginationParams).extend({
-  environmentID: z.string().describe("The environment ID to list nodes from."),
-  detail: z.boolean().optional().describe("Return full node detail."),
-  skipParsing: z
-    .boolean()
-    .optional()
-    .describe("Skip column-reference parsing. Faster, but column sources will not be populated."),
-});
-
-export async function coaListEnvironmentNodesHandler(
-  params: z.infer<typeof ListEnvironmentNodesParams>,
-  runCoaFn: RunCoaFn = runCoa
-): Promise<CoaToolResult> {
-  const args = [
-    "nodes",
-    "list",
-    "--format",
-    "json",
-    "--skipConfirm",
-    "--environmentID",
-    params.environmentID,
-  ];
-  if (params.detail) args.push("--detail");
-  if (params.skipParsing) args.push("--skipParsing");
-  pushIf(args, "--limit", params.limit?.toString());
-  pushIf(args, "--startingFrom", params.startingFrom);
-  pushIf(args, "--orderBy", params.orderBy);
-  pushIf(args, "--profile", resolveProfile(params.profile));
-  pushIf(args, "--token", params.token);
-  const result = await runCoaFn(args, { parseJson: true });
-  return buildResult(args, result);
-}
-
-const ListRunsParams = CloudAuthParams.merge(CloudPaginationParams).extend({
-  environmentID: z
-    .string()
-    .optional()
-    .describe("Environment ID. Omit with allEnvironments=true for a cross-env view."),
-  allEnvironments: z.boolean().optional().describe("Include runs across all environments."),
-  orderByDirection: z.enum(["asc", "desc"]).optional().describe("Sort direction (default desc)."),
-  projectID: z
-    .array(z.string())
-    .optional()
-    .describe("Filter by one or more project IDs."),
-  runType: z.array(z.string()).optional().describe("Filter by one or more run types."),
-  runStatus: z
-    .array(z.string())
-    .optional()
-    .describe("Filter by one or more run status values."),
-  detail: z.boolean().optional().describe("Return full run detail."),
-});
-
-export async function coaListRunsHandler(
-  params: z.infer<typeof ListRunsParams>,
-  runCoaFn: RunCoaFn = runCoa
-): Promise<CoaToolResult> {
-  if (!params.environmentID && !params.allEnvironments) {
-    throw new Error(
-      "coa_list_runs requires either environmentID or allEnvironments=true"
-    );
-  }
-  const args = ["runs", "list", "--format", "json", "--skipConfirm"];
-  if (params.detail) args.push("--detail");
-  if (params.allEnvironments) args.push("--allEnvironments");
-  pushIf(args, "--environmentID", params.environmentID);
-  pushIf(args, "--limit", params.limit?.toString());
-  pushIf(args, "--startingFrom", params.startingFrom);
-  pushIf(args, "--orderBy", params.orderBy);
-  pushIf(args, "--orderByDirection", params.orderByDirection);
-  for (const id of params.projectID ?? []) args.push("--projectID", id);
-  for (const type of params.runType ?? []) args.push("--runType", type);
-  for (const status of params.runStatus ?? []) args.push("--runStatus", status);
-  pushIf(args, "--profile", resolveProfile(params.profile));
-  pushIf(args, "--token", params.token);
-  const result = await runCoaFn(args, { parseJson: true });
   return buildResult(args, result);
 }
 
@@ -625,7 +521,7 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       {
         title: "COA List Project Nodes",
         description:
-          "List all nodes defined in a local COA project (pre-deploy). Wraps `coa create --list-nodes`.\n\nDifferent from coa_list_environment_nodes (which lists deployed nodes in a cloud environment).\n\nArgs:\n  - projectPath (string, required)\n  - workspace (string, optional)\n\nReturns:\n  { command, exitCode, stdout, json?, coaVersion }",
+          "List all nodes defined in a local COA project (pre-deploy). Wraps `coa create --list-nodes`.\n\nDifferent from list_environment_nodes (which lists deployed nodes in a cloud environment via the REST API).\n\nArgs:\n  - projectPath (string, required)\n  - workspace (string, optional)\n\nReturns:\n  { command, exitCode, stdout, json?, coaVersion }",
         inputSchema: ProjectPathParam,
         annotations: READ_ONLY_LOCAL_ANNOTATIONS,
       },
@@ -654,30 +550,6 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
         annotations: READ_ONLY_LOCAL_ANNOTATIONS,
       },
       coaDryRunRunHandler
-    ),
-
-    defineLocalTool(
-      "coa_list_environments",
-      {
-        title: "COA List Environments (cloud)",
-        description:
-          "List deployment environments visible to the current COA profile. Wraps `coa environments list --format json`.\n\nRequires COA cloud credentials in ~/.coa/config (domain + token), or pass profile/token explicitly.\n\nArgs:\n  - detail, limit, startingFrom, orderBy, profile, token (all optional)\n\nReturns:\n  { command, exitCode, stdout, json?, coaVersion }",
-        inputSchema: ListEnvironmentsParams,
-        annotations: READ_ONLY_ANNOTATIONS,
-      },
-      coaListEnvironmentsHandler
-    ),
-
-    defineLocalTool(
-      "coa_list_environment_nodes",
-      {
-        title: "COA List Environment Nodes (cloud)",
-        description:
-          "List deployed nodes in a cloud environment. Wraps `coa nodes list --environmentID ...`.\n\nDifferent from coa_list_project_nodes (which lists nodes in a local COA project).\n\nArgs:\n  - environmentID (string, required)\n  - detail, skipParsing, limit, startingFrom, orderBy, profile, token (all optional)\n\nReturns:\n  { command, exitCode, stdout, json?, coaVersion }",
-        inputSchema: ListEnvironmentNodesParams,
-        annotations: READ_ONLY_ANNOTATIONS,
-      },
-      coaListEnvironmentNodesHandler
     ),
 
     defineDestructiveLocalTool(
@@ -764,16 +636,5 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       coaDescribeHandler
     ),
 
-    defineLocalTool(
-      "coa_list_runs",
-      {
-        title: "COA List Runs (cloud)",
-        description:
-          "List pipeline runs in a cloud environment (or across all). Wraps `coa runs list`.\n\nArgs:\n  - environmentID (string, required unless allEnvironments=true)\n  - allEnvironments (boolean, optional): Include runs across every environment\n  - detail, limit, startingFrom, orderBy, orderByDirection (asc|desc)\n  - projectID (string[], optional), runType (string[], optional), runStatus (string[], optional)\n  - profile, token (optional)\n\nReturns:\n  { command, exitCode, stdout, json?, coaVersion }",
-        inputSchema: ListRunsParams,
-        annotations: READ_ONLY_ANNOTATIONS,
-      },
-      coaListRunsHandler
-    ),
   ];
 }

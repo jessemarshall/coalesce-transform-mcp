@@ -13,11 +13,11 @@ function createMockClient() {
   };
 }
 
-// 107 via registerTool + 3 via registerToolTask (start_run, run_and_wait, retry_and_wait).
-// 107 = 91 pre-COA + 8 read-only coa_* (Phase 2) + 1 coa_describe (Phase 3)
+// 104 via registerTool + 3 via registerToolTask (start_run, run_and_wait, retry_and_wait).
+// 104 = 91 pre-COA + 5 read-only coa_* (Phase 2) + 1 coa_describe (Phase 3)
 //       + 6 write/destructive coa_* (Phase 4, includes coa_bootstrap_workspaces)
 //       + 1 diagnose_setup (setup helper).
-const REGISTER_TOOL_COUNT = 107;
+const REGISTER_TOOL_COUNT = 104;
 const TASK_TOOL_NAMES = ["start_run", "run_and_wait", "retry_and_wait"];
 
 describe("Tool Registration", () => {
@@ -109,10 +109,13 @@ describe("Tool Registration", () => {
     expect(toolNames).toContain("coa_list_project_nodes");
     expect(toolNames).toContain("coa_dry_run_create");
     expect(toolNames).toContain("coa_dry_run_run");
-    expect(toolNames).toContain("coa_list_environments");
-    expect(toolNames).toContain("coa_list_environment_nodes");
-    expect(toolNames).toContain("coa_list_runs");
     expect(toolNames).toContain("coa_describe");
+    // The cloud-facing coa_list_* tools (environments, environment_nodes,
+    // runs) were removed in favor of the first-class list_environments /
+    // list_environment_nodes / list_runs REST tools.
+    expect(toolNames).not.toContain("coa_list_environments");
+    expect(toolNames).not.toContain("coa_list_environment_nodes");
+    expect(toolNames).not.toContain("coa_list_runs");
 
     // COA CLI write + destructive tools (Phase 4)
     expect(toolNames).toContain("coa_create");
