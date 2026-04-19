@@ -101,7 +101,7 @@ export async function retryAndWait(
   for (const w of [pollClamped.warning, timeoutClamped.warning]) {
     if (w) {
       if (reportProgress) await reportProgress(w);
-      else console.warn(`[retry_and_wait] ${w}`);
+      else process.stderr.write(`[retry_and_wait] ${w}\n`);
     }
   }
 

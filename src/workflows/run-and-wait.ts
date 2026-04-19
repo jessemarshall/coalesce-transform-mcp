@@ -63,7 +63,7 @@ export async function runAndWait(
   for (const w of [pollClamped.warning, timeoutClamped.warning]) {
     if (w) {
       if (reportProgress) await reportProgress(w);
-      else console.warn(`[run_and_wait] ${w}`);
+      else process.stderr.write(`[run_and_wait] ${w}\n`);
     }
   }
 
