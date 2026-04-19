@@ -49,7 +49,9 @@ export function parseJobSelector(input: string | undefined | null): ParsedSelect
 
     const body = chunk.slice(1, -1).trim();
 
-    if (/\|\|/.test(body)) {
+    // Strip quoted runs before the `||` footgun check so legitimate quoted
+    // names like `{ subgraph: "A||B" }` aren't dropped.
+    if (/\|\|/.test(stripQuotedRuns(body))) {
       warnings.push(
         `Selector term "${chunk}" uses \`{ A || B }\` form which silently matches zero nodes. Use \`{ A } OR { B }\` (separate braces per operand). Term skipped.`
       );
@@ -104,7 +106,10 @@ function parseTermBody(body: string): { term?: SelectorTerm; warning?: string } 
     return { term: { kind: "subgraph", name } };
   }
 
-  const locationNameMatch = body.match(/^location\s*:\s*(\S+)\s+name\s*:\s*(.+)$/i);
+  // Location may be quoted (supports spaces) or a bare token.
+  const locationNameMatch = body.match(
+    /^location\s*:\s*("[^"]+"|'[^']+'|\S+)\s+name\s*:\s*(.+)$/i
+  );
   if (locationNameMatch) {
     const location = stripQuotes(locationNameMatch[1].trim());
     const name = stripQuotes(locationNameMatch[2].trim());
@@ -113,6 +118,10 @@ function parseTermBody(body: string): { term?: SelectorTerm; warning?: string } 
   }
 
   return { warning: `unrecognized clause "${body}" — expected subgraph: or location:+name:` };
+}
+
+function stripQuotedRuns(input: string): string {
+  return input.replace(/"[^"]*"|'[^']*'/g, "");
 }
 
 function stripQuotes(value: string): string {

@@ -427,6 +427,12 @@ const PlanParams = ProjectPathParam.merge(CloudAuthParams).extend({
     .boolean()
     .optional()
     .describe("Enable coa's plan cache. Coalesce recommends leaving this off unless plan generation is slow."),
+  v2Acknowledged: z
+    .boolean()
+    .optional()
+    .describe(
+      "Required when the project contains V2 artifacts. A plan built from V2 sources is alpha-contaminated by construction — the guard fires here as well as on create/run. See coalesce://context/sql-node-v2-policy."
+    ),
 });
 
 export async function coaPlanHandler(
@@ -436,6 +442,7 @@ export async function coaPlanHandler(
   const cwd = validateProjectPath(params.projectPath);
   const report = runPreflight(cwd, {});
   runOrThrow(report);
+  assertV2Acknowledged(report, params.v2Acknowledged);
   const args = [
     "plan",
     "--dir",

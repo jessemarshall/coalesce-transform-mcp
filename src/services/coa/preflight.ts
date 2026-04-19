@@ -153,7 +153,15 @@ function countSqlNodes(projectPath: string): CountResult {
   if (!existsSync(nodesDir)) return { count: 0, errors: [] };
   const files: string[] = [];
   const errors: string[] = [];
-  collectSqlFilesWithErrors(nodesDir, files, errors);
+  const hitCap = collectSqlFilesWithErrors(nodesDir, files, errors);
+  if (hitCap) {
+    // Partial scan — the V2 hard guard depends on "couldn't rule out V2" vs
+    // "no V2 found" being distinguishable. A truncated scan that returns a
+    // clean count must surface as a scan failure, not a V1-clean project.
+    errors.push(
+      `hit MAX_SQL_FILES_SCANNED cap (${MAX_SQL_FILES_SCANNED}); scan may be incomplete`
+    );
+  }
   return { count: files.length, errors };
 }
 
@@ -612,8 +620,9 @@ function inspectSqlFile(
 
 /**
  * Detect the common `{ A || B }` selector footgun. Coalesce selectors require
- * separate braces around each OR operand: `{ A } || { B }`. The combined form
- * silently matches zero nodes with no error.
+ * separate braces around each OR operand joined by the `OR` keyword:
+ * `{ A } OR { B }`. The combined form silently matches zero nodes with no
+ * error. (See `parseJobSelector` grammar in src/services/jobs/selector-parser.ts.)
  */
 function checkSelector(
   selector: string | undefined,
@@ -629,7 +638,7 @@ function checkSelector(
       level: "error",
       code: "SELECTOR_COMBINED_OR",
       message:
-        `Selector "${trimmed}" uses \`{ A || B }\` form which silently matches zero nodes. Use \`{ A } || { B }\` (separate braces around each OR operand).`,
+        `Selector "${trimmed}" uses \`{ A || B }\` form which silently matches zero nodes. Use \`{ A } OR { B }\` (separate braces around each OR operand).`,
     });
   }
 }

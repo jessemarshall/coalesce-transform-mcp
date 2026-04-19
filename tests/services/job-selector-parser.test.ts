@@ -93,6 +93,29 @@ describe("parseJobSelector", () => {
     expect(r.terms).toEqual([{ kind: "subgraph", name: "DIM_DATE" }]);
   });
 
+  it("accepts quoted location names that contain spaces", () => {
+    const r = parseJobSelector(`{ location: "My Warehouse" name: ORDERS }`);
+    expect(r.warnings).toEqual([]);
+    expect(r.terms).toEqual([
+      { kind: "location_name", location: "My Warehouse", name: "ORDERS" },
+    ]);
+  });
+
+  it("accepts single-quoted location names that contain spaces", () => {
+    const r = parseJobSelector(`{ location: 'My Warehouse' name: ORDERS }`);
+    expect(r.terms).toEqual([
+      { kind: "location_name", location: "My Warehouse", name: "ORDERS" },
+    ]);
+  });
+
+  it("accepts `||` inside a quoted name without triggering the footgun warning", () => {
+    const r = parseJobSelector(`{ subgraph: "pipeline_a||pipeline_b" }`);
+    expect(r.warnings).toEqual([]);
+    expect(r.terms).toEqual([
+      { kind: "subgraph", name: "pipeline_a||pipeline_b" },
+    ]);
+  });
+
   it("parses the real-world JCI-style long OR chain", () => {
     const input =
       `{ subgraph: "SFDC_ACCOUNT" } OR { subgraph: "SFDC_CAMPAIGN" } OR ` +

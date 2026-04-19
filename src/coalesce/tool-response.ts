@@ -125,18 +125,24 @@ function cleanupStaleAutoCacheFilesInBucket(autoCacheDir: string): void {
       }
     }
 
-    // Phase 2: hard cap — if the directory could still exceed the limit
-    // (original count was high enough), re-read and evict oldest beyond the cap.
+    // Phase 2: hard cap — if the directory STILL exceeds the limit after
+    // phase 1 (e.g. a current-session flood), re-read and evict oldest beyond
+    // the cap. Gating on `currentFiles.length` (not `files.length`) is load
+    // bearing: after phase 1 drops the count below the cap,
+    // `currentFiles.length - MAX` is negative and `slice(0, -N)` would evict
+    // current-session files we just wrote.
     if (files.length > AUTO_CACHE_MAX_FILES) {
       const currentFiles = readdirSync(autoCacheDir)
         .filter((f) => f.endsWith(".json"))
         .sort();
-      for (const file of currentFiles.slice(0, currentFiles.length - AUTO_CACHE_MAX_FILES)) {
-        try {
-          unlinkSync(join(autoCacheDir, file));
-        } catch (err) {
-          const reason = err instanceof Error ? err.message : String(err);
-          process.stderr.write(`[auto-cache] Phase 2 eviction failed for ${file}: ${reason}\n`);
+      if (currentFiles.length > AUTO_CACHE_MAX_FILES) {
+        for (const file of currentFiles.slice(0, currentFiles.length - AUTO_CACHE_MAX_FILES)) {
+          try {
+            unlinkSync(join(autoCacheDir, file));
+          } catch (err) {
+            const reason = err instanceof Error ? err.message : String(err);
+            process.stderr.write(`[auto-cache] Phase 2 eviction failed for ${file}: ${reason}\n`);
+          }
         }
       }
     }

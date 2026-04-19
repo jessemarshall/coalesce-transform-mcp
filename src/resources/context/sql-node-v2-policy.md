@@ -4,6 +4,8 @@
 
 > **V2 is ALPHA.** The V2 SQL node shape (`fileVersion: 2` node types + `.sql` nodes) ships in the `@next` COA channel and is not yet GA. It has known rough edges: silent column-reference false positives in `coa validate`, `UNION ALL` silently dropped from the body (use `insertStrategy` config instead), `CREATE TABLE ()` with zero columns on parse errors, and UI/CLI divergence on `isRequired` config fields. Before proceeding with V2, surface this to the user — "V2 is alpha, here's what that means for your project" — and get explicit confirmation. Never opt someone into alpha tooling silently.
 
+**Hard guard scope.** `coa_create`, `coa_run`, and `coa_plan` all block execution when V2 artifacts are detected (or when the V2 scan fails and cannot rule them out) unless the agent passes `v2Acknowledged: true`. Plan is in-scope because a plan built from V2 sources is alpha-contaminated by construction. `coa_deploy` has no project path and no preflight; the acknowledgement on `coa_plan` stands in.
+
 ## The Rule
 
 **Default to V1. Never convert existing V1 nodes or node types to V2 unless the user explicitly asks for V2 AND has been told V2 is alpha.**
