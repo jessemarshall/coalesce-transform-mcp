@@ -219,13 +219,14 @@ function getStaleNodes(
 ): StaleNode[] {
   const cutoff = new Date(Date.now() - staleDays * MS_PER_DAY);
   const stale: StaleNode[] = [];
+  const statusByNodeID = new Map(nodeRunStatuses.map((s) => [s.nodeID, s]));
 
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i];
-    const status = nodeRunStatuses[i];
-    if (status.lastRunStatus === "never_run") {
+  for (const node of nodes) {
+    const nodeID = getNodeID(node);
+    const status = statusByNodeID.get(nodeID);
+    if (!status || status.lastRunStatus === "never_run") {
       stale.push({
-        nodeID: getNodeID(node),
+        nodeID,
         nodeName: getNodeName(node),
         nodeType: getNodeType(node),
       });
@@ -238,7 +239,7 @@ function getStaleNodes(
           (Date.now() - lastRunDate.getTime()) / MS_PER_DAY
         );
         stale.push({
-          nodeID: getNodeID(node),
+          nodeID,
           nodeName: getNodeName(node),
           nodeType: getNodeType(node),
           lastRunTime: status.lastRunTime,

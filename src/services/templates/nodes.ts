@@ -268,6 +268,14 @@ export function buildSetWorkspaceNodeTemplateFromDefinition(
           return;
         }
 
+        if (targetPath.includes("[]")) {
+          // Column-level paths (e.g., columns[].isBusinessKey) are informational —
+          // documented in fieldMappings and usageGuidance but not settable as
+          // top-level fields. Feeding them to setByPath would create garbage keys
+          // like {"columns[]": {"isBusinessKey": true}}.
+          return;
+        }
+
         if (defaultValue === undefined) {
           warnings.push(
             `Config item ${targetPath} has no inferred default. Fill it before calling set_workspace_node if the node type requires it.`
