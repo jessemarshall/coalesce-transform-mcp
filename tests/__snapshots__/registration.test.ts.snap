@@ -82,7 +82,6 @@ exports[`Tool Registration > registers the expected set of tools (snapshot) > re
   "list_user_roles",
   "list_workspace_node_types",
   "list_workspace_nodes",
-  "list_workspace_subgraphs",
   "list_workspaces",
   "parse_sql_structure",
   "personalize_skills",

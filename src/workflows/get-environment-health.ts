@@ -165,6 +165,14 @@ function buildNodeRunStatuses(
       continue;
     }
 
+    // Skip canceled runs — a cancellation is a deliberate user action, not a
+    // pass or failure.  Skipping means the node's last-run status reflects the
+    // most recent completed-or-failed outcome, which is what the health score
+    // should be based on.
+    if (run.runStatus === "canceled") {
+      continue;
+    }
+
     const runTime = run.runEndTime ?? run.runStartTime;
     if (!runTime || typeof runTime !== "string") continue;
 
@@ -219,13 +227,14 @@ function getStaleNodes(
 ): StaleNode[] {
   const cutoff = new Date(Date.now() - staleDays * MS_PER_DAY);
   const stale: StaleNode[] = [];
+  const statusByNodeID = new Map(nodeRunStatuses.map((s) => [s.nodeID, s]));
 
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i];
-    const status = nodeRunStatuses[i];
-    if (status.lastRunStatus === "never_run") {
+  for (const node of nodes) {
+    const nodeID = getNodeID(node);
+    const status = statusByNodeID.get(nodeID);
+    if (!status || status.lastRunStatus === "never_run") {
       stale.push({
-        nodeID: getNodeID(node),
+        nodeID,
         nodeName: getNodeName(node),
         nodeType: getNodeType(node),
       });
@@ -238,7 +247,7 @@ function getStaleNodes(
           (Date.now() - lastRunDate.getTime()) / MS_PER_DAY
         );
         stale.push({
-          nodeID: getNodeID(node),
+          nodeID,
           nodeName: getNodeName(node),
           nodeType: getNodeType(node),
           lastRunTime: status.lastRunTime,

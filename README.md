@@ -371,8 +371,7 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 
 - **`list_environment_jobs`** - List all jobs for an environment
 - **`get_environment_job`** - Get details of a specific job
-- **`list_workspace_subgraphs`** - List subgraphs in a workspace
-- **`get_workspace_subgraph`** - Get details of a specific subgraph
+- **`get_workspace_subgraph`** - Get details of a specific subgraph by UUID (the public API has no subgraph list endpoint — look up UUIDs via the repo's `subgraphs/` folder or the local cache populated on create)
 - **`list_runs`** - List runs with optional filters
 - **`get_run`** - Get details of a specific run
 - **`get_run_results`** - Get results of a completed run
