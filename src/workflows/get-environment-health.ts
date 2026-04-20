@@ -165,6 +165,14 @@ function buildNodeRunStatuses(
       continue;
     }
 
+    // Skip canceled runs — a cancellation is a deliberate user action, not a
+    // pass or failure.  Skipping means the node's last-run status reflects the
+    // most recent completed-or-failed outcome, which is what the health score
+    // should be based on.
+    if (run.runStatus === "canceled") {
+      continue;
+    }
+
     const runTime = run.runEndTime ?? run.runStartTime;
     if (!runTime || typeof runTime !== "string") continue;
 

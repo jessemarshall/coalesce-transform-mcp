@@ -513,6 +513,88 @@ describe("get-environment-health workflow", () => {
     expect(result.healthScore).toBe("healthy");
   });
 
+  it("does not classify canceled runs as failures in per-node status", async () => {
+    const client = createMockClient();
+    const nodes = [
+      makeNode("n1", "STG_ORDERS", "Stage"),
+      makeNode("n2", "DIM_ORDERS", "Dimension", { predecessorNodeIDs: ["n1"] }),
+    ];
+
+    client.get.mockImplementation((path: string) => {
+      if (path === "/api/v1/environments/env-1/nodes") {
+        return Promise.resolve({ data: nodes });
+      }
+      if (path === "/api/v1/runs") {
+        return Promise.resolve({
+          data: [
+            {
+              // Most recent run was canceled — should be skipped
+              ...makeRun("r2", "canceled", HOURS_AGO(1), HOURS_AGO(0)),
+              runDetails: {
+                nodes: [{ nodeID: "n1" }, { nodeID: "n2" }],
+                nodesInRun: 2,
+              },
+            },
+            {
+              // Previous run completed successfully — should be the node's status
+              ...makeRun("r1", "completed", HOURS_AGO(3), HOURS_AGO(2)),
+              runDetails: {
+                nodes: [{ nodeID: "n1" }, { nodeID: "n2" }],
+                nodesInRun: 2,
+              },
+            },
+          ],
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    const result = await getEnvironmentHealth(client as any, { environmentID: "env-1" });
+
+    // Nodes should reflect the completed run, not the canceled one
+    expect(result.nodeRunStatus).toHaveLength(2);
+    expect(result.nodeRunStatus.every((s) => s.lastRunStatus === "passed")).toBe(true);
+    // Canceled run should not appear in failedRunsLast24h
+    expect(result.failedRunsLast24h).toHaveLength(0);
+    // Health score should be healthy (no failures, no orphans, all recently run)
+    expect(result.healthScore).toBe("healthy");
+    // Verify no failure-related health reasons
+    expect(result.healthReasons.some((r: string) => r.includes("failed"))).toBe(false);
+  });
+
+  it("shows never_run when only run was canceled (no prior completions)", async () => {
+    const client = createMockClient();
+    const nodes = [
+      makeNode("n1", "STG_ORDERS", "Stage"),
+    ];
+
+    client.get.mockImplementation((path: string) => {
+      if (path === "/api/v1/environments/env-1/nodes") {
+        return Promise.resolve({ data: nodes });
+      }
+      if (path === "/api/v1/runs") {
+        return Promise.resolve({
+          data: [
+            {
+              ...makeRun("r1", "canceled", HOURS_AGO(1), HOURS_AGO(0)),
+              runDetails: {
+                nodes: [{ nodeID: "n1" }],
+                nodesInRun: 1,
+              },
+            },
+          ],
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    const result = await getEnvironmentHealth(client as any, { environmentID: "env-1" });
+
+    // With only a canceled run, node should show as never_run
+    expect(result.nodeRunStatus).toHaveLength(1);
+    expect(result.nodeRunStatus[0].lastRunStatus).toBe("never_run");
+  });
+
   it("marks node with failed last run correctly", async () => {
     const client = createMockClient();
     const nodes = [
