@@ -27,7 +27,7 @@ export function defineJobTools(
   defineSimpleTool(client, "list_job_nodes", {
     title: "List Job Nodes (grouped by subgraph)",
     description:
-      "Resolve a workspace job's selectors into concrete workspace nodes, grouped by subgraph. Composes getWorkspaceJob + listWorkspaceNodes + listWorkspaceSubgraphs and evaluates the includeSelector/excludeSelector DSL (supported clauses: { subgraph: NAME } and { location: LOC name: NAME }, joined by OR).\n\nArgs:\n  - workspaceID (string, required): The workspace that owns the job\n  - jobID (string, optional): The job ID. Preferred when known.\n  - jobName (string, optional): The job name. Resolved against workspace jobs when jobID is absent.\n\nReturns:\n  {\n    job: { id, name, includeSelector, excludeSelector },\n    summary: { totalNodes, subgraphCount, unattachedCount, unresolvedCount, warnings },\n    nodesBySubgraph: [{ subgraphID, subgraphName, nodes: [{ id, name, location, nodeType }] }],\n    unattached: [...],                       // nodes matched by the job but not in any subgraph\n    unresolved: [{ term, reason }]           // selector terms that matched nothing (stale selectors)\n  }",
+      "Resolve a workspace job's selectors into concrete workspace nodes, grouped by subgraph. Composes getWorkspaceJob + listWorkspaceNodes + the local repo's subgraphs/ folder to evaluate the includeSelector/excludeSelector DSL (supported clauses: { subgraph: NAME } and { location: LOC name: NAME }, joined by OR).\n\nSubgraph resolution note: the public Coalesce API has no subgraph list endpoint. `{ subgraph: NAME }` terms can only be resolved when `repoPath` is set (or COALESCE_REPO_PATH). Without a repo, such terms land in `unresolved` and a warning is added to `summary.warnings`.\n\nArgs:\n  - workspaceID (string, required): The workspace that owns the job\n  - jobID (string, optional): The job ID. Preferred when known.\n  - jobName (string, optional): The job name. Resolved against workspace jobs when jobID is absent.\n  - repoPath (string, optional): Coalesce repo path for subgraph YAML lookup. Falls back to COALESCE_REPO_PATH or the coa profile.\n\nReturns:\n  {\n    job: { id, name, includeSelector, excludeSelector },\n    summary: { totalNodes, subgraphCount, unattachedCount, unresolvedCount, warnings },\n    nodesBySubgraph: [{ subgraphID, subgraphName, nodes: [{ id, name, location, nodeType }] }],\n    unattached: [...],                       // nodes matched by the job but not in any subgraph\n    unresolved: [{ term, reason }]           // selector terms that matched nothing (stale selectors or missing repoPath)\n  }",
     inputSchema: z
       .object({
         workspaceID: z.string().describe("The workspace that owns the job"),
@@ -36,6 +36,12 @@ export function defineJobTools(
           .string()
           .optional()
           .describe("The job name — resolved via listWorkspaceJobs when jobID is absent."),
+        repoPath: z
+          .string()
+          .optional()
+          .describe(
+            "Optional Coalesce repo path for subgraph YAML lookup. Required to resolve `{ subgraph: NAME }` selector terms. Falls back to COALESCE_REPO_PATH or the coa profile."
+          ),
       })
       .refine((v) => Boolean(v.jobID) || Boolean(v.jobName), {
         message: "Either jobID or jobName is required",

@@ -1,4 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import YAML from "yaml";
 import { listJobNodes } from "../../src/services/jobs/resolve.js";
 
 type NodeRecord = {
@@ -22,13 +26,15 @@ type Fixture = {
   job: JobRecord;
   jobsIndex?: JobRecord[]; // for listWorkspaceJobs scan (name→id lookup)
   nodes: NodeRecord[];
-  subgraphs: SubgraphRecord[];
 };
 
 /**
  * Builds a minimal client that serves getWorkspaceJob, listWorkspaceNodes,
- * listWorkspaceSubgraphs, and the sequential scan that listWorkspaceJobs
- * performs (GET /workspaces/{wid}/jobs/{numericID}).
+ * and the sequential scan that listWorkspaceJobs performs
+ * (GET /workspaces/{wid}/jobs/{numericID}).
+ *
+ * Subgraphs are NOT served by the API — listJobNodes loads them from the repo
+ * path, so tests seed a tmp `subgraphs/` folder and pass it as `repoPath`.
  */
 function makeClient(f: Fixture) {
   const get = vi.fn(async (path: string) => {
@@ -39,7 +45,6 @@ function makeClient(f: Fixture) {
       if (jid === f.job.id) return f.job;
       const hit = (f.jobsIndex ?? []).find((j) => j.id === jid);
       if (hit) return hit;
-      // simulate 404 via the CoalesceApiError shape so scanResourcesByID skips it
       const { CoalesceApiError } = await import("../../src/client.js");
       throw new CoalesceApiError("Not found", 404);
     }
@@ -54,21 +59,36 @@ function makeClient(f: Fixture) {
         })),
       };
     }
-    // listWorkspaceSubgraphs uses scanResourcesByID /api/v1/workspaces/<wid>/subgraphs/<id>
-    const sgMatch = path.match(/\/api\/v1\/workspaces\/[^/]+\/subgraphs\/([^/?]+)$/);
-    if (sgMatch) {
-      const id = sgMatch[1];
-      const hit = f.subgraphs.find((s) => s.id === id);
-      if (hit) return hit;
-      const { CoalesceApiError } = await import("../../src/client.js");
-      throw new CoalesceApiError("Not found", 404);
-    }
     throw new Error(`Unexpected GET ${path}`);
   });
   return { get, post: vi.fn(), put: vi.fn(), delete: vi.fn() };
 }
 
+let repoDir: string;
+
+function seedSubgraphs(subgraphs: SubgraphRecord[]): string {
+  repoDir = mkdtempSync(join(tmpdir(), "coalesce-job-resolve-test-"));
+  const sgDir = join(repoDir, "subgraphs");
+  mkdirSync(sgDir, { recursive: true });
+  for (const sg of subgraphs) {
+    writeFileSync(join(sgDir, `${sg.name}.yml`), YAML.stringify(sg), "utf8");
+  }
+  return repoDir;
+}
+
 describe("listJobNodes", () => {
+  beforeEach(() => {
+    // Isolate from ambient COALESCE_REPO_PATH so tests control repo resolution.
+    delete process.env.COALESCE_REPO_PATH;
+  });
+
+  afterEach(() => {
+    if (repoDir) {
+      rmSync(repoDir, { recursive: true, force: true });
+      repoDir = "";
+    }
+  });
+
   it("groups nodes by subgraph when a subgraph selector matches", async () => {
     const job: JobRecord = {
       id: "10",
@@ -83,12 +103,13 @@ describe("listJobNodes", () => {
         { id: "n2", name: "DIM_DATE", locationName: "SILVER_EDM", nodeType: "Dimension" },
         { id: "n3", name: "OTHER", locationName: "SILVER_STG", nodeType: "Work" },
       ],
-      subgraphs: [{ id: "1", name: "DIM_DATE", steps: ["n1", "n2"] }],
     });
+    const repoPath = seedSubgraphs([{ id: "1", name: "DIM_DATE", steps: ["n1", "n2"] }]);
 
     const result = await listJobNodes(client as any, {
       workspaceID: "ws1",
       jobID: "10",
+      repoPath,
     });
 
     expect(result.job).toEqual({
@@ -119,12 +140,13 @@ describe("listJobNodes", () => {
         { id: "n1", name: "STG_X", locationName: "SILVER_STG", nodeType: "Work" },
         { id: "n2", name: "STG_LOOSE", locationName: "SILVER_STG", nodeType: "Work" },
       ],
-      subgraphs: [{ id: "1", name: "A", steps: ["n1"] }],
     });
+    const repoPath = seedSubgraphs([{ id: "1", name: "A", steps: ["n1"] }]);
 
     const result = await listJobNodes(client as any, {
       workspaceID: "ws1",
       jobID: "11",
+      repoPath,
     });
 
     expect(result.summary.totalNodes).toBe(2);
@@ -150,12 +172,13 @@ describe("listJobNodes", () => {
         { id: "n1", name: "STG_DATE", locationName: "SILVER_STG", nodeType: "Work" },
         { id: "n2", name: "DIM_DATE", locationName: "SILVER_EDM", nodeType: "Dimension" },
       ],
-      subgraphs: [{ id: "1", name: "DIM_DATE", steps: ["n1", "n2"] }],
     });
+    const repoPath = seedSubgraphs([{ id: "1", name: "DIM_DATE", steps: ["n1", "n2"] }]);
 
     const result = await listJobNodes(client as any, {
       workspaceID: "ws1",
       jobID: "12",
+      repoPath,
     });
 
     expect(result.summary.totalNodes).toBe(1);
@@ -179,12 +202,13 @@ describe("listJobNodes", () => {
         { id: "n1", name: "STG_X", locationName: "SILVER_STG", nodeType: "Work" },
         { id: "n2", name: "STG_LOOSE", locationName: "SILVER_STG", nodeType: "Work" },
       ],
-      subgraphs: [{ id: "1", name: "ALL", steps: ["n1", "n2"] }],
     });
+    const repoPath = seedSubgraphs([{ id: "1", name: "ALL", steps: ["n1", "n2"] }]);
 
     const result = await listJobNodes(client as any, {
       workspaceID: "ws1",
       jobID: "13",
+      repoPath,
     });
 
     expect(result.summary.totalNodes).toBe(1);
@@ -201,12 +225,13 @@ describe("listJobNodes", () => {
     const client = makeClient({
       job,
       nodes: [{ id: "n1", name: "KEEP", locationName: "LOC", nodeType: "Work" }],
-      subgraphs: [],
     });
+    const repoPath = seedSubgraphs([]);
 
     const result = await listJobNodes(client as any, {
       workspaceID: "ws1",
       jobID: "14",
+      repoPath,
     });
 
     expect(result.summary.totalNodes).toBe(0);
@@ -226,16 +251,38 @@ describe("listJobNodes", () => {
     const client = makeClient({
       job,
       nodes: [],
-      subgraphs: [],
     });
+    const repoPath = seedSubgraphs([]);
 
     const result = await listJobNodes(client as any, {
       workspaceID: "ws1",
       jobID: "15",
+      repoPath,
     });
 
-    expect(result.summary.warnings).toHaveLength(1);
-    expect(result.summary.warnings[0]).toContain("||");
+    expect(result.summary.warnings.some((w) => w.includes("||"))).toBe(true);
+  });
+
+  it("warns when subgraph selectors are used without a repoPath", async () => {
+    const job: JobRecord = {
+      id: "16",
+      name: "JOB_NO_REPO",
+      includeSelector: `{ subgraph: "DIM_DATE" }`,
+      excludeSelector: "",
+    };
+    const client = makeClient({
+      job,
+      nodes: [{ id: "n1", name: "STG_DATE", locationName: "SILVER_STG", nodeType: "Work" }],
+    });
+
+    const result = await listJobNodes(client as any, {
+      workspaceID: "ws1",
+      jobID: "16",
+    });
+
+    expect(result.summary.totalNodes).toBe(0);
+    expect(result.summary.unresolvedCount).toBe(1);
+    expect(result.summary.warnings.some((w) => w.includes("repoPath"))).toBe(true);
   });
 
   it("resolves jobID from jobName when ID is not provided", async () => {
@@ -249,12 +296,13 @@ describe("listJobNodes", () => {
       job,
       jobsIndex: [job],
       nodes: [{ id: "n1", name: "A", locationName: "L", nodeType: "Work" }],
-      subgraphs: [{ id: "1", name: "X", steps: ["n1"] }],
     });
+    const repoPath = seedSubgraphs([{ id: "1", name: "X", steps: ["n1"] }]);
 
     const result = await listJobNodes(client as any, {
       workspaceID: "ws1",
       jobName: "JOB_BY_NAME",
+      repoPath,
     });
 
     expect(result.job.id).toBe("42");
@@ -270,7 +318,6 @@ describe("listJobNodes", () => {
         excludeSelector: "",
       },
       nodes: [],
-      subgraphs: [],
     });
     await expect(
       listJobNodes(client as any, { workspaceID: "ws1" } as any)

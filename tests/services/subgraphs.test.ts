@@ -18,7 +18,6 @@ import {
   updateSubgraphResolved,
   deleteSubgraphByID,
 } from "../../src/services/subgraphs/operations.js";
-import { CoalesceApiError } from "../../src/client.js";
 
 function createMockClient() {
   return {
@@ -304,26 +303,24 @@ describe("repo subgraph scan", () => {
 });
 
 describe("resolveSubgraphByName", () => {
-  it("returns cache hit without hitting the API", async () => {
+  it("returns cache hit without any I/O", () => {
     saveSubgraphToCache({
       workspaceID: "ws-1",
       id: "sg-cache-1",
       name: "Staging",
       steps: [],
     });
-    const client = createMockClient();
 
-    const result = await resolveSubgraphByName(client as any, {
+    const result = resolveSubgraphByName({
       workspaceID: "ws-1",
       name: "Staging",
     });
 
     expect(result.id).toBe("sg-cache-1");
     expect(result.source).toBe("cache");
-    expect(client.get).not.toHaveBeenCalled();
   });
 
-  it("falls back to repo folder when cache misses", async () => {
+  it("falls back to repo folder when cache misses", () => {
     const repoDir = mkdtempSync(join(tmpdir(), "subgraph-resolve-repo-"));
     try {
       mkdirSync(join(repoDir, "subgraphs"), { recursive: true });
@@ -332,8 +329,7 @@ describe("resolveSubgraphByName", () => {
         `id: sg-repo-marts\nname: Marts\nsteps: []\nversion: 1\n`
       );
 
-      const client = createMockClient();
-      const result = await resolveSubgraphByName(client as any, {
+      const result = resolveSubgraphByName({
         workspaceID: "ws-1",
         name: "Marts",
         repoPath: repoDir,
@@ -350,76 +346,38 @@ describe("resolveSubgraphByName", () => {
     }
   });
 
-  it("falls back to workspace API when cache and repo both miss", async () => {
-    const client = createMockClient();
-    client.get.mockImplementation(async (path: string) => {
-      if (path === "/api/v1/workspaces/ws-1/subgraphs/1") {
-        return { id: "sg-ws-1", name: "Production", steps: ["n-a"] };
-      }
-      throw new CoalesceApiError("Not found", 404);
-    });
-
-    const result = await resolveSubgraphByName(client as any, {
-      workspaceID: "ws-1",
-      name: "Production",
-    });
-
-    expect(result.id).toBe("sg-ws-1");
-    expect(result.source).toBe("workspace");
-    expect(
-      findSubgraphInCache({ workspaceID: "ws-1", name: "Production" })?.id
-    ).toBe("sg-ws-1");
+  it("throws when cache misses and no repoPath is provided (no workspace fallback)", () => {
+    expect(() =>
+      resolveSubgraphByName({
+        workspaceID: "ws-1",
+        name: "Production",
+      })
+    ).toThrow(/Could not find a subgraph named "Production"/);
   });
 
-  it("uses repo folder before workspace list when both could match", async () => {
-    const repoDir = mkdtempSync(join(tmpdir(), "subgraph-priority-repo-"));
+  it("lists candidate names from the repo when the requested name is missing", () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "subgraph-resolve-missing-"));
     try {
       mkdirSync(join(repoDir, "subgraphs"), { recursive: true });
       writeFileSync(
-        join(repoDir, "subgraphs", "shared.yml"),
-        `id: sg-from-repo\nname: Shared\nsteps: []\nversion: 1\n`
+        join(repoDir, "subgraphs", "alpha.yml"),
+        `id: sg-a\nname: Alpha\nsteps: []\nversion: 1\n`
+      );
+      writeFileSync(
+        join(repoDir, "subgraphs", "beta.yml"),
+        `id: sg-b\nname: Beta\nsteps: []\nversion: 1\n`
       );
 
-      const client = createMockClient();
-      // Workspace also has a subgraph named "Shared" but with a different ID
-      client.get.mockImplementation(async (path: string) => {
-        if (path === "/api/v1/workspaces/ws-1/subgraphs/1") {
-          return { id: "sg-from-ws", name: "Shared", steps: [] };
-        }
-        throw new CoalesceApiError("Not found", 404);
-      });
-
-      const result = await resolveSubgraphByName(client as any, {
-        workspaceID: "ws-1",
-        name: "Shared",
-        repoPath: repoDir,
-      });
-
-      expect(result.id).toBe("sg-from-repo");
-      expect(result.source).toBe("repo");
+      expect(() =>
+        resolveSubgraphByName({
+          workspaceID: "ws-1",
+          name: "NoSuch",
+          repoPath: repoDir,
+        })
+      ).toThrow(/NoSuch.*Alpha.*Beta|Alpha.*Beta/);
     } finally {
       rmSync(repoDir, { recursive: true, force: true });
     }
-  });
-
-  it("throws a clear error listing available names when not found", async () => {
-    const client = createMockClient();
-    client.get.mockImplementation(async (path: string) => {
-      if (path === "/api/v1/workspaces/ws-1/subgraphs/1") {
-        return { id: "sg-a", name: "Alpha", steps: [] };
-      }
-      if (path === "/api/v1/workspaces/ws-1/subgraphs/2") {
-        return { id: "sg-b", name: "Beta", steps: [] };
-      }
-      throw new CoalesceApiError("Not found", 404);
-    });
-
-    await expect(
-      resolveSubgraphByName(client as any, {
-        workspaceID: "ws-1",
-        name: "NoSuch",
-      })
-    ).rejects.toThrow(/NoSuch.*Alpha.*Beta|Alpha.*Beta/);
   });
 });
 

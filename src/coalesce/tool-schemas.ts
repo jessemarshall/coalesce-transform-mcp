@@ -604,7 +604,6 @@ const LIST_TOOL_NAMES = new Set([
   "list_user_roles",
   "list_git_accounts",
   "list_workspaces",
-  "list_workspace_subgraphs",
 ]);
 
 const ENTITY_TOOL_NAMES = new Set([

@@ -55,7 +55,7 @@ The tool detects the workspace methodology (Kimball, Data Vault, dbt-style, mixe
 
 By default, the tool reviews all nodes but only fetches full detail for the first 50. For large workspaces:
 
-1. **Use subgraph scoping**: Get node IDs from `list_workspace_subgraphs` and pass them as `nodeIDs`
+1. **Use subgraph scoping**: Look up a subgraph by UUID with `get_workspace_subgraph` (or from the repo's `subgraphs/` folder — the Coalesce API has no subgraph list endpoint) and pass its step IDs as `nodeIDs`
 2. **Focus on a pipeline section**: Pass specific node IDs for the pipeline you want to review
 
 ## Typical Workflow
