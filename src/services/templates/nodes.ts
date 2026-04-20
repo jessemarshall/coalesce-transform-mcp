@@ -353,7 +353,7 @@ export function compareGeneratedTemplateToWorkspaceNode(
   workspaceNode: Record<string, unknown>
 ): TemplateComparisonResult {
   const checks = generated.fieldMappings
-    .filter((mapping) => mapping.targetPath)
+    .filter((mapping) => mapping.targetPath && !mapping.targetPath.includes("[]"))
     .map((mapping) => {
       const targetPath = mapping.targetPath!;
       const actualValue = getByPath(workspaceNode, targetPath);
