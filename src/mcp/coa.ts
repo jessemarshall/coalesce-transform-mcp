@@ -66,7 +66,7 @@ function formatCommand(args: string[]): string {
       i += 1;
       continue;
     }
-    parts.push(arg.includes(" ") ? `'${arg}'` : arg);
+    parts.push(arg.includes(" ") ? `'${arg.replace(/'/g, "'\\''")}'` : arg);
   }
   return parts.join(" ");
 }

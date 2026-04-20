@@ -1,10 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
-import {
-  listWorkspaceSubgraphs,
-  getWorkspaceSubgraph,
-} from "../coalesce/api/subgraphs.js";
+import { getWorkspaceSubgraph } from "../coalesce/api/subgraphs.js";
 import {
   createSubgraphWithCache,
   updateSubgraphResolved,
@@ -12,7 +9,6 @@ import {
 } from "../services/subgraphs/operations.js";
 import { resolveSubgraphByName } from "../services/subgraphs/resolve.js";
 import {
-  PaginationParams,
   READ_ONLY_ANNOTATIONS,
   WRITE_ANNOTATIONS,
   DESTRUCTIVE_ANNOTATIONS,
@@ -25,16 +21,6 @@ export function defineSubgraphTools(
   client: CoalesceClient
 ): ToolDefinition[] {
   return [
-  defineSimpleTool(client, "list_workspace_subgraphs", {
-    title: "List Workspace Subgraphs",
-    description:
-      "List all subgraphs in a Coalesce workspace. Use this to discover subgraph IDs.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - limit, startingFrom, orderBy, orderByDirection: Pagination\n\nReturns:\n  { data: Subgraph[], next?: string, total?: number }",
-    inputSchema: PaginationParams.extend({
-      workspaceID: z.string().describe("The workspace ID"),
-    }),
-    annotations: READ_ONLY_ANNOTATIONS,
-  }, listWorkspaceSubgraphs),
-
   defineSimpleTool(client, "get_workspace_subgraph", {
     title: "Get Workspace Subgraph",
     description:
@@ -63,7 +49,7 @@ export function defineSubgraphTools(
   defineSimpleTool(client, "update_workspace_subgraph", {
     title: "Update Workspace Subgraph",
     description:
-      "Update a subgraph's name and member nodes. Replaces the entire steps array. Pass either subgraphID (fastest) or subgraphName — if only the name is given, the ID is resolved from (1) the local UUID cache, (2) {repoPath}/subgraphs/*.yml, (3) the workspace subgraph list.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - subgraphID (string, optional): The subgraph ID. Preferred when known.\n  - subgraphName (string, optional): The subgraph name. Used to resolve the ID when subgraphID is absent.\n  - repoPath (string, optional): Coalesce repo path for subgraph YAML lookup.\n  - name (string, required): Updated name\n  - steps (string[], required): Updated node IDs\n\nReturns:\n  { subgraphID, subgraph, resolvedFrom } where resolvedFrom is \"input\" | \"cache\" | \"repo\" | \"workspace\".",
+      "Update a subgraph's name and member nodes. Replaces the entire steps array. Pass either subgraphID (fastest) or subgraphName — if only the name is given, the ID is resolved from (1) the local UUID cache, (2) {repoPath}/subgraphs/*.yml. The public Coalesce API has no subgraph list endpoint, so a subgraph created outside this MCP session cannot be resolved by name without a repo checkout.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - subgraphID (string, optional): The subgraph ID. Preferred when known.\n  - subgraphName (string, optional): The subgraph name. Used to resolve the ID when subgraphID is absent.\n  - repoPath (string, optional): Coalesce repo path for subgraph YAML lookup.\n  - name (string, required): Updated name\n  - steps (string[], required): Updated node IDs\n\nReturns:\n  { subgraphID, subgraph, resolvedFrom } where resolvedFrom is \"input\" | \"cache\" | \"repo\".",
     inputSchema: z.object({
       workspaceID: z.string().describe("The workspace ID"),
       subgraphID: z
@@ -74,7 +60,7 @@ export function defineSubgraphTools(
         .string()
         .optional()
         .describe(
-          "The subgraph name. Used to resolve the ID from the local cache, repo subgraphs/ folder, or workspace list when subgraphID is absent."
+          "The subgraph name. Used to resolve the ID from the local cache or repo subgraphs/ folder when subgraphID is absent (the Coalesce API has no subgraph list endpoint)."
         ),
       repoPath: z
         .string()
@@ -93,7 +79,7 @@ export function defineSubgraphTools(
   defineDestructiveTool(server, client, "delete_workspace_subgraph", {
     title: "Delete Workspace Subgraph",
     description:
-      "Delete a subgraph from a workspace. Destructive — the subgraph is removed but its member nodes are NOT deleted. Pass either subgraphID (preferred) or subgraphName with optional repoPath.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - subgraphID (string, optional): The subgraph ID. Preferred when known.\n  - subgraphName (string, optional): The subgraph name. Resolved via cache \u2192 repo \u2192 workspace when subgraphID is absent.\n  - repoPath (string, optional): Coalesce repo path for subgraph YAML lookup.\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms deletion\n\nReturns:\n  Confirmation message.",
+      "Delete a subgraph from a workspace. Destructive — the subgraph is removed but its member nodes are NOT deleted. Pass either subgraphID (preferred) or subgraphName with optional repoPath.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - subgraphID (string, optional): The subgraph ID. Preferred when known.\n  - subgraphName (string, optional): The subgraph name. Resolved via cache \u2192 repo when subgraphID is absent (the Coalesce API has no subgraph list endpoint).\n  - repoPath (string, optional): Coalesce repo path for subgraph YAML lookup.\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms deletion\n\nReturns:\n  Confirmation message.",
     inputSchema: z.object({
       workspaceID: z.string().describe("The workspace ID"),
       subgraphID: z
@@ -104,7 +90,7 @@ export function defineSubgraphTools(
         .string()
         .optional()
         .describe(
-          "The subgraph name. Resolved via cache \u2192 repo \u2192 workspace list when subgraphID is absent."
+          "The subgraph name. Resolved via cache \u2192 repo when subgraphID is absent (the Coalesce API has no subgraph list endpoint)."
         ),
       repoPath: z
         .string()
@@ -123,7 +109,7 @@ export function defineSubgraphTools(
         throw new Error("Either subgraphID or subgraphName is required.");
       }
       if (!params.subgraphID) {
-        const resolved = await resolveSubgraphByName(client, {
+        const resolved = resolveSubgraphByName({
           workspaceID: params.workspaceID,
           name: params.subgraphName!,
           repoPath: params.repoPath,

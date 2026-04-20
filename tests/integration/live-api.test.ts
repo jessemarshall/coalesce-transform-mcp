@@ -237,17 +237,10 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
       }
     });
 
-    it("list_workspace_subgraphs", async () => {
-      const res = await callTool("list_workspace_subgraphs", {
-        workspaceID: WORKSPACE_ID,
-      });
-      assertToolSuccess(res, "list_workspace_subgraphs");
-      const data = parseStructured(res);
-      const subgraphs = (data.data ?? data) as any[];
-      if (subgraphs?.[0]?.id) {
-        discovered.subgraphID = subgraphs[0].id;
-      }
-    });
+    // list_workspace_subgraphs removed — the public Coalesce API has no subgraph
+    // list endpoint. Subgraphs created inside this integration suite are
+    // captured into `created.subgraphID` by the create-subgraph test, which is
+    // used to exercise get/update/delete downstream.
   });
 
   // ── Phase 2: Read-Only Tools ──────────────────────────────────────────
@@ -429,16 +422,10 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
       assertToolSuccess(res, "get_git_account");
     });
 
-    // Subgraphs
-    it("get_workspace_subgraph", async () => {
-      const sid = discovered.subgraphID;
-      if (!sid) return;
-      const res = await callTool("get_workspace_subgraph", {
-        workspaceID: WORKSPACE_ID,
-        subgraphID: sid,
-      });
-      assertToolSuccess(res, "get_workspace_subgraph");
-    });
+    // Subgraphs: `get_workspace_subgraph` lives in Phase 3 after
+    // `create_workspace_subgraph` populates `created.subgraphID` (the public
+    // Coalesce API has no subgraph list endpoint, so we can't discover an
+    // existing subgraph ID in Phase 1).
 
     // Pipelines (read-only)
     it("plan_pipeline", { timeout: 120_000 }, async () => {
@@ -771,6 +758,15 @@ describe.skipIf(!HAS_REQUIRED)("Live API — All MCP Tools", { timeout: 60_000 }
       assertToolSuccess(res, "create_workspace_subgraph");
       const data = parseStructured(res);
       created.subgraphID = (data as any)?.id ?? (data as any)?.data?.id;
+    });
+
+    it("get_workspace_subgraph", async () => {
+      if (!created.subgraphID) return;
+      const res = await callTool("get_workspace_subgraph", {
+        workspaceID: WORKSPACE_ID,
+        subgraphID: created.subgraphID,
+      });
+      assertToolSuccess(res, "get_workspace_subgraph");
     });
 
     it("update_workspace_subgraph", async () => {

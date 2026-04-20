@@ -18,10 +18,9 @@ export type SubgraphTarget = {
   repoPath?: string;
 };
 
-async function resolveTarget(
-  client: CoalesceClient,
+function resolveTarget(
   target: SubgraphTarget
-): Promise<{ id: string; resolved: ResolvedSubgraph | null }> {
+): { id: string; resolved: ResolvedSubgraph | null } {
   if (target.subgraphID) {
     return { id: target.subgraphID, resolved: null };
   }
@@ -30,7 +29,7 @@ async function resolveTarget(
       "Either subgraphID or subgraphName is required. Pass subgraphID if you know it, or subgraphName (with optional repoPath) to resolve by name."
     );
   }
-  const resolved = await resolveSubgraphByName(client, {
+  const resolved = resolveSubgraphByName({
     workspaceID: target.workspaceID,
     name: target.subgraphName,
     repoPath: target.repoPath,
@@ -68,7 +67,7 @@ export async function updateSubgraphResolved(
   client: CoalesceClient,
   params: SubgraphTarget & { name: string; steps: string[] }
 ): Promise<Record<string, unknown>> {
-  const { id, resolved } = await resolveTarget(client, params);
+  const { id, resolved } = resolveTarget(params);
   const updated = await apiUpdate(client, {
     workspaceID: params.workspaceID,
     subgraphID: id,

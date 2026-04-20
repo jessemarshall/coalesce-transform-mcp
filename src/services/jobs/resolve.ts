@@ -7,7 +7,8 @@ import {
 import {
   listWorkspaceNodes,
 } from "../../coalesce/api/nodes.js";
-import { listWorkspaceSubgraphs } from "../../coalesce/api/subgraphs.js";
+import { resolveOptionalRepoPathInput } from "../repo/path.js";
+import { scanRepoSubgraphs } from "../subgraphs/repo-scan.js";
 import { WORKSPACE_NODE_PAGE_LIMIT } from "../pipelines/planning-types.js";
 import { parseJobSelector, type SelectorTerm } from "./selector-parser.js";
 
@@ -63,7 +64,7 @@ export type JobNodesResult = {
 
 export async function listJobNodes(
   client: CoalesceClient,
-  params: { workspaceID: string; jobID?: string; jobName?: string }
+  params: { workspaceID: string; jobID?: string; jobName?: string; repoPath?: string }
 ): Promise<JobNodesResult> {
   if (!params.jobID && !params.jobName) {
     throw new Error("list_job_nodes requires either jobID or jobName.");
@@ -83,10 +84,14 @@ export async function listJobNodes(
   const exclude = parseJobSelector(job.excludeSelector);
   const warnings = [...include.warnings, ...exclude.warnings];
 
-  const [nodes, subgraphs] = await Promise.all([
-    listAllWorkspaceNodes(client, params.workspaceID),
-    listAllSubgraphs(client, params.workspaceID),
-  ]);
+  const resolvedRepoPath = resolveOptionalRepoPathInput(params.repoPath);
+  const subgraphs = resolvedRepoPath ? loadSubgraphsFromRepo(resolvedRepoPath) : [];
+  if (!resolvedRepoPath && hasSubgraphSelector([...include.terms, ...exclude.terms])) {
+    warnings.push(
+      "Job selectors reference `{ subgraph: NAME }` but no repoPath was provided and the Coalesce API has no subgraph list endpoint — subgraph terms will appear in `unresolved`. Pass repoPath (or set COALESCE_REPO_PATH) to resolve them from the repo's subgraphs/ folder."
+    );
+  }
+  const nodes = await listAllWorkspaceNodes(client, params.workspaceID);
 
   const nodesByID = new Map(nodes.map((n) => [n.id, n]));
   const subgraphByName = new Map<string, SubgraphEntry>();
@@ -267,25 +272,16 @@ async function listAllWorkspaceNodes(
   return out;
 }
 
-async function listAllSubgraphs(
-  client: CoalesceClient,
-  workspaceID: string
-): Promise<SubgraphEntry[]> {
-  const response = await listWorkspaceSubgraphs(client, { workspaceID });
-  const data =
-    isPlainObject(response) && Array.isArray(response.data) ? response.data : [];
-  const out: SubgraphEntry[] = [];
-  for (const entry of data) {
-    if (!isPlainObject(entry)) continue;
-    const id = typeof entry.id === "string" ? entry.id : null;
-    const name = typeof entry.name === "string" ? entry.name : null;
-    if (!id || !name) continue;
-    const steps = Array.isArray(entry.steps)
-      ? entry.steps.filter((s): s is string => typeof s === "string")
-      : [];
-    out.push({ id, name, steps });
-  }
-  return out;
+function loadSubgraphsFromRepo(repoPath: string): SubgraphEntry[] {
+  return scanRepoSubgraphs(repoPath).map((s) => ({
+    id: s.id,
+    name: s.name,
+    steps: s.steps,
+  }));
+}
+
+function hasSubgraphSelector(terms: SelectorTerm[]): boolean {
+  return terms.some((t) => t.kind === "subgraph");
 }
 
 function indexByLocationName(
