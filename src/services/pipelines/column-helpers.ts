@@ -1,20 +1,13 @@
 import { isPlainObject } from "../../utils.js";
 import type { PlannedSelectItem, PlannedPipelineNode } from "./planning-types.js";
 import { normalizeSqlIdentifier, deepClone, getUniqueSourceDependencies } from "./sql-parsing.js";
+import { getNodeColumnNames } from "../workspace/node-inspection.js";
 
-export function getColumnNamesFromNode(node: Record<string, unknown>): string[] {
-  const metadata = isPlainObject(node.metadata) ? node.metadata : undefined;
-  if (!Array.isArray(metadata?.columns)) {
-    return [];
-  }
-
-  return metadata.columns.flatMap((column) => {
-    if (!isPlainObject(column) || typeof column.name !== "string") {
-      return [];
-    }
-    return [column.name];
-  });
-}
+/**
+ * Re-export of getNodeColumnNames under the name pipeline consumers already use.
+ * The canonical implementation lives in workspace/node-inspection.ts.
+ */
+export const getColumnNamesFromNode = getNodeColumnNames;
 
 export function getNodeColumnArray(node: Record<string, unknown>): Record<string, unknown>[] {
   const metadata = isPlainObject(node.metadata) ? node.metadata : undefined;
