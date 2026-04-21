@@ -318,7 +318,6 @@ export function scoreCandidate(
 
 export function challengeCandidate(
   candidate: InternalPipelineNodeTypeCandidate,
-  context: PipelineNodeTypeSelectionContext,
   contextText: string
 ): string[] {
   const challenges: string[] = [];

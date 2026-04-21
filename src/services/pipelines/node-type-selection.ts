@@ -265,7 +265,7 @@ export function selectPipelineNodeType(
     const top = sorted[0] ?? null;
     if (!top) break;
 
-    const challenges = challengeCandidate(top, context, contextText);
+    const challenges = challengeCandidate(top, contextText);
     if (challenges.length > 0) {
       challengeLog.push(`Round ${round}: challenged "${top.nodeType}" (${top.displayName ?? top.family}) — ${challenges.join("; ")}`);
       top.score = -Infinity;

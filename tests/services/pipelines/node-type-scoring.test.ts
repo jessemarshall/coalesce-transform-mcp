@@ -736,7 +736,6 @@ describe("challengeCandidate", () => {
     });
     const challenges = challengeCandidate(
       candidate,
-      makeContext(),
       "simple staging layer"
     );
     expect(challenges).toEqual(
@@ -754,7 +753,6 @@ describe("challengeCandidate", () => {
     });
     const challenges = challengeCandidate(
       candidate,
-      makeContext(),
       "stage raw data"
     );
     expect(challenges).toEqual(
@@ -770,7 +768,6 @@ describe("challengeCandidate", () => {
     });
     const challenges = challengeCandidate(
       candidate,
-      makeContext(),
       "process raw data"
     );
     expect(challenges).toEqual(
@@ -786,7 +783,6 @@ describe("challengeCandidate", () => {
     });
     const challenges = challengeCandidate(
       candidate,
-      makeContext(),
       "build a dimensional model"
     );
     const semanticChallenges = challenges.filter((c) =>
@@ -801,7 +797,6 @@ describe("challengeCandidate", () => {
     });
     const challenges = challengeCandidate(
       candidate,
-      makeContext(),
       "persistent stage with CDC tracking"
     );
     expect(challenges).toEqual(
@@ -818,7 +813,6 @@ describe("challengeCandidate", () => {
     // "work" and "transform" are strong signals for work, but stage/work don't challenge each other
     const challenges = challengeCandidate(
       candidate,
-      makeContext(),
       "work table for intermediate transform"
     );
     const crossChallenges = challenges.filter((c) =>
@@ -834,7 +828,6 @@ describe("challengeCandidate", () => {
       });
       const challenges = challengeCandidate(
         candidate,
-        makeContext(),
         "CTE decomposition of the staging pipeline"
       );
       expect(challenges).toEqual(
@@ -850,7 +843,6 @@ describe("challengeCandidate", () => {
       });
       const challenges = challengeCandidate(
         candidate,
-        makeContext(),
         "batch ETL pipeline with truncate and insert"
       );
       expect(challenges).toEqual(
@@ -866,7 +858,6 @@ describe("challengeCandidate", () => {
       });
       const challenges = challengeCandidate(
         candidate,
-        makeContext(),
         "general purpose staging of simple data"
       );
       expect(challenges).toEqual(
@@ -881,7 +872,6 @@ describe("challengeCandidate", () => {
       const candidate = makeCandidate({ family: "unknown" });
       const challenges = challengeCandidate(
         candidate,
-        makeContext(),
         "cte decomposition batch etl general purpose"
       );
       // "unknown" family has doNotUseWhen: ["A known family matches the use case"]
@@ -897,7 +887,6 @@ describe("challengeCandidate", () => {
     });
     const challenges = challengeCandidate(
       candidate,
-      makeContext(),
       "transform data"
     );
     expect(challenges).toEqual(
@@ -915,7 +904,6 @@ describe("challengeCandidate", () => {
     });
     const challenges = challengeCandidate(
       candidate,
-      makeContext(),
       "general staging transform"
     );
     expect(challenges).toEqual(
@@ -932,7 +920,6 @@ describe("challengeCandidate", () => {
     });
     const challenges = challengeCandidate(
       candidate,
-      makeContext(),
       "stage raw data"
     );
     // Stage for "stage raw data" should pass with no challenges
