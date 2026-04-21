@@ -100,6 +100,9 @@ function getNodeType(node: NodeRecord): string {
 }
 
 
+// Best-effort: covers the scoping mechanisms Coalesce currently exposes
+// (job, include/exclude selectors). New scope mechanisms added server-side
+// will look "full-environment" here until added to this list.
 function isRunScoped(details: Record<string, unknown>): boolean {
   return (
     typeof details.jobID === "string" ||

@@ -220,6 +220,50 @@ function getByPath(source: Record<string, unknown>, path: string): unknown {
   return current;
 }
 
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) {
+    return true;
+  }
+
+  if (typeof a !== typeof b) {
+    return false;
+  }
+
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) {
+      return false;
+    }
+    for (let index = 0; index < a.length; index += 1) {
+      if (!deepEqual(a[index], b[index])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (isPlainObject(a)) {
+    if (!isPlainObject(b)) {
+      return false;
+    }
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    if (aKeys.length !== bKeys.length) {
+      return false;
+    }
+    for (const key of aKeys) {
+      if (!Object.prototype.hasOwnProperty.call(b, key)) {
+        return false;
+      }
+      if (!deepEqual(a[key], b[key])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  return false;
+}
+
 export function buildSetWorkspaceNodeTemplateFromDefinition(
   nodeDefinition: Record<string, unknown>,
   options: NodeDefinitionTemplateOptions = {}
@@ -372,10 +416,9 @@ export function compareGeneratedTemplateToWorkspaceNode(
         targetPath,
         inferredDefault,
         actualValue,
-        status:
-          JSON.stringify(actualValue) === JSON.stringify(inferredDefault)
-            ? ("matched" as const)
-            : ("mismatched" as const),
+        status: deepEqual(actualValue, inferredDefault)
+          ? ("matched" as const)
+          : ("mismatched" as const),
       };
     });
 
