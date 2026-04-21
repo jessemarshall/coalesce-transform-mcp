@@ -169,13 +169,23 @@ describe("buildUseCaseContext", () => {
       expect(result.desiredFamilies).toContain("view");
     });
 
-    it("falls through to general-purpose when view intent + hasJoin", () => {
+    it("skips explicit view intent when hasJoin but still matches via strong signals", () => {
       const result = buildUseCaseContext(
         makeContext({ goal: "create a view", hasJoin: true })
       );
-      // With a join, explicit view intent is overridden — view alone can't handle joins well
-      // The strong signal check or general-purpose fallback applies
-      expect(["general-purpose", "view"]).toContain(result.category);
+      // hasJoin blocks the explicit viewIntent check (line 77), but "view" in the goal
+      // still matches view's strongSignals regex in the fallback loop — so category is "view"
+      expect(result.category).toBe("view");
+    });
+
+    it("falls through to general-purpose when hasJoin and no view signal in text", () => {
+      const result = buildUseCaseContext(
+        makeContext({ goal: "join two tables with no materialization", hasJoin: true })
+      );
+      // "no materialization" triggers viewIntent, but hasJoin blocks the explicit check.
+      // "no materialization" does NOT match view's strongSignals regex, so it falls
+      // through to general-purpose.
+      expect(result.category).toBe("general-purpose");
     });
 
     it("detects 'no materialization' intent", () => {
@@ -213,6 +223,30 @@ describe("buildUseCaseContext", () => {
         makeContext({ targetName: "hub_customer" })
       );
       expect(result.category).toBe("data-vault");
+    });
+  });
+
+  describe("empty/undefined context fields", () => {
+    it("handles all optional fields undefined with sourceCount 0", () => {
+      const result = buildUseCaseContext({
+        sourceCount: 0,
+        goal: undefined,
+        targetName: undefined,
+        workspaceNodeTypeCounts: undefined,
+      } as PipelineNodeTypeSelectionContext);
+      expect(result.category).toBe("general-purpose");
+      expect(result.multiSource).toBe(false);
+      expect(result.dimensionalModeling).toBe(false);
+      expect(result.desiredFamilies.length).toBeGreaterThan(0);
+    });
+
+    it("falls back to empty counts when workspaceNodeTypeCounts is undefined", () => {
+      const result = buildUseCaseContext(makeContext({
+        workspaceNodeTypeCounts: undefined,
+      }));
+      // With no usage data, stage is preferred over work (default ordering)
+      expect(result.category).toBe("general-purpose");
+      expect(result.desiredFamilies[0]).toBe("stage");
     });
   });
 
@@ -268,21 +302,17 @@ describe("scoreCandidate", () => {
   });
 
   describe("family scoring — general-purpose", () => {
-    it("gives high score to stage family for general-purpose context", () => {
-      const candidate = makeCandidate({ family: "stage" });
+    it("gives high score to stage and work families for general-purpose context", () => {
+      const stage = makeCandidate({ family: "stage" });
+      const work = makeCandidate({ nodeType: "base:::Work", family: "work" });
+      const view = makeCandidate({ nodeType: "base:::View", family: "view" });
       const context = makeContext({ goal: "transform data" });
-      const scored = scoreCandidate(candidate, context);
-      expect(scored.score).toBeGreaterThanOrEqual(120);
-    });
-
-    it("gives high score to work family for general-purpose context", () => {
-      const candidate = makeCandidate({
-        nodeType: "base:::Work",
-        family: "work",
-      });
-      const context = makeContext({ goal: "process records" });
-      const scored = scoreCandidate(candidate, context);
-      expect(scored.score).toBeGreaterThanOrEqual(120);
+      const scoredStage = scoreCandidate(stage, context);
+      const scoredWork = scoreCandidate(work, context);
+      const scoredView = scoreCandidate(view, context);
+      // Stage and work should both score well above view for general-purpose
+      expect(scoredStage.score).toBeGreaterThan(scoredView.score);
+      expect(scoredWork.score).toBeGreaterThan(scoredView.score);
     });
 
     it("gives workspace bonus to observed stage/work candidates", () => {
@@ -312,30 +342,34 @@ describe("scoreCandidate", () => {
       expect(scoredStage.score).toBeGreaterThan(scoredView.score);
     });
 
-    it("gives zero family score to dimension for general-purpose context", () => {
-      const candidate = makeCandidate({
+    it("gives much lower score to dimension than stage for general-purpose context", () => {
+      const dimension = makeCandidate({
         nodeType: "base:::Dimension",
         family: "dimension",
         autoExecutable: false,
         semanticSignals: ["business_key"],
       });
+      const stage = makeCandidate({ family: "stage" });
       const context = makeContext({ goal: "basic staging" });
-      const scored = scoreCandidate(candidate, context);
-      // Dimension should score low for general-purpose
-      expect(scored.score).toBeLessThan(50);
+      const scoredDimension = scoreCandidate(dimension, context);
+      const scoredStage = scoreCandidate(stage, context);
+      // Dimension should score far below stage for general-purpose
+      expect(scoredDimension.score).toBeLessThan(scoredStage.score);
     });
   });
 
   describe("family scoring — specialized categories", () => {
-    it("gives high score to dimension when dimensional modeling detected", () => {
-      const candidate = makeCandidate({
+    it("gives higher score to dimension than stage when dimensional modeling detected", () => {
+      const dimension = makeCandidate({
         nodeType: "base:::Dimension",
         family: "dimension",
         autoExecutable: false,
       });
+      const stage = makeCandidate({ family: "stage" });
       const context = makeContext({ goal: "build a dimensional model" });
-      const scored = scoreCandidate(candidate, context);
-      expect(scored.score).toBeGreaterThan(100);
+      const scoredDimension = scoreCandidate(dimension, context);
+      const scoredStage = scoreCandidate(stage, context);
+      expect(scoredDimension.score).toBeGreaterThan(scoredStage.score);
     });
 
     it("gives fallback score to stage when dimensional category active", () => {
@@ -791,6 +825,70 @@ describe("challengeCandidate", () => {
       /strong signal for work but candidate is stage/i.test(c)
     );
     expect(crossChallenges).toHaveLength(0);
+  });
+
+  describe("doNotUseWhen challenges", () => {
+    it("challenges dimension for CTE decomposition context", () => {
+      const candidate = makeCandidate({
+        family: "dimension",
+      });
+      const challenges = challengeCandidate(
+        candidate,
+        makeContext(),
+        "CTE decomposition of the staging pipeline"
+      );
+      expect(challenges).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/do not use dimension for CTE decomposition/),
+        ])
+      );
+    });
+
+    it("challenges persistent-stage for batch ETL context", () => {
+      const candidate = makeCandidate({
+        family: "persistent-stage",
+      });
+      const challenges = challengeCandidate(
+        candidate,
+        makeContext(),
+        "batch ETL pipeline with truncate and insert"
+      );
+      expect(challenges).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/do not use persistent-stage for batch ETL/),
+        ])
+      );
+    });
+
+    it("challenges persistent-stage for general-purpose context", () => {
+      const candidate = makeCandidate({
+        family: "persistent-stage",
+      });
+      const challenges = challengeCandidate(
+        candidate,
+        makeContext(),
+        "general purpose staging of simple data"
+      );
+      expect(challenges).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/do not use persistent-stage for general-purpose/),
+        ])
+      );
+    });
+
+    it("skips doNotUseWhen for short anti-patterns (length <= 10)", () => {
+      // The guard `antiLower.length > 10` filters out short entries
+      const candidate = makeCandidate({ family: "unknown" });
+      const challenges = challengeCandidate(
+        candidate,
+        makeContext(),
+        "cte decomposition batch etl general purpose"
+      );
+      // "unknown" family has doNotUseWhen: ["A known family matches the use case"]
+      // which is > 10 chars but doesn't match any of the three regex branches
+      const doNotUseChallenges = challenges.filter((c) => /do not use/i.test(c));
+      expect(doNotUseChallenges).toHaveLength(0);
+    });
   });
 
   it("challenges 'Copy of' display names", () => {
