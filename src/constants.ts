@@ -9,8 +9,18 @@ export const DEFAULT_PAGE_SIZE = 250;
 
 // ── Timeouts ──────────────────────────────────────────────────────────────────
 
-/** Per-page timeout for detail=true API fetches (2 minutes). */
-export const DETAIL_FETCH_TIMEOUT_MS = 120_000;
+const DEFAULT_DETAIL_FETCH_TIMEOUT_MS = 180_000;
+
+/** Per-page timeout (ms) for detail=true API fetches. Evaluated per call so
+ *  tests (and at-runtime env changes) can override. Override via
+ *  COALESCE_MCP_DETAIL_FETCH_TIMEOUT_MS. */
+export function getDetailFetchTimeoutMs(): number {
+  const raw = process.env.COALESCE_MCP_DETAIL_FETCH_TIMEOUT_MS;
+  if (!raw) return DEFAULT_DETAIL_FETCH_TIMEOUT_MS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_DETAIL_FETCH_TIMEOUT_MS;
+  return parsed;
+}
 
 /** One day in milliseconds (24 hours). */
 export const MS_PER_DAY = 24 * 60 * 60 * 1000;

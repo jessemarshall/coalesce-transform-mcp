@@ -5,7 +5,7 @@ import { CACHE_DIR_NAME, getCacheBaseDir } from "../../cache-dir.js";
 import type { LineageCacheEntry } from "./lineage-cache.js";
 import { invalidateLineageCache } from "./lineage-cache.js";
 import { walkColumnLineage } from "./lineage-traversal.js";
-import { setWorkspaceNode } from "../../coalesce/api/nodes.js";
+import { setWorkspaceNodeAndInvalidate } from "../workspace/mutations.js";
 import { buildUpdatedWorkspaceNodeBody } from "../workspace/node-update-helpers.js";
 import { validatePathSegment } from "../../coalesce/types.js";
 import { isPlainObject } from "../../utils.js";
@@ -84,7 +84,7 @@ async function rollbackPreparedNodeUpdates(
 
   for (const update of [...appliedUpdates].reverse()) {
     try {
-      await setWorkspaceNode(client, {
+      await setWorkspaceNodeAndInvalidate(client, {
         workspaceID,
         nodeID: validatePathSegment(update.nodeID, "nodeID"),
         body: update.originalBody,
@@ -310,7 +310,7 @@ export async function propagateColumnChange(
     await emitProgress("Applying", update.nodeName, i, prepared.length);
 
     try {
-      await setWorkspaceNode(client, {
+      await setWorkspaceNodeAndInvalidate(client, {
         workspaceID: safeWorkspaceID,
         nodeID: validatePathSegment(update.nodeID, "nodeID"),
         body: update.body,

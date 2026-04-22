@@ -1,13 +1,12 @@
 import { type CoalesceClient } from "../../client.js";
 import {
   getWorkspaceNode,
-  listWorkspaceNodes,
 } from "../../coalesce/api/nodes.js";
 import { listWorkspaceNodeTypes } from "../workspace/mutations.js";
 import { isPlainObject, rethrowNonRecoverableOrServerError } from "../../utils.js";
 import { type WorkspaceNodeIndexEntry } from "../shared/node-helpers.js";
+import { getWorkspaceNodeIndex } from "../cache/workspace-node-index.js";
 import {
-  WORKSPACE_NODE_PAGE_LIMIT,
   type PipelinePlan,
   type ParsedSqlSourceRef,
   type PlannedSourceRef,
@@ -25,71 +24,6 @@ export {
   buildDefaultNodeName,
   buildPlanFromSql,
 } from "./plan-builder.js";
-
-const MAX_PAGES = 500;
-
-async function listAllWorkspaceNodes(
-  client: CoalesceClient,
-  workspaceID: string
-): Promise<WorkspaceNodeIndexEntry[]> {
-  const nodes: WorkspaceNodeIndexEntry[] = [];
-  const seenCursors = new Set<string>();
-  let next: string | undefined;
-  let isFirstPage = true;
-  let pageCount = 0;
-
-  while (isFirstPage || next) {
-    if (++pageCount > MAX_PAGES) {
-      throw new Error(
-        `Workspace node pagination exceeded ${MAX_PAGES} pages (${nodes.length} nodes fetched). ` +
-        `This likely indicates an API bug. The nodes fetched so far are not returned.`
-      );
-    }
-    const response = await listWorkspaceNodes(client, {
-      workspaceID,
-      limit: WORKSPACE_NODE_PAGE_LIMIT,
-      orderBy: "id",
-      ...(next ? { startingFrom: next } : {}),
-    });
-
-    if (!isPlainObject(response)) {
-      throw new Error("Workspace node list response was not an object");
-    }
-
-    if (Array.isArray(response.data)) {
-      for (const item of response.data) {
-        if (!isPlainObject(item) || typeof item.id !== "string" || typeof item.name !== "string") {
-          continue;
-        }
-        nodes.push({
-          id: item.id,
-          name: item.name,
-          nodeType: typeof item.nodeType === "string" ? item.nodeType : null,
-          locationName:
-            typeof item.locationName === "string" ? item.locationName : null,
-        });
-      }
-    }
-
-    const responseNext =
-      typeof response.next === "string" && response.next.trim().length > 0
-        ? response.next
-        : typeof response.next === "number"
-          ? String(response.next)
-          : undefined;
-    if (responseNext) {
-      if (seenCursors.has(responseNext)) {
-        throw new Error(`Workspace node pagination repeated cursor ${responseNext}`);
-      }
-      seenCursors.add(responseNext);
-    }
-
-    next = responseNext;
-    isFirstPage = false;
-  }
-
-  return nodes;
-}
 
 function getNodeLocationName(node: Record<string, unknown>): string | null {
   if (typeof node.locationName === "string" && node.locationName.trim().length > 0) {
@@ -119,7 +53,7 @@ export async function resolveSqlRefsToWorkspaceNodes(
     return { refs, openQuestions, warnings, predecessorNodes };
   }
 
-  const workspaceNodes = await listAllWorkspaceNodes(client, workspaceID);
+  const workspaceNodes = await getWorkspaceNodeIndex(client, workspaceID);
   const nodesByNormalizedName = new Map<string, WorkspaceNodeIndexEntry[]>();
   for (const node of workspaceNodes) {
     const normalized = normalizeSqlIdentifier(node.name);

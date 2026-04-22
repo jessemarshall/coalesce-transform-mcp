@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { CoalesceApiError, type CoalesceClient } from "../../client.js";
-import { validatePathSegment } from "../../coalesce/types.js";
 import { buildPlanConfirmationToken } from "./confirmation.js";
 import {
   PipelinePlanSchema,
@@ -21,9 +20,13 @@ import {
 } from "./planning.js";
 import {
   getWorkspaceNode,
-  setWorkspaceNode,
 } from "../../coalesce/api/nodes.js";
-import { createWorkspaceNodeFromPredecessor, buildUpdatedWorkspaceNodeBody } from "../workspace/mutations.js";
+import {
+  createWorkspaceNodeFromPredecessor,
+  buildUpdatedWorkspaceNodeBody,
+  deleteWorkspaceNode,
+  setWorkspaceNodeAndInvalidate,
+} from "../workspace/mutations.js";
 import { isPlainObject, uniqueInOrder } from "../../utils.js";
 
 function isStageLikeNode(nodePlan: PlannedPipelineNode): boolean {
@@ -189,16 +192,6 @@ function validateSavedNode(
   };
 }
 
-async function deleteWorkspaceNode(
-  client: CoalesceClient,
-  workspaceID: string,
-  nodeID: string
-): Promise<void> {
-  await client.delete(
-    `/api/v1/workspaces/${validatePathSegment(workspaceID, "workspaceID")}/nodes/${validatePathSegment(nodeID, "nodeID")}`
-  );
-}
-
 type SerializedPipelineError = {
   message: string;
   status?: number;
@@ -250,7 +243,7 @@ async function rollbackCreatedPipelineNodes(
 
   for (const nodeID of uniqueNodeIDs.reverse()) {
     try {
-      await deleteWorkspaceNode(client, workspaceID, nodeID);
+      await deleteWorkspaceNode(client, { workspaceID, nodeID });
     } catch (error) {
       rollbackFailures.push({
         nodeID,
@@ -322,11 +315,20 @@ export async function createPipelineFromPlan(
       if (!isPlainObject(created) || !isPlainObject(created.node)) {
         throw new Error(`Pipeline node ${nodePlan.planNodeID} did not return a created node body.`);
       }
+      // Don't delete user-owned nodes that pre-existed — only rollback nodes
+      // we actually created in this run.
+      const isPreExisting = created.preExisting === true;
       if (typeof created.node.id === "string") {
         createdNodeID = created.node.id;
-        createdNodeIDsForRollback.push(createdNodeID);
+        if (!isPreExisting) {
+          createdNodeIDsForRollback.push(createdNodeID);
+        }
       }
-      if ("warning" in created && typeof created.warning === "string") {
+      if (
+        !isPreExisting &&
+        "warning" in created &&
+        typeof created.warning === "string"
+      ) {
         throw new Error(
           `Predecessor-based creation for ${nodePlan.name} did not confirm full auto-population: ${created.warning}`
         );
@@ -334,6 +336,26 @@ export async function createPipelineFromPlan(
 
       if (!createdNodeID) {
         throw new Error(`Created pipeline node ${nodePlan.planNodeID} did not return a node ID.`);
+      }
+
+      if (isPreExisting) {
+        // Pre-existing node: do NOT rewrite columnIDs, metadata, or join
+        // conditions. Rewriting would rotate column IDs and orphan every
+        // downstream reference. Register the node so subsequent plan nodes
+        // can treat it as a predecessor and move on.
+        createdNodeIDsByPlanNodeID.set(nodePlan.planNodeID, createdNodeID);
+        createdNodes.push({
+          planNodeID: nodePlan.planNodeID,
+          nodeID: createdNodeID,
+          name: nodePlan.name,
+          nodeType: nodePlan.nodeType,
+          preExisting: true,
+          warning:
+            typeof created.warning === "string"
+              ? created.warning
+              : `Reused pre-existing node "${nodePlan.name}" instead of creating a new one.`,
+        });
+        continue;
       }
 
       const plannedBody = buildNodeBodyFromPlan(created.node, {
@@ -345,7 +367,7 @@ export async function createPipelineFromPlan(
       // fields (dataType, columnID, enabledColumnTestIDs, etc.) are present.
       const finalBody = buildUpdatedWorkspaceNodeBody(created.node, plannedBody);
 
-      await setWorkspaceNode(client, {
+      await setWorkspaceNodeAndInvalidate(client, {
         workspaceID: params.workspaceID,
         nodeID: createdNodeID,
         body: finalBody,

@@ -8,6 +8,8 @@ import {
   cacheRuns,
   cacheWorkspaceNodes,
 } from "../../src/services/cache/snapshots.js";
+import { getDetailFetchTimeoutMs } from "../../src/constants.js";
+const DETAIL_FETCH_TIMEOUT_MS = getDetailFetchTimeoutMs();
 
 function createMockClient() {
   return {
@@ -65,13 +67,13 @@ describe("cache snapshot tools", () => {
       1,
       "/api/v1/workspaces/ws-1/nodes",
       { detail: true, limit: 250, orderBy: "id" },
-      { timeoutMs: 120_000 }
+      { timeoutMs: DETAIL_FETCH_TIMEOUT_MS }
     );
     expect(client.get).toHaveBeenNthCalledWith(
       2,
       "/api/v1/workspaces/ws-1/nodes",
       { detail: true, limit: 250, orderBy: "id", startingFrom: "cursor-2" },
-      { timeoutMs: 120_000 }
+      { timeoutMs: DETAIL_FETCH_TIMEOUT_MS }
     );
 
     const lines = readFileSync(result.filePath, "utf8").trimEnd().split("\n");

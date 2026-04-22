@@ -80,6 +80,34 @@
           "name": "COALESCE_MCP_MAX_REQUEST_BODY_BYTES"
         },
         {
+          "description": "Default per-request timeout for Coalesce API calls. Raise on large workspaces where paginated reads exceed the default. Defaults to 60000.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_MCP_REQUEST_TIMEOUT_MS"
+        },
+        {
+          "description": "Per-page timeout for detail=true paginated fetches of large node lists. Defaults to 180000.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_MCP_DETAIL_FETCH_TIMEOUT_MS"
+        },
+        {
+          "description": "In-memory TTL for the workspace node-type inventory. Set to `0` to disable. Defaults to 300000.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_MCP_INVENTORY_CACHE_TTL_MS"
+        },
+        {
+          "description": "In-memory TTL for the workspace node-index (id/name/type/location) cache used by SQL- and intent-ref resolution. Set to `0` to disable. Defaults to 300000.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_MCP_NODE_INDEX_CACHE_TTL_MS"
+        },
+        {
           "description": "When `true`, hides all write/mutation tools during registration. Only read, list, search, cache, analyze, review, diagnose, and plan tools are exposed. Defaults to false.",
           "isRequired": false,
           "format": "string",

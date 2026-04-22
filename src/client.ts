@@ -12,7 +12,7 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
-const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_REQUEST_BODY_BYTES = 512 * 1024; // 512 KB
 
 function getMaxRequestBodyBytes(): number {
@@ -20,6 +20,14 @@ function getMaxRequestBodyBytes(): number {
   if (!raw) return DEFAULT_MAX_REQUEST_BODY_BYTES;
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_MAX_REQUEST_BODY_BYTES;
+  return parsed;
+}
+
+function getEnvRequestTimeoutMs(): number | undefined {
+  const raw = process.env.COALESCE_MCP_REQUEST_TIMEOUT_MS;
+  if (!raw) return undefined;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return undefined;
   return parsed;
 }
 
@@ -152,7 +160,9 @@ export interface QueryParams {
 export function createClient(config: ClientConfig) {
   const defaultRequestTimeoutMs = Math.max(
     1,
-    Math.floor(config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS)
+    Math.floor(
+      config.requestTimeoutMs ?? getEnvRequestTimeoutMs() ?? DEFAULT_REQUEST_TIMEOUT_MS
+    )
   );
 
   function buildUrl(path: string, params?: QueryParams): string {

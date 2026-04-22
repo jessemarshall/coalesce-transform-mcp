@@ -6,7 +6,7 @@ import { validatePathSegment } from "../../coalesce/types.js";
 import { isPlainObject } from "../../utils.js";
 import { CACHE_DIR_NAME, getCacheBaseDir } from "../../cache-dir.js";
 import type { WorkflowProgressReporter } from "../../workflows/progress.js";
-import { DEFAULT_PAGE_SIZE, DETAIL_FETCH_TIMEOUT_MS } from "../../constants.js";
+import { DEFAULT_PAGE_SIZE, getDetailFetchTimeoutMs } from "../../constants.js";
 
 const DEFAULT_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const MAX_CACHE_ENTRIES = 50;
@@ -303,7 +303,7 @@ async function fetchAllNodes(
       limit: DEFAULT_PAGE_SIZE,
       orderBy: "id",
       ...(next ? { startingFrom: next } : {}),
-    } as QueryParams & { workspaceID: string }, { timeoutMs: DETAIL_FETCH_TIMEOUT_MS });
+    } as QueryParams & { workspaceID: string }, { timeoutMs: getDetailFetchTimeoutMs() });
 
     const page = parsePage(response);
     for (const item of page.data) {

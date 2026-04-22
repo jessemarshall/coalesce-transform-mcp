@@ -6,11 +6,11 @@ import {
   listWorkspaceNodes,
   getEnvironmentNode,
   getWorkspaceNode,
-  setWorkspaceNode,
-  deleteWorkspaceNode,
 } from "../coalesce/api/nodes.js";
 import {
   updateWorkspaceNode,
+  deleteWorkspaceNode,
+  setWorkspaceNodeAndInvalidate,
   buildUpdatedWorkspaceNodeBody,
   replaceWorkspaceNodeColumns,
   createWorkspaceNodeFromScratch,
@@ -182,7 +182,7 @@ export function defineNodeTools(
           }
         }
 
-        const result = await setWorkspaceNode(client, {
+        const result = await setWorkspaceNodeAndInvalidate(client, {
           workspaceID: params.workspaceID,
           nodeID: params.nodeID,
           body,

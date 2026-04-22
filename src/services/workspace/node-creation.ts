@@ -1,7 +1,6 @@
 import { type CoalesceClient } from "../../client.js";
 import {
   getWorkspaceNode,
-  setWorkspaceNode,
   createWorkspaceNode,
 } from "../../coalesce/api/nodes.js";
 import { assertNoSqlOverridePayload } from "../policies/sql-override.js";
@@ -30,13 +29,21 @@ import {
   assertNotSourceNodeType,
   mergeWorkspaceNodeChanges,
   buildUpdatedWorkspaceNodeBody,
-  type WorkspaceNodeChanges,
 } from "./node-update-helpers.js";
 import {
   updateWorkspaceNode,
   replaceWorkspaceNodeColumns,
+  setWorkspaceNodeAndInvalidate,
 } from "./mutations.js";
 import { convertJoinToAggregation } from "./join-operations.js";
+import {
+  isUniqueStorageLocationNameError,
+  recoverFromUniqueNameError,
+  findExistingNodeForCreation,
+  type DuplicateNodeResult,
+} from "./duplicate-detection.js";
+import { invalidateWorkspaceInventory } from "../cache/workspace-inventory.js";
+import { invalidateWorkspaceNodeIndex } from "../cache/workspace-node-index.js";
 
 type ScratchNodeCompletionLevel = "created" | "named" | "configured";
 
@@ -224,7 +231,60 @@ function buildScratchNodeNextSteps(
   return steps;
 }
 
+function resolveTargetName(params: {
+  name?: string;
+  changes?: Record<string, unknown>;
+}): string | undefined {
+  if (params.name && params.name.trim().length > 0) return params.name;
+  return params.changes ? getRequestedNodeName(params.changes) : undefined;
+}
+
 export async function createWorkspaceNodeFromScratch(
+  client: CoalesceClient,
+  params: {
+    workspaceID: string;
+    nodeType: string;
+    completionLevel?: ScratchNodeCompletionLevel;
+    name?: string;
+    description?: string;
+    storageLocations?: unknown[];
+    config?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+    changes?: Record<string, unknown>;
+    repoPath?: string;
+    goal?: string;
+  }
+): Promise<unknown> {
+  const targetName = resolveTargetName(params);
+  const targetLocation = extractRequestedLocationName(params.changes);
+
+  if (targetName) {
+    const preflight = await findExistingNodeForCreation(client, {
+      workspaceID: params.workspaceID,
+      name: targetName,
+      locationName: targetLocation,
+      nodeType: params.nodeType,
+    });
+    if (preflight) return preflight;
+  }
+
+  try {
+    return await createWorkspaceNodeFromScratchInner(client, params);
+  } catch (error) {
+    if (!isUniqueStorageLocationNameError(error)) throw error;
+    if (!targetName) throw error;
+    const recovered = await recoverFromUniqueNameError(client, {
+      workspaceID: params.workspaceID,
+      name: targetName,
+      locationName: targetLocation,
+      nodeType: params.nodeType,
+    });
+    if (recovered) return recovered;
+    throw error;
+  }
+}
+
+async function createWorkspaceNodeFromScratchInner(
   client: CoalesceClient,
   params: {
     workspaceID: string;
@@ -266,6 +326,8 @@ export async function createWorkspaceNodeFromScratch(
     workspaceID: params.workspaceID,
     nodeType: params.nodeType,
   });
+  invalidateWorkspaceInventory(params.workspaceID);
+  invalidateWorkspaceNodeIndex(params.workspaceID);
 
   if (!isPlainObject(created) || typeof created.id !== "string") {
     throw new Error("Workspace node creation did not return a node ID");
@@ -284,7 +346,7 @@ export async function createWorkspaceNodeFromScratch(
   if (Object.keys(scratchChanges).length > 0) {
     const body = buildUpdatedWorkspaceNodeBody(createdNode, scratchChanges);
 
-    await setWorkspaceNode(client, {
+    await setWorkspaceNodeAndInvalidate(client, {
       workspaceID: params.workspaceID,
       nodeID: created.id,
       body,
@@ -455,6 +517,62 @@ export async function createWorkspaceNodeFromPredecessor(
     joinType?: "INNER JOIN" | "LEFT JOIN" | "RIGHT JOIN" | "FULL OUTER JOIN";
   }
 ): Promise<unknown> {
+  const targetName = resolveTargetName({ changes: params.changes });
+  const targetLocation = extractRequestedLocationName(params.changes);
+
+  if (targetName) {
+    const preflight: DuplicateNodeResult | null = await findExistingNodeForCreation(
+      client,
+      {
+        workspaceID: params.workspaceID,
+        name: targetName,
+        locationName: targetLocation,
+        nodeType: params.nodeType,
+      }
+    );
+    if (preflight) return preflight;
+  }
+
+  try {
+    return await createWorkspaceNodeFromPredecessorInner(client, params);
+  } catch (error) {
+    if (!isUniqueStorageLocationNameError(error)) throw error;
+    if (!targetName) throw error;
+    const recovered = await recoverFromUniqueNameError(client, {
+      workspaceID: params.workspaceID,
+      name: targetName,
+      locationName: targetLocation,
+      nodeType: params.nodeType,
+    });
+    if (recovered) return recovered;
+    throw error;
+  }
+}
+
+function extractRequestedLocationName(
+  changes: Record<string, unknown> | undefined
+): string | null {
+  if (!changes) return null;
+  const value = changes.locationName;
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+async function createWorkspaceNodeFromPredecessorInner(
+  client: CoalesceClient,
+  params: {
+    workspaceID: string;
+    nodeType: string;
+    predecessorNodeIDs: string[];
+    changes?: Record<string, unknown>;
+    repoPath?: string;
+    goal?: string;
+    columns?: Array<{ name: string; transform?: string; dataType?: string; description?: string }>;
+    whereCondition?: string;
+    groupByColumns?: string[];
+    aggregates?: Array<{ name: string; function: string; expression: string; description?: string }>;
+    joinType?: "INNER JOIN" | "LEFT JOIN" | "RIGHT JOIN" | "FULL OUTER JOIN";
+  }
+): Promise<unknown> {
   assertNotSourceNodeType(params.nodeType);
   const effectivePredecessorNodeIDs = uniqueInOrder(params.predecessorNodeIDs);
 
@@ -519,6 +637,8 @@ export async function createWorkspaceNodeFromPredecessor(
     nodeType: params.nodeType,
     predecessorNodeIDs: effectivePredecessorNodeIDs,
   });
+  invalidateWorkspaceInventory(params.workspaceID);
+  invalidateWorkspaceNodeIndex(params.workspaceID);
 
   if (!isPlainObject(created) || typeof created.id !== "string") {
     throw new Error("Workspace node creation did not return a node ID");
@@ -582,7 +702,7 @@ export async function createWorkspaceNodeFromPredecessor(
   if (params.changes && Object.keys(params.changes).length > 0) {
     const body = buildUpdatedWorkspaceNodeBody(createdNode, params.changes);
 
-    await setWorkspaceNode(client, {
+    await setWorkspaceNodeAndInvalidate(client, {
       workspaceID: params.workspaceID,
       nodeID: created.id,
       body,

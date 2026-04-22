@@ -2,8 +2,15 @@ import { type CoalesceClient } from "../../client.js";
 import {
   getWorkspaceNode,
   setWorkspaceNode,
+  deleteWorkspaceNode as deleteWorkspaceNodeApi,
 } from "../../coalesce/api/nodes.js";
 import { fetchAllWorkspaceNodes } from "../cache/snapshots.js";
+import {
+  loadInventoryWithCache,
+  invalidateWorkspaceInventory,
+  type WorkspaceNodeInventoryEntry,
+} from "../cache/workspace-inventory.js";
+import { invalidateWorkspaceNodeIndex } from "../cache/workspace-node-index.js";
 import { assertNoSqlOverridePayload } from "../policies/sql-override.js";
 import { isPlainObject } from "../../utils.js";
 import {
@@ -56,6 +63,34 @@ export {
 
 // ── Group B: Core update operations (kept in this file) ────────────────
 
+/**
+ * Wrapper around the raw `setWorkspaceNode` API that invalidates the
+ * workspace-node-index cache. The node-index is keyed by id/name/location,
+ * and any PUT *can* carry a rename or relocation — so we invalidate
+ * unconditionally rather than trying to guess from the body.
+ *
+ * All service-layer writes should route through this helper; the raw API
+ * call should only be used by code that has a reason to skip invalidation.
+ */
+export async function setWorkspaceNodeAndInvalidate(
+  client: CoalesceClient,
+  params: { workspaceID: string; nodeID: string; body: Record<string, unknown> }
+): Promise<unknown> {
+  const result = await setWorkspaceNode(client, params);
+  invalidateWorkspaceNodeIndex(params.workspaceID);
+  return result;
+}
+
+export async function deleteWorkspaceNode(
+  client: CoalesceClient,
+  params: { workspaceID: string; nodeID: string }
+): Promise<unknown> {
+  const result = await deleteWorkspaceNodeApi(client, params);
+  invalidateWorkspaceInventory(params.workspaceID);
+  invalidateWorkspaceNodeIndex(params.workspaceID);
+  return result;
+}
+
 export async function updateWorkspaceNode(
   client: CoalesceClient,
   params: {
@@ -73,7 +108,7 @@ export async function updateWorkspaceNode(
 
   const body = buildUpdatedWorkspaceNodeBody(current, params.changes);
 
-  return setWorkspaceNode(client, {
+  return setWorkspaceNodeAndInvalidate(client, {
     workspaceID: params.workspaceID,
     nodeID: params.nodeID,
     body,
@@ -215,7 +250,7 @@ export async function replaceWorkspaceNodeColumns(
     appendWhereToJoinCondition(updated, params.whereCondition);
   }
 
-  return setWorkspaceNode(client, {
+  return setWorkspaceNodeAndInvalidate(client, {
     workspaceID: params.workspaceID,
     nodeID: params.nodeID,
     body: updated,
@@ -232,43 +267,39 @@ export async function replaceWorkspaceNodeColumns(
 export async function listWorkspaceNodeTypes(
   client: CoalesceClient,
   params: { workspaceID: string }
-): Promise<{
-  workspaceID: string;
-  basis: "observed_nodes";
-  nodeTypes: string[];
-  counts: Record<string, number>;
-  total: number;
-}> {
+): Promise<WorkspaceNodeInventoryEntry> {
   const { workspaceID } = params;
-  const nodes = await fetchAllWorkspaceNodes(client, {
-    workspaceID,
-    detail: false,
+  return loadInventoryWithCache(workspaceID, async () => {
+    const nodes = await fetchAllWorkspaceNodes(client, {
+      workspaceID,
+      detail: false,
+    });
+
+    const data = nodes.items;
+    const counts: Record<string, number> = {};
+    let total = 0;
+
+    for (const node of data) {
+      if (!isPlainObject(node)) {
+        continue;
+      }
+      const nodeType = node.nodeType;
+      if (typeof nodeType === "string" && nodeType.length > 0) {
+        counts[nodeType] = (counts[nodeType] ?? 0) + 1;
+        total++;
+      }
+    }
+
+    const nodeTypes = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+
+    return {
+      workspaceID,
+      basis: "observed_nodes",
+      nodeTypes,
+      counts,
+      total,
+    };
   });
-
-  const data = nodes.items;
-  const counts: Record<string, number> = {};
-  let total = 0;
-
-  for (const node of data) {
-    if (!isPlainObject(node)) {
-      continue;
-    }
-    const nodeType = node.nodeType;
-    if (typeof nodeType === 'string' && nodeType.length > 0) {
-      counts[nodeType] = (counts[nodeType] ?? 0) + 1;
-      total++;
-    }
-  }
-
-  const nodeTypes = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-
-  return {
-    workspaceID,
-    basis: "observed_nodes",
-    nodeTypes,
-    counts,
-    total
-  };
 }
 
 /**
