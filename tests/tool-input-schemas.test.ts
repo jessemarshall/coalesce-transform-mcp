@@ -3,6 +3,7 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { defineNodeTools } from "../src/mcp/nodes.js";
 import { definePipelineTools } from "../src/mcp/pipelines.js";
+import { defineCoaTools } from "../src/mcp/coa.js";
 
 function createMockClient() {
   return {
@@ -168,6 +169,21 @@ describe("Node Tool Input Schemas", () => {
         additionalChanges: "rename-node",
       }).success
     ).toBe(false);
+  });
+});
+
+describe("COA Cloud Tool Input Schemas", () => {
+  it("rejects empty environmentID for coa_plan, coa_deploy, and coa_refresh", () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "registerTool");
+
+    defineCoaTools(server).forEach(t => server.registerTool(...t));
+
+    for (const toolName of ["coa_plan", "coa_deploy", "coa_refresh"]) {
+      const schema = getToolParamsSchema(toolSpy, toolName);
+      const result = schema.safeParse({ environmentID: "" });
+      expect(result.success, `${toolName} should reject empty environmentID`).toBe(false);
+    }
   });
 });
 
