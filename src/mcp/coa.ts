@@ -415,6 +415,7 @@ export async function coaRunHandler(
 const PlanParams = ProjectPathParam.merge(CloudAuthParams).extend({
   environmentID: z
     .string()
+    .min(1, "environmentID must not be empty")
     .describe("Target environment ID for the deployment plan."),
   out: z
     .string()
@@ -460,7 +461,7 @@ export async function coaPlanHandler(
 }
 
 const DeployParams = CloudAuthParams.extend({
-  environmentID: z.string().describe("Target environment ID to deploy into."),
+  environmentID: z.string().min(1, "environmentID must not be empty").describe("Target environment ID to deploy into."),
   plan: z
     .string()
     .describe("Path to the coa-plan.json produced by coa_plan. Must exist before calling."),
@@ -493,7 +494,7 @@ export async function coaDeployHandler(
 }
 
 const RefreshParams = CloudAuthParams.extend({
-  environmentID: z.string().describe("Environment ID to refresh."),
+  environmentID: z.string().min(1, "environmentID must not be empty").describe("Environment ID to refresh."),
   include: z.string().optional().describe("Node selector to scope the refresh."),
   exclude: z.string().optional().describe("Node selector to exclude."),
   jobID: z.string().optional().describe("Run a specific deployed job."),
