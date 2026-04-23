@@ -131,30 +131,40 @@ describe("cache invalidation on mutations", () => {
     expect(after[0]?.id).toBe("fresh");
   });
 
-  it("setWorkspaceNodeAndInvalidate invalidates the node-index cache", async () => {
-    let moved = false;
+  it("setWorkspaceNodeAndInvalidate invalidates both inventory and node-index caches", async () => {
+    let changed = false;
     mockListWorkspaceNodes.mockImplementation(async () => ({
       data: [
         {
           id: "n-1",
           name: "A",
-          nodeType: "Stage",
-          locationName: moved ? "EDM" : "RAW",
+          nodeType: changed ? "Dimension" : "Stage",
+          locationName: changed ? "EDM" : "RAW",
         },
       ],
     }));
 
     const client = makeClient();
-    await getWorkspaceNodeIndex(client, "ws-1");
 
-    moved = true;
+    // Prime both caches
+    const typesBefore = await listWorkspaceNodeTypes(client, { workspaceID: "ws-1" });
+    const indexBefore = await getWorkspaceNodeIndex(client, "ws-1");
+    expect(typesBefore.counts).toEqual({ Stage: 1 });
+    expect(indexBefore[0]?.locationName).toBe("RAW");
+    const callsAfterPriming = mockListWorkspaceNodes.mock.calls.length;
+
+    changed = true;
     await setWorkspaceNodeAndInvalidate(client, {
       workspaceID: "ws-1",
       nodeID: "n-1",
-      body: { locationName: "EDM" },
+      body: { nodeType: "Dimension", locationName: "EDM" },
     });
 
+    // Both caches should be invalidated — fresh fetches pick up the change
+    const typesAfter = await listWorkspaceNodeTypes(client, { workspaceID: "ws-1" });
     const indexAfter = await getWorkspaceNodeIndex(client, "ws-1");
+    expect(typesAfter.counts).toEqual({ Dimension: 1 });
     expect(indexAfter[0]?.locationName).toBe("EDM");
+    expect(mockListWorkspaceNodes.mock.calls.length).toBeGreaterThan(callsAfterPriming);
   });
 });

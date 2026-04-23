@@ -64,10 +64,12 @@ export {
 // ── Group B: Core update operations (kept in this file) ────────────────
 
 /**
- * Wrapper around the raw `setWorkspaceNode` API that invalidates the
- * workspace-node-index cache. The node-index is keyed by id/name/location,
- * and any PUT *can* carry a rename or relocation — so we invalidate
- * unconditionally rather than trying to guess from the body.
+ * Wrapper around the raw `setWorkspaceNode` API that invalidates both the
+ * workspace-node-index and workspace-inventory caches. The node-index is
+ * keyed by id/name/location, and any PUT *can* carry a rename, relocation,
+ * or node-type change — so we invalidate unconditionally rather than
+ * trying to guess from the body. Inventory tracks node-type counts and
+ * must also be invalidated for the same reason.
  *
  * All service-layer writes should route through this helper; the raw API
  * call should only be used by code that has a reason to skip invalidation.
@@ -77,6 +79,7 @@ export async function setWorkspaceNodeAndInvalidate(
   params: { workspaceID: string; nodeID: string; body: Record<string, unknown> }
 ): Promise<unknown> {
   const result = await setWorkspaceNode(client, params);
+  invalidateWorkspaceInventory(params.workspaceID);
   invalidateWorkspaceNodeIndex(params.workspaceID);
   return result;
 }
