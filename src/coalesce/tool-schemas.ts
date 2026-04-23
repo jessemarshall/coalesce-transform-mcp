@@ -594,14 +594,14 @@ const PersonalizeSkillsOutputSchema = z.object({
 }).passthrough();
 
 const CoaToolOutputSchema = z.object({
-  command: z.string().optional(),
-  exitCode: z.number().nullable().optional(),
-  timedOut: z.boolean().optional(),
-  stdout: z.string().optional(),
-  stderr: z.string().optional(),
+  command: z.string(),
+  exitCode: z.number().nullable(),
+  timedOut: z.boolean(),
+  stdout: z.string(),
+  stderr: z.string(),
   json: z.unknown().optional(),
   jsonParseError: z.string().optional(),
-  coaVersion: z.string().nullable().optional(),
+  coaVersion: z.string().nullable(),
   preflightWarnings: z.array(z.object({
     level: z.enum(["error", "warning"]).optional(),
     code: z.string().optional(),
@@ -619,20 +619,29 @@ const CoaDescribeOutputSchema = z.object({
 }).passthrough();
 
 const DiagnoseSetupOutputSchema = z.object({
+  coaConfig: z.object({
+    status: z.string(),
+  }).passthrough(),
   accessToken: z.object({
-    status: z.string().optional(),
-  }).passthrough().optional(),
+    status: z.string(),
+  }).passthrough(),
   snowflakeCreds: z.object({
-    status: z.string().optional(),
-  }).passthrough().optional(),
+    status: z.string(),
+  }).passthrough(),
   repoPath: z.object({
-    status: z.string().optional(),
-  }).passthrough().optional(),
+    status: z.string(),
+  }).passthrough(),
   coaDoctor: z.object({
-    status: z.string().optional(),
-  }).passthrough().optional(),
-  nextSteps: z.array(z.string()).optional(),
-  ready: z.boolean().optional(),
+    status: z.string(),
+  }).passthrough(),
+  projectWarnings: z.array(z.object({
+    level: z.enum(["error", "warning"]).optional(),
+    code: z.string().optional(),
+    message: z.string().optional(),
+    path: z.string().optional(),
+  }).passthrough()),
+  nextSteps: z.array(z.string()),
+  ready: z.boolean(),
 }).passthrough();
 
 const LIST_TOOL_NAMES = new Set([
@@ -713,6 +722,8 @@ const COA_TOOL_NAMES = new Set([
   "coa_plan",
   "coa_deploy",
   "coa_refresh",
+  // NOTE: coa_describe is intentionally NOT here — it has a dedicated
+  // CoaDescribeOutputSchema in the switch below.
 ]);
 
 export const JsonToolOutputSchema = JsonObjectSchema.describe(
