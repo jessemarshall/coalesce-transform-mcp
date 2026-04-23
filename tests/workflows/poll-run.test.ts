@@ -259,30 +259,28 @@ describe("pollRunToCompletion", () => {
     await expectation;
   });
 
-  it("returns incomplete when timeout expires before results fetch", async () => {
+  it("returns timedOut when polling budget is exhausted during sleep", async () => {
     const client = createMockClient();
 
-    // Status returns completed, but we set startedAt far enough back
-    // that remainingTimeMs is 0 before results fetch
     const now = Date.now();
-    client.get
-      .mockResolvedValueOnce({ runCounter: 100, runStatus: "completed" });
-
+    // Only 50ms of budget remains; the poll sleep (clamped to 50ms)
+    // consumes it all, so the loop breaks before ever calling client.get.
     const opts = buildOptions({
       client,
-      startedAt: now - 4950, // nearly expired
+      startedAt: now - 4950,
       timeoutMs: 5000,
       pollIntervalMs: 100,
     });
     const promise = pollRunToCompletion(opts);
 
-    // The initial sleep eats up remaining time
     await vi.advanceTimersByTimeAsync(100);
 
     const result = (await promise) as Record<string, unknown>;
-    // Should still succeed since there was ~50ms remaining when status returned
-    // and results fetch happens within that window
-    expect(result.status).toBeDefined();
+    expect(result.timedOut).toBe(true);
+    expect(result.results).toBeNull();
+    expect(result.status).toBeNull();
+    // client.get should never have been called — budget ran out before the fetch
+    expect(client.get).not.toHaveBeenCalled();
   });
 
   it("handles non-string runStatus by throwing", async () => {
