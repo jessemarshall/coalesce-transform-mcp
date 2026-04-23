@@ -593,6 +593,48 @@ const PersonalizeSkillsOutputSchema = z.object({
   configHint: z.string().nullable(),
 }).passthrough();
 
+const CoaToolOutputSchema = z.object({
+  command: z.string().optional(),
+  exitCode: z.number().nullable().optional(),
+  timedOut: z.boolean().optional(),
+  stdout: z.string().optional(),
+  stderr: z.string().optional(),
+  json: z.unknown().optional(),
+  jsonParseError: z.string().optional(),
+  coaVersion: z.string().nullable().optional(),
+  preflightWarnings: z.array(z.object({
+    level: z.enum(["error", "warning"]).optional(),
+    code: z.string().optional(),
+    message: z.string().optional(),
+    path: z.string().optional(),
+  }).passthrough()).optional(),
+}).passthrough();
+
+const CoaDescribeOutputSchema = z.object({
+  topic: z.string().optional(),
+  subtopic: z.string().optional(),
+  source: z.string().optional(),
+  content: z.string().optional(),
+  coaVersion: z.string().nullable().optional(),
+}).passthrough();
+
+const DiagnoseSetupOutputSchema = z.object({
+  accessToken: z.object({
+    status: z.string().optional(),
+  }).passthrough().optional(),
+  snowflakeCreds: z.object({
+    status: z.string().optional(),
+  }).passthrough().optional(),
+  repoPath: z.object({
+    status: z.string().optional(),
+  }).passthrough().optional(),
+  coaDoctor: z.object({
+    status: z.string().optional(),
+  }).passthrough().optional(),
+  nextSteps: z.array(z.string()).optional(),
+  ready: z.boolean().optional(),
+}).passthrough();
+
 const LIST_TOOL_NAMES = new Set([
   "list_environments",
   "list_projects",
@@ -659,6 +701,20 @@ const CACHE_TOOL_NAMES = new Set([
   "cache_org_users",
 ]);
 
+const COA_TOOL_NAMES = new Set([
+  "coa_doctor",
+  "coa_bootstrap_workspaces",
+  "coa_validate",
+  "coa_list_project_nodes",
+  "coa_dry_run_create",
+  "coa_dry_run_run",
+  "coa_create",
+  "coa_run",
+  "coa_plan",
+  "coa_deploy",
+  "coa_refresh",
+]);
+
 export const JsonToolOutputSchema = JsonObjectSchema.describe(
   "Tool-specific JSON object output. Oversized responses may be replaced with cache metadata including resourceUri."
 );
@@ -675,6 +731,9 @@ export function getToolOutputSchema(toolName: string) {
   }
   if (CACHE_TOOL_NAMES.has(toolName)) {
     return CacheArtifactOutputSchema;
+  }
+  if (COA_TOOL_NAMES.has(toolName)) {
+    return CoaToolOutputSchema;
   }
 
   switch (toolName) {
@@ -749,6 +808,10 @@ export function getToolOutputSchema(toolName: string) {
       return PropagateColumnChangeOutputSchema;
     case "personalize_skills":
       return PersonalizeSkillsOutputSchema;
+    case "coa_describe":
+      return CoaDescribeOutputSchema;
+    case "diagnose_setup":
+      return DiagnoseSetupOutputSchema;
     default:
       return JsonToolOutputSchema;
   }
