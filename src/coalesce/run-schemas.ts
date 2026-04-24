@@ -2,6 +2,17 @@ import { z } from "zod";
 
 import { resolveSnowflakeAuth } from "../services/config/credentials.js";
 
+// Shared validator: runID must be a numeric run ID string, not a UUID.
+// The REST API rejects non-numeric IDs with an opaque HTTP error; this surfaces
+// the constraint at the MCP validation boundary with a helpful message.
+export const RunIDSchema = z
+  .string()
+  .min(1)
+  .regex(
+    /^\d+$/,
+    "runID must be a numeric run ID (integer), e.g. '401' — not the UUID from a run URL."
+  );
+
 // --- startRun / run-and-wait schemas ---
 
 export const RunDetailsSchema = z
@@ -97,7 +108,7 @@ export type StartRunInput = z.infer<typeof StartRunParams>;
 // --- rerun / retry-and-wait schemas ---
 
 export const RerunDetailsSchema = z.object({
-  runID: z.string().describe("The run ID to retry"),
+  runID: RunIDSchema.describe("The numeric run ID (integer, e.g. '401') to retry — not the UUID from a run URL."),
   forceIgnoreWorkspaceStatus: z
     .boolean()
     .optional()
