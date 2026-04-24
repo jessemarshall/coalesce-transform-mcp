@@ -21,6 +21,7 @@ import {
 import {
   buildPredecessorSummary,
   buildJoinSuggestions,
+  getReferencedPredecessorNodeIDs,
   type JoinSuggestion,
 } from "./join-helpers.js";
 import {
@@ -782,6 +783,3 @@ async function createWorkspaceNodeFromPredecessorInner(
     ...(nodeDataStale ? { warning: "Node was created successfully but re-fetch failed after config completion was skipped. The returned node data may not reflect the current server state." } : {}),
   };
 }
-
-// Re-import for use in createWorkspaceNodeFromPredecessor
-import { getReferencedPredecessorNodeIDs } from "./join-helpers.js";

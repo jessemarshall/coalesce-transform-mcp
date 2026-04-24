@@ -14,6 +14,8 @@ import {
   CoaPreflightError,
   detectV2Artifacts,
   summarizePreflight,
+  pathExists,
+  readLocationNames,
 } from "../../../src/services/coa/preflight.js";
 
 let projectDir: string;
@@ -441,6 +443,150 @@ describe("detectV2Artifacts + V2_ALPHA_DETECTED", () => {
       }
     }
   );
+});
+
+describe("runPreflight - workspaces.yml non-object shapes", () => {
+  it("warns when workspaces.yml parses to a YAML list", () => {
+    writeFileSync(join(projectDir, "workspaces.yml"), "- one\n- two\n");
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).toContain(
+      "WORKSPACES_YML_INVALID_SHAPE"
+    );
+  });
+
+  it("warns when workspaces.yml parses to a scalar", () => {
+    writeFileSync(join(projectDir, "workspaces.yml"), "just-a-string\n");
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).toContain(
+      "WORKSPACES_YML_INVALID_SHAPE"
+    );
+  });
+
+  it("does not emit unknown-location warning when the workspace has no locations block", () => {
+    writeFileSync(
+      join(projectDir, "locations.yml"),
+      "SRC_KNOWN:\n  type: snowflake\n"
+    );
+    writeFileSync(
+      join(projectDir, "workspaces.yml"),
+      "dev:\n  connection: snowflake\n"
+    );
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).not.toContain(
+      "WORKSPACES_YML_UNKNOWN_LOCATION"
+    );
+  });
+});
+
+describe("runPreflight - .gitignore ignore-hint heuristic", () => {
+  beforeEach(() => {
+    mkdirSync(join(projectDir, ".git"));
+    writeFileSync(
+      join(projectDir, "workspaces.yml"),
+      "dev:\n  connection: snowflake\n"
+    );
+  });
+
+  it("recognizes a bare `*` as covering workspaces.yml", () => {
+    writeFileSync(join(projectDir, ".gitignore"), "*\n");
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).not.toContain(
+      "WORKSPACES_YML_NOT_GITIGNORED"
+    );
+  });
+
+  it("recognizes `*.yaml` as covering workspaces.yml", () => {
+    writeFileSync(
+      join(projectDir, "workspaces.yaml"),
+      "dev:\n  connection: snowflake\n"
+    );
+    rmSync(join(projectDir, "workspaces.yml"));
+    writeFileSync(join(projectDir, ".gitignore"), "*.yaml\n");
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).not.toContain(
+      "WORKSPACES_YML_NOT_GITIGNORED"
+    );
+  });
+
+  it("recognizes the `workspaces.*` wildcard pattern", () => {
+    writeFileSync(join(projectDir, ".gitignore"), "workspaces.*\n");
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).not.toContain(
+      "WORKSPACES_YML_NOT_GITIGNORED"
+    );
+  });
+
+  it("ignores comments and negation lines", () => {
+    // A `!workspaces.yml` negation means "force include" — the heuristic must
+    // not treat it as coverage.
+    writeFileSync(
+      join(projectDir, ".gitignore"),
+      "# workspaces.yml\n!workspaces.yml\nnode_modules/\n"
+    );
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).toContain(
+      "WORKSPACES_YML_NOT_GITIGNORED"
+    );
+  });
+
+  it("is silent when the project is not a git repo and .gitignore is missing", () => {
+    rmSync(join(projectDir, ".git"), { recursive: true, force: true });
+    const report = runPreflight(projectDir);
+    expect(report.warnings.map((w) => w.code)).not.toContain(
+      "WORKSPACES_YML_NOT_GITIGNORED"
+    );
+  });
+});
+
+describe("readLocationNames", () => {
+  it("returns [] when locations.yml is missing", () => {
+    expect(readLocationNames(projectDir)).toEqual([]);
+  });
+
+  it("returns [] when locations.yml is malformed", () => {
+    writeFileSync(join(projectDir, "locations.yml"), "[unclosed\n");
+    expect(readLocationNames(projectDir)).toEqual([]);
+  });
+
+  it("reads top-level keys (flat shape)", () => {
+    writeFileSync(
+      join(projectDir, "locations.yml"),
+      "SRC_A:\n  type: snowflake\nSRC_B:\n  type: snowflake\n"
+    );
+    expect(readLocationNames(projectDir).sort()).toEqual(["SRC_A", "SRC_B"]);
+  });
+
+  it("reads keys under a nested `locations:` wrapper", () => {
+    writeFileSync(
+      join(projectDir, "locations.yml"),
+      "locations:\n  SRC_A:\n    type: snowflake\n  SRC_B:\n    type: snowflake\n"
+    );
+    expect(readLocationNames(projectDir).sort()).toEqual(["SRC_A", "SRC_B"]);
+  });
+
+  it("filters out the `fileVersion` key", () => {
+    writeFileSync(
+      join(projectDir, "locations.yml"),
+      "fileVersion: 1\nSRC_A:\n  type: snowflake\n"
+    );
+    expect(readLocationNames(projectDir)).toEqual(["SRC_A"]);
+  });
+});
+
+describe("pathExists", () => {
+  it("returns true for an existing file", () => {
+    const path = join(projectDir, "data.yml");
+    expect(pathExists(path)).toBe(true);
+  });
+
+  it("returns false for a directory (file-only check)", () => {
+    const path = join(projectDir, "nodes");
+    expect(pathExists(path)).toBe(false);
+  });
+
+  it("returns false for a missing path", () => {
+    expect(pathExists(join(projectDir, "does-not-exist"))).toBe(false);
+  });
 });
 
 describe("CoaPreflightError + summarizePreflight", () => {

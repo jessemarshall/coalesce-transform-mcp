@@ -118,6 +118,18 @@ export async function updateWorkspaceNode(
   });
 }
 
+type SourceWithRefs = {
+  columnReferences: unknown[];
+};
+
+function hasColumnReferences(value: unknown): value is SourceWithRefs {
+  return (
+    isPlainObject(value) &&
+    Array.isArray(value.columnReferences) &&
+    value.columnReferences.length > 0
+  );
+}
+
 /**
  * When replacing columns, preserve columnReferences from auto-populated columns.
  * This keeps predecessor DAG links intact when custom transforms are applied.
@@ -133,14 +145,11 @@ function preserveColumnReferences(
   if (currentColumns.length === 0) return newColumns;
 
   // Build lookup: normalized column name → existing column's sources with columnReferences
-  const existingRefsByName = new Map<string, unknown[]>();
+  const existingRefsByName = new Map<string, SourceWithRefs[]>();
   for (const col of currentColumns) {
     if (!isPlainObject(col) || typeof col.name !== "string") continue;
     const sources = Array.isArray(col.sources) ? col.sources : [];
-    const refsWithLinks = sources.filter(
-      (s) => isPlainObject(s) && Array.isArray((s as Record<string, unknown>).columnReferences) &&
-        ((s as Record<string, unknown>).columnReferences as unknown[]).length > 0
-    );
+    const refsWithLinks = sources.filter(hasColumnReferences);
     if (refsWithLinks.length > 0) {
       existingRefsByName.set(normalizeColumnName(col.name), refsWithLinks);
     }
@@ -150,32 +159,24 @@ function preserveColumnReferences(
 
   // Enrich new columns with preserved references
   return newColumns.map((col) => {
-    if (!isPlainObject(col) || typeof (col as Record<string, unknown>).name !== "string") return col;
-    const colObj = col as Record<string, unknown>;
-    const normalized = normalizeColumnName(colObj.name as string);
+    if (!isPlainObject(col) || typeof col.name !== "string") return col;
+    const normalized = normalizeColumnName(col.name);
     const existingRefs = existingRefsByName.get(normalized);
     if (!existingRefs) return col;
 
     // If the new column already has sources with columnReferences, don't overwrite
-    const newSources = Array.isArray(colObj.sources) ? colObj.sources : [];
-    const hasRefs = newSources.some(
-      (s) => isPlainObject(s) && Array.isArray((s as Record<string, unknown>).columnReferences) &&
-        ((s as Record<string, unknown>).columnReferences as unknown[]).length > 0
-    );
-    if (hasRefs) return col;
+    const newSources = Array.isArray(col.sources) ? col.sources : [];
+    if (newSources.some(hasColumnReferences)) return col;
 
     // Carry over only columnReferences from existing sources, applying the new transform
-    const transform = typeof colObj.transform === "string" ? colObj.transform : "";
-    const enrichedSources = existingRefs.map((ref) => {
-      const refObj = ref as Record<string, unknown>;
-      return {
-        transform,
-        columnReferences: refObj.columnReferences ?? [],
-      };
-    });
+    const transform = typeof col.transform === "string" ? col.transform : "";
+    const enrichedSources = existingRefs.map((ref) => ({
+      transform,
+      columnReferences: ref.columnReferences,
+    }));
 
     return {
-      ...colObj,
+      ...col,
       sources: enrichedSources,
     };
   });
