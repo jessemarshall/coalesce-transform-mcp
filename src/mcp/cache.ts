@@ -20,7 +20,7 @@ import {
   cacheWorkspaceNodes,
 } from "../services/cache/snapshots.js";
 import { defineSimpleTool } from "./tool-helpers.js";
-import { RUN_STATUS_VALUES } from "../constants.js";
+import { DOCUMENTED_RUN_STATUSES } from "../constants.js";
 
 const SnapshotPaginationShape = {
   pageSize: z
@@ -82,7 +82,7 @@ export function defineCacheTools(
     inputSchema: z.object({
       runType: z.enum(["deploy", "refresh"]).optional().describe("Optional run type filter"),
       runStatus: z
-        .enum(RUN_STATUS_VALUES)
+        .enum(DOCUMENTED_RUN_STATUSES)
         .optional()
         .describe("Optional run status filter"),
       environmentID: z.string().optional().describe("Optional environment ID filter"),

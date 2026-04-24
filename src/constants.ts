@@ -30,12 +30,7 @@ export const STALE_SESSION_MS = MS_PER_DAY;
 
 // ── Run status values ────────────────────────────────────────────────────────
 
-/**
- * Re-exported from run-status.ts — single source of truth for all run status values.
- * DOCUMENTED_RUN_STATUSES is the canonical list; RUN_STATUS_VALUES is the alias
- * used by Zod schemas and type definitions outside of the workflow module.
- */
-export { DOCUMENTED_RUN_STATUSES as RUN_STATUS_VALUES } from "./workflows/run-status.js";
+export { DOCUMENTED_RUN_STATUSES } from "./workflows/run-status.js";
 export type { KnownRunStatus as RunStatus } from "./workflows/run-status.js";
 
 // ── Workflow poll / timeout boundaries ────────────────────────────────────────

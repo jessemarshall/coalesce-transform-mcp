@@ -22,7 +22,7 @@ import {
 } from "../coalesce/types.js";
 import { RunIDSchema } from "../coalesce/run-schemas.js";
 import { defineSimpleTool, defineDestructiveTool, extractEntityName } from "./tool-helpers.js";
-import { RUN_STATUS_VALUES } from "../constants.js";
+import { DOCUMENTED_RUN_STATUSES } from "../constants.js";
 
 // NOTE: runID (string) and runCounter (number) are both Coalesce API concepts, not a naming inconsistency.
 // The REST API (/api/v1/runs/{runID}) uses runID; the scheduler (/scheduler/runStatus) uses runCounter.
@@ -39,7 +39,7 @@ export function defineRunTools(
       "List Coalesce runs with optional filters for type, status, and environment.\n\nArgs:\n  - runType ('deploy'|'refresh', optional): Filter by type\n  - runStatus ('completed'|'failed'|'canceled'|'running'|'waitingToRun', optional): Filter by status\n  - environmentID (string, optional): Filter by environment\n  - detail (boolean, optional): Include full run details\n  - limit, startingFrom, orderBy, orderByDirection: Pagination controls\n\nReturns:\n  { data: Run[], next?: string, total?: number }",
     inputSchema: PaginationParams.extend({
       runType: z.enum(["deploy", "refresh"]).optional().describe("Filter by run type"),
-      runStatus: z.enum(RUN_STATUS_VALUES).optional().describe("Filter by run status"),
+      runStatus: z.enum(DOCUMENTED_RUN_STATUSES).optional().describe("Filter by run status"),
       environmentID: z.string().optional().describe("Filter by environment ID"),
       detail: z.boolean().optional().describe("Include full run details in response"),
     }),

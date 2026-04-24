@@ -110,4 +110,27 @@ describe("run-status", () => {
       expect(isTerminalRunStatus("Completed")).toBe(false);
     });
   });
+
+  describe("validateRunStatus → isTerminalRunStatus composition", () => {
+    // Guards against drift between the two functions. poll-run.ts and
+    // retry-and-wait.ts compose them directly — a breaking edit that desyncs
+    // the classification must break a test, not the workflow loop.
+    it("classifies every DOCUMENTED_RUN_STATUSES value consistently with its terminal grouping", () => {
+      const expectedTerminal = new Set(["completed", "failed", "canceled"]);
+      for (const status of DOCUMENTED_RUN_STATUSES) {
+        const validated = validateRunStatus(1, status);
+        expect(validated).toBe(status);
+        expect(isTerminalRunStatus(validated)).toBe(expectedTerminal.has(status));
+      }
+    });
+
+    it("every DOCUMENTED_RUN_STATUSES value is classified as exactly terminal xor non-terminal", () => {
+      // No overlap and no gap — every documented status lands in exactly one bucket.
+      for (const status of DOCUMENTED_RUN_STATUSES) {
+        const terminal = isTerminalRunStatus(status);
+        const nonTerminal = !terminal;
+        expect(terminal !== nonTerminal).toBe(true);
+      }
+    });
+  });
 });

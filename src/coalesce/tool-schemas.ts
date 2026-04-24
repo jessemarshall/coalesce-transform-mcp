@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { RUN_STATUS_VALUES } from "../constants.js";
+import { DOCUMENTED_RUN_STATUSES } from "../constants.js";
 
 const JsonObjectSchema = z.object({}).passthrough();
 
@@ -123,7 +123,7 @@ const CacheArtifactOutputSchema = z.object({
   environmentID: z.string().optional(),
   runType: z.enum(["deploy", "refresh"]).optional(),
   runStatus: z
-    .enum(RUN_STATUS_VALUES)
+    .enum(DOCUMENTED_RUN_STATUSES)
     .optional(),
   detail: z.boolean().optional(),
   totalNodes: z.number().optional(),
