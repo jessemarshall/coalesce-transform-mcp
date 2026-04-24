@@ -82,7 +82,11 @@ export function defineRunTools(
     description:
       "Get the current status of a Coalesce run by run counter.\n\nTerminal statuses: completed, failed, canceled. Non-terminal: waitingToRun, running.\n\nArgs:\n  - runCounter (number, required): The numeric run counter\n\nReturns:\n  { runCounter, runStatus, message }",
     inputSchema: z.object({
-      runCounter: z.number().describe("The run counter number"),
+      runCounter: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe("The run counter number (non-negative integer)"),
     }),
     annotations: READ_ONLY_ANNOTATIONS,
     sanitize: true,
