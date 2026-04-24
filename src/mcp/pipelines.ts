@@ -963,7 +963,7 @@ export function definePipelineTools(
         ),
         targetName: z.string().optional().describe("Optional target node name — used for naming-signal scoring."),
         sql: z.string().optional().describe("Optional SQL for this step — used for structural analysis during scoring."),
-        sourceCount: z.number().describe("Number of source/predecessor nodes feeding into this step."),
+        sourceCount: z.number().int().nonnegative().describe("Number of source/predecessor nodes feeding into this step."),
         hasJoin: z.boolean().optional().describe("Does this step involve a JOIN? Prevents view-family selection and provides structural context for ranking."),
         hasGroupBy: z.boolean().optional().describe("Does this step involve a GROUP BY? Influences selection toward aggregation-capable types."),
         hasBusinessKeys: z.boolean().optional().describe("Are business keys explicitly defined? Influences dimensional/data-vault type selection."),
