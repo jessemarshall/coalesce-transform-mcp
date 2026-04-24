@@ -189,6 +189,60 @@ describe("runPreflight - locations.yml shape", () => {
   });
 });
 
+describe("runPreflight - read-failure warnings on unreadable files", () => {
+  // POSIX chmod 0 makes the file unreadable so readFileSync throws EACCES.
+  // Skipped on Windows (chmod no-op) and when running as root (root bypasses DAC).
+  const canTestFsPermissionDenial =
+    process.platform !== "win32" && process.getuid?.() !== 0;
+
+  it.skipIf(!canTestFsPermissionDenial)(
+    "emits LOCATIONS_YML_READ_FAILED when locations.yml exists but cannot be read",
+    () => {
+      const path = join(projectDir, "locations.yml");
+      writeFileSync(path, "SRC_A:\n  type: snowflake\n");
+      chmodSync(path, 0o000);
+      try {
+        const report = runPreflight(projectDir);
+        expect(report.warnings.map((w) => w.code)).toContain("LOCATIONS_YML_READ_FAILED");
+      } finally {
+        chmodSync(path, 0o600);
+      }
+    }
+  );
+
+  it.skipIf(!canTestFsPermissionDenial)(
+    "emits WORKSPACES_YML_READ_FAILED when workspaces.yml exists but cannot be read",
+    () => {
+      const path = join(projectDir, "workspaces.yml");
+      writeFileSync(path, "dev:\n  connection: snowflake\n");
+      chmodSync(path, 0o000);
+      try {
+        const report = runPreflight(projectDir);
+        expect(report.warnings.map((w) => w.code)).toContain("WORKSPACES_YML_READ_FAILED");
+      } finally {
+        chmodSync(path, 0o600);
+      }
+    }
+  );
+
+  it.skipIf(!canTestFsPermissionDenial)(
+    "emits GITIGNORE_READ_FAILED when .gitignore exists but cannot be read",
+    () => {
+      mkdirSync(join(projectDir, ".git"));
+      writeFileSync(join(projectDir, "workspaces.yml"), "dev:\n  connection: snowflake\n");
+      const gitignorePath = join(projectDir, ".gitignore");
+      writeFileSync(gitignorePath, "node_modules/\n");
+      chmodSync(gitignorePath, 0o000);
+      try {
+        const report = runPreflight(projectDir);
+        expect(report.warnings.map((w) => w.code)).toContain("GITIGNORE_READ_FAILED");
+      } finally {
+        chmodSync(gitignorePath, 0o600);
+      }
+    }
+  );
+});
+
 describe("runPreflight - workspaces.yml cross-reference with locations.yml", () => {
   it("warns when a location key is not declared in locations.yml", () => {
     writeFileSync(
