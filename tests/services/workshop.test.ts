@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   openWorkshop,
   workshopInstruct,
@@ -13,6 +16,28 @@ import { createMockClient } from "../helpers/fixtures.js";
 vi.mock("../../src/services/config/intelligent.js", () => ({
   completeNodeConfiguration: vi.fn(async () => ({})),
 }));
+
+// Per-file cache dir so workshop session JSON files don't collide with
+// sibling tests running in parallel. getCacheDir() resolves via
+// COALESCE_CACHE_DIR; without this isolation, all workshop tests share
+// `<cwd>/coalesce_transform_mcp_data_cache/workshops/` and produce EINVAL
+// races under vitest's parallel file pool.
+let workshopTestCacheDir: string;
+const savedCacheDir = process.env.COALESCE_CACHE_DIR;
+
+beforeEach(() => {
+  workshopTestCacheDir = mkdtempSync(join(tmpdir(), "workshop-cache-test-"));
+  process.env.COALESCE_CACHE_DIR = workshopTestCacheDir;
+});
+
+afterEach(() => {
+  if (savedCacheDir === undefined) {
+    delete process.env.COALESCE_CACHE_DIR;
+  } else {
+    process.env.COALESCE_CACHE_DIR = savedCacheDir;
+  }
+  rmSync(workshopTestCacheDir, { recursive: true, force: true });
+});
 
 function setupMockClient(nodes: Array<{ id: string; name: string; locationName: string }> = []) {
   const client = createMockClient();
