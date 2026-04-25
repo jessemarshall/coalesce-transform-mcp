@@ -8,6 +8,10 @@ import type { JoinSuggestion } from "../../src/services/workspace/join-helpers.j
 // ---------------------------------------------------------------------------
 // suggestNamingConvention
 // ---------------------------------------------------------------------------
+// Naming-convention regex matches below check only the family prefix, not the
+// full convention string. This keeps the tests robust to incidental edits in
+// the human-readable example portion (e.g., adding/removing example node names)
+// while still catching prefix changes that would actually break agent output.
 describe("suggestNamingConvention", () => {
   it("returns the stage convention for stage", () => {
     expect(suggestNamingConvention("stage")).toMatch(/STG_/);
@@ -180,13 +184,40 @@ describe("buildPostCreationNextSteps", () => {
     expect(steps.some((s) => s.startsWith("For fact tables:"))).toBe(false);
   });
 
-  it("returns steps in a stable, deterministic order", () => {
-    const steps1 = buildPostCreationNextSteps(2, "Fact", [joinSuggestion(2)], {
-      name: "FACT_SALES",
+  it("falls back to the generic naming-convention message for an unknown-family node type", () => {
+    // Source nodes resolve to an unknown family in inferFamily — exercises the
+    // path where suggestNamingConvention's family lookup misses and the
+    // generic fallback string is used.
+    const steps = buildPostCreationNextSteps(0, "Source", [], { name: "" });
+    const namingStep = steps.find((s) => s.startsWith("Name this node"));
+    expect(namingStep).toBeDefined();
+    expect(namingStep).toContain("Use a descriptive, layer-appropriate name");
+    // Source is not fact/dimension — no materialization guidance should appear.
+    expect(steps.some((s) => s.startsWith("Verify materialization"))).toBe(false);
+  });
+
+  it("returns steps in the documented section order", () => {
+    // Asserts the actual ordering of the section blocks (naming -> join ->
+    // family materialization -> verification) so that any reordering of the
+    // emit blocks in buildPostCreationNextSteps is caught. Substring matches
+    // keep the test robust to copy edits inside each block.
+    const steps = buildPostCreationNextSteps(2, "Fact", [joinSuggestion(2)], {
+      name: "",
     });
-    const steps2 = buildPostCreationNextSteps(2, "Fact", [joinSuggestion(2)], {
-      name: "FACT_SALES",
-    });
-    expect(steps1).toEqual(steps2);
+    const namingIdx = steps.findIndex((s) => s.startsWith("Name this node"));
+    const requiredJoinIdx = steps.findIndex((s) => s.startsWith("REQUIRED: Set up the join"));
+    const verifyJoinIdx = steps.findIndex((s) => s.startsWith("Verify join columns"));
+    const materializationIdx = steps.findIndex((s) => s.startsWith("Verify materialization"));
+    const grainIdx = steps.findIndex((s) => s.startsWith("For fact tables: define the grain"));
+    const verifyNodeIdx = steps.findIndex((s) =>
+      s.startsWith("Verify the node:")
+    );
+
+    expect(namingIdx).toBeGreaterThanOrEqual(0);
+    expect(requiredJoinIdx).toBeGreaterThan(namingIdx);
+    expect(verifyJoinIdx).toBeGreaterThan(requiredJoinIdx);
+    expect(materializationIdx).toBeGreaterThan(verifyJoinIdx);
+    expect(grainIdx).toBeGreaterThan(materializationIdx);
+    expect(verifyNodeIdx).toBe(steps.length - 1); // verification is always last
   });
 });
