@@ -52,7 +52,7 @@ export function defineJobTools(
   defineSimpleTool(client, "list_environment_jobs", {
     title: "List Environment Jobs",
     description:
-      "List all jobs in a Coalesce environment. Jobs define which nodes to run together.\n\nArgs:\n  - environmentID (string, required): The environment ID\n  - limit, startingFrom, orderBy, orderByDirection: Pagination\n\nReturns:\n  { data: Job[], next?: string, total?: number }",
+      "List all jobs deployed to a Coalesce environment. Jobs define which nodes run together — pair this with list_environment_nodes when planning a refresh, or with create_workspace_job when authoring new schedules.\n\nDifferent from listing workspace-side jobs: this returns the jobs *currently deployed* to the target environment (what the scheduler will execute), not the in-flight workspace edits that may not be deployed yet.\n\nArgs:\n  - environmentID (string, required): The environment ID\n  - limit, startingFrom, orderBy, orderByDirection: Pagination\n\nReturns:\n  { data: Job[], next?: string, total?: number }",
     inputSchema: PaginationParams.extend({
       environmentID: z.string().describe("The environment ID"),
     }),
