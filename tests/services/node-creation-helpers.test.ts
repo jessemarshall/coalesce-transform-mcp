@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   suggestNamingConvention,
+  shouldSuggestNamingConvention,
+  buildFamilyMaterializationGuidance,
   buildPostCreationNextSteps,
 } from "../../src/services/workspace/node-creation.js";
 import type { JoinSuggestion } from "../../src/services/workspace/join-helpers.js";
@@ -56,6 +58,81 @@ describe("suggestNamingConvention", () => {
     expect(suggestNamingConvention("")).toBe(
       "Use a descriptive, layer-appropriate name"
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// shouldSuggestNamingConvention
+// ---------------------------------------------------------------------------
+describe("shouldSuggestNamingConvention", () => {
+  it("returns true for empty current name", () => {
+    expect(shouldSuggestNamingConvention("", "Stage")).toBe(true);
+  });
+
+  it("returns true when current name equals the node type (placeholder default)", () => {
+    expect(shouldSuggestNamingConvention("Stage", "Stage")).toBe(true);
+    expect(shouldSuggestNamingConvention("Dimension", "Dimension")).toBe(true);
+  });
+
+  it("returns true for COA UI placeholder pattern (TYPE_NN)", () => {
+    expect(shouldSuggestNamingConvention("STAGE_42", "Stage")).toBe(true);
+    expect(shouldSuggestNamingConvention("DIMENSION_7", "Dimension")).toBe(true);
+    expect(shouldSuggestNamingConvention("FACT_1", "Fact")).toBe(true);
+  });
+
+  it("returns false for an intentional name", () => {
+    expect(shouldSuggestNamingConvention("STG_CUSTOMERS", "Stage")).toBe(false);
+    expect(shouldSuggestNamingConvention("DIM_PRODUCT", "Dimension")).toBe(false);
+    expect(shouldSuggestNamingConvention("FACT_SALES", "Fact")).toBe(false);
+  });
+
+  it("returns false for a name with mixed casing or non-placeholder shape", () => {
+    expect(shouldSuggestNamingConvention("MyNode", "Stage")).toBe(false);
+    expect(shouldSuggestNamingConvention("stg_customers", "Stage")).toBe(false);
+    expect(shouldSuggestNamingConvention("STG_CUSTOMERS_V2", "Stage")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildFamilyMaterializationGuidance
+// ---------------------------------------------------------------------------
+describe("buildFamilyMaterializationGuidance", () => {
+  it("returns no steps for non-fact/dimension families", () => {
+    expect(buildFamilyMaterializationGuidance("stage", 0)).toEqual([]);
+    expect(buildFamilyMaterializationGuidance("view", 1)).toEqual([]);
+    expect(buildFamilyMaterializationGuidance("work", 2)).toEqual([]);
+    expect(buildFamilyMaterializationGuidance("", 0)).toEqual([]);
+  });
+
+  it("emits a single materialization step for fact with <= 1 predecessors", () => {
+    const steps = buildFamilyMaterializationGuidance("fact", 0);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]).toMatch(/Verify materialization.*Fact/);
+
+    const stepsOnePred = buildFamilyMaterializationGuidance("fact", 1);
+    expect(stepsOnePred).toHaveLength(1);
+    expect(stepsOnePred[0]).toMatch(/Verify materialization.*Fact/);
+  });
+
+  it("adds grain-definition guidance for multi-predecessor fact nodes", () => {
+    const steps = buildFamilyMaterializationGuidance("fact", 2);
+    expect(steps).toHaveLength(2);
+    expect(steps[0]).toMatch(/Verify materialization.*Fact/);
+    expect(steps[1]).toMatch(/define the grain/);
+  });
+
+  it("emits materialization + business-key guidance for dimension regardless of predecessor count", () => {
+    for (const count of [0, 1, 5]) {
+      const steps = buildFamilyMaterializationGuidance("dimension", count);
+      expect(steps).toHaveLength(2);
+      expect(steps[0]).toMatch(/Verify materialization.*Dimension/);
+      expect(steps[1]).toMatch(/business key/);
+    }
+  });
+
+  it("does not emit grain guidance for dimension nodes (grain is fact-only)", () => {
+    const steps = buildFamilyMaterializationGuidance("dimension", 5);
+    expect(steps.some((s) => /define the grain/.test(s))).toBe(false);
   });
 });
 
