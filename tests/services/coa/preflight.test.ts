@@ -667,3 +667,63 @@ describe("CoaPreflightError + summarizePreflight", () => {
     expect(err.message).toContain("SELECTOR_COMBINED_OR");
   });
 });
+
+// ---------------------------------------------------------------------------
+// runPreflight contract — should never throw
+// ---------------------------------------------------------------------------
+// Callers (notably collectProjectWarnings in src/services/setup/diagnose.ts)
+// rely on runPreflight being total: every fs/YAML/scanner failure is converted
+// to a *_PARSE_FAILED / *_READ_FAILED warning rather than escaping as an
+// exception. These tests lock in that contract so a future regression that
+// reintroduces a silent-swallowing try/catch around runPreflight isn't
+// silently green.
+describe("runPreflight - contract: returns a PreflightReport, never throws", () => {
+  it("returns a report (does not throw) when locations.yml is malformed YAML", () => {
+    writeFileSync(join(projectDir, "locations.yml"), "{{{ not yaml\n");
+    const report = runPreflight(projectDir);
+    expect(report).toMatchObject({ errors: expect.any(Array), warnings: expect.any(Array) });
+    expect(report.warnings.map((w) => w.code)).toContain("LOCATIONS_YML_PARSE_FAILED");
+  });
+
+  it("returns a report (does not throw) when workspaces.yml is malformed YAML", () => {
+    writeFileSync(
+      join(projectDir, "workspaces.yml"),
+      "::: not\n  - really\n    yaml: [\n"
+    );
+    const report = runPreflight(projectDir, { requireWorkspacesYml: true });
+    expect(report).toMatchObject({ errors: expect.any(Array), warnings: expect.any(Array) });
+    expect(report.warnings.map((w) => w.code)).toContain("WORKSPACES_YML_PARSE_FAILED");
+  });
+
+  it("returns a report (does not throw) when an SQL node file cannot be read", () => {
+    // Per-file SQL read errors are intentionally swallowed inside scanSqlFiles
+    // (best-effort scan over hundreds of files). The contract here is just that
+    // the unreadable file does not blow up the whole preflight.
+    const targetSql = join(projectDir, "nodes", "no-perm.sql");
+    writeFileSync(targetSql, "SELECT 1\n");
+    chmodSync(targetSql, 0o000);
+    try {
+      const report = runPreflight(projectDir);
+      expect(report).toMatchObject({ errors: expect.any(Array), warnings: expect.any(Array) });
+    } finally {
+      // Restore so afterEach rmSync can clean up.
+      chmodSync(targetSql, 0o600);
+    }
+  });
+
+  it("returns a report (does not throw) when projectPath itself does not exist", () => {
+    const ghostPath = join(tmpdir(), "this-path-does-not-exist-" + Date.now());
+    const report = runPreflight(ghostPath);
+    expect(report).toMatchObject({ errors: expect.any(Array), warnings: expect.any(Array) });
+    // data.yml read fails because the directory doesn't exist.
+    expect(report.errors.map((e) => e.code)).toContain("DATA_YML_READ_FAILED");
+  });
+
+  it("returns a report (does not throw) when an invalid selector is provided", () => {
+    // Selector validation runs after YAML/SQL scanning. Confirm a malformed
+    // selector flows out as a typed error rather than escaping.
+    const report = runPreflight(projectDir, { selectors: ["{ A || B }"] });
+    expect(report).toMatchObject({ errors: expect.any(Array), warnings: expect.any(Array) });
+    expect(report.errors.map((e) => e.code)).toContain("SELECTOR_COMBINED_OR");
+  });
+});
