@@ -4,15 +4,23 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CoalesceClient } from "../client.js";
 import {
   READ_ONLY_ANNOTATIONS,
+  WRITE_ANNOTATIONS,
   buildJsonToolResponse,
   handleToolError,
   type ToolDefinition,
 } from "../coalesce/types.js";
 import { getWorkspaceNode } from "../coalesce/api/nodes.js";
+import { setWorkspaceNodeAndInvalidate } from "../services/workspace/mutations.js";
 import {
   cloudNodeToDisk,
   diskNodeToCloud,
 } from "../services/templates/node-shape-bridge.js";
+import {
+  applyColumnDiff,
+  diffColumns,
+  parseCreateTableColumns,
+} from "../services/templates/sql-column-diff.js";
+import { isPlainObject } from "../utils.js";
 
 // Mark unused to satisfy `noUnusedParameters`; the SDK helper signatures take a
 // server instance so other tools can register callbacks. These two converters
@@ -45,6 +53,7 @@ export function defineRenderNodeTools(
   return [
     defineSerializeWorkspaceNodeToDiskYaml(client),
     defineParseDiskNodeToWorkspaceBody(client),
+    defineApplySqlToWorkspaceNode(client),
   ];
 }
 
@@ -163,6 +172,139 @@ function defineParseDiskNodeToWorkspaceBody(client: CoalesceClient): ToolDefinit
           cloudBody,
           nodeID: typeof cloudBody.id === "string" ? cloudBody.id : undefined,
           name: typeof cloudBody.name === "string" ? cloudBody.name : undefined,
+        });
+      } catch (err) {
+        return handleToolError(err);
+      }
+    }),
+  ];
+}
+
+// ── apply_sql_to_workspace_node ───────────────────────────────────────────────
+
+const ApplySqlInputSchema = z.object({
+  workspaceID: z.string().describe("The workspace ID containing the node."),
+  nodeID: z.string().describe("The node ID to update."),
+  sql: z
+    .string()
+    .min(1)
+    .describe(
+      "The edited SQL to apply. For v1 this should be a CREATE [OR REPLACE] TABLE statement — "
+        + "the same shape produced by `coa create --dry-run`. The tool extracts the column list "
+        + "and diffs it against the node's current metadata.columns[].",
+    ),
+  dryRun: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "When true, returns the diff and updated metadata.columns[] without writing to the workspace. "
+        + "Useful for previewing what would change before pushing.",
+    ),
+});
+
+function defineApplySqlToWorkspaceNode(client: CoalesceClient): ToolDefinition {
+  const name = "apply_sql_to_workspace_node";
+  return [
+    name,
+    {
+      title: "Apply SQL Edits to Workspace Node",
+      description:
+        "Round-trip a user's edits on a rendered DDL/DML SQL document back to the cloud "
+        + "workspace node it came from. Parses the SQL's column list, diffs it against the "
+        + "node's current metadata.columns[], and updates the node via set_workspace_node "
+        + "(unless dryRun: true).\n\n"
+        + "**v1 scope is column-level only**:\n"
+        + "  - Removed columns (in YAML, missing in SQL) → dropped\n"
+        + "  - Type changes (matching name, different dataType) → updated in place; existing\n"
+        + "    sources / columnReferences / lineage metadata is preserved\n"
+        + "  - New columns in the SQL → REJECTED (a new column needs a source mapping that\n"
+        + "    the SQL alone doesn't carry — edit the YAML or use the cloud UI to add columns)\n\n"
+        + "Structural changes (joins, CTEs, WHERE/GROUP BY edits, custom expressions) are not "
+        + "reverse-engineered out of edited SQL. Those parts of the node are owned by the YAML "
+        + "and not safely inferrable from the rendered output.\n\n"
+        + "Args:\n"
+        + "  - workspaceID (string, required)\n"
+        + "  - nodeID (string, required)\n"
+        + "  - sql (string, required): A CREATE [OR REPLACE] TABLE statement. v1 doesn't yet\n"
+        + "    handle SELECT/INSERT shapes — pass the DDL output, not DML.\n"
+        + "  - dryRun (boolean, optional): If true, return the diff without writing.\n\n"
+        + "Returns: { applied, dryRun, diff: { unchanged, typeChanged, removed, added }, body? }",
+      inputSchema: ApplySqlInputSchema,
+      annotations: WRITE_ANNOTATIONS,
+    },
+    (async (params: z.infer<typeof ApplySqlInputSchema>) => {
+      try {
+        const parsed = parseCreateTableColumns(params.sql);
+        if (!parsed) {
+          throw new Error(
+            "Could not parse a CREATE TABLE column list out of the SQL. v1 only handles "
+              + "DDL-shaped input (the output of coa create --dry-run). For SELECT/INSERT shapes "
+              + "or structural edits, edit the node YAML directly.",
+          );
+        }
+
+        const current = await getWorkspaceNode(client, {
+          workspaceID: params.workspaceID,
+          nodeID: params.nodeID,
+        });
+        if (!isPlainObject(current)) {
+          throw new Error(
+            `get_workspace_node returned ${typeof current}, expected an object`,
+          );
+        }
+        const metadata = isPlainObject(current.metadata) ? current.metadata : {};
+        const existingColumns = Array.isArray(metadata.columns) ? metadata.columns : [];
+
+        const diff = diffColumns(parsed, existingColumns);
+
+        if (diff.added.length > 0) {
+          // Surface the failure as structured data instead of throwing — the
+          // caller may want to render the diff to the user before deciding
+          // what to do (e.g., prompt them to edit YAML for the adds).
+          return buildJsonToolResponse(name, {
+            applied: false,
+            dryRun: params.dryRun ?? false,
+            diff,
+            error:
+              `Cannot apply: ${diff.added.length} new column(s) (${diff.added.map((a) => a.name).join(", ")}) `
+              + "appear in the SQL but not on the node. Adding columns from edited SQL is not supported "
+              + "(no source mapping). Edit the YAML or add the columns via the cloud UI first.",
+          });
+        }
+
+        if (diff.typeChanged.length === 0 && diff.removed.length === 0) {
+          return buildJsonToolResponse(name, {
+            applied: false,
+            dryRun: params.dryRun ?? false,
+            diff,
+            message: "No changes to apply — the SQL's columns match the node's current metadata.",
+          });
+        }
+
+        const updatedColumns = applyColumnDiff(parsed, existingColumns, diff);
+        const updatedMetadata = { ...metadata, columns: updatedColumns };
+        const body = { ...current, metadata: updatedMetadata };
+
+        if (params.dryRun) {
+          return buildJsonToolResponse(name, {
+            applied: false,
+            dryRun: true,
+            diff,
+            body,
+          });
+        }
+
+        await setWorkspaceNodeAndInvalidate(client, {
+          workspaceID: params.workspaceID,
+          nodeID: params.nodeID,
+          body,
+        });
+
+        return buildJsonToolResponse(name, {
+          applied: true,
+          dryRun: false,
+          diff,
         });
       } catch (err) {
         return handleToolError(err);

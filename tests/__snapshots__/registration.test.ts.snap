@@ -5,6 +5,7 @@ exports[`Tool Registration > registers the expected set of tools (snapshot) > re
   "analyze_impact",
   "analyze_workspace_patterns",
   "apply_join_condition",
+  "apply_sql_to_workspace_node",
   "audit_documentation_coverage",
   "build_pipeline_from_intent",
   "cache_environment_nodes",
