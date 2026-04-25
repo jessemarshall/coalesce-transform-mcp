@@ -94,6 +94,33 @@ function buildResult(args: string[], runResult: RunCoaResult): CoaToolResult {
   return out;
 }
 
+/**
+ * Synthesize a CoaToolResult for a pre-flight error (e.g., {@link
+ * InvalidCoaProjectPathError} thrown by {@link validateProjectPath} before
+ * the CLI ever runs). Without this, the throw propagates up and the MCP SDK
+ * tries to wrap it into a response that lacks the required output-schema
+ * fields, which surfaces to the caller as a cryptic "Structured content does
+ * not match the tool's output schema" error instead of the actual problem.
+ */
+function buildPreflightErrorResult(args: string[], err: unknown): CoaToolResult {
+  const message = err instanceof Error ? err.message : String(err);
+  const version = (() => {
+    try {
+      return resolveCoaBinary().version;
+    } catch {
+      return null;
+    }
+  })();
+  return {
+    command: formatCommand(args),
+    exitCode: -1,
+    timedOut: false,
+    stdout: "",
+    stderr: message,
+    coaVersion: version,
+  };
+}
+
 // ---------- input schemas (shared) ----------
 
 const ProjectPathParam = z.object({
@@ -209,11 +236,16 @@ export async function coaValidateHandler(
   params: z.infer<typeof SelectorParams>,
   runCoaFn: RunCoaFn = runCoa
 ): Promise<CoaToolResult> {
-  const cwd = validateProjectPath(params.projectPath);
-  const args = ["--json", "validate", "--dir", cwd];
+  const args = ["--json", "validate", "--dir", params.projectPath];
   pushIf(args, "--workspace", params.workspace);
   pushIf(args, "--include", params.include);
   pushIf(args, "--exclude", params.exclude);
+  let cwd: string;
+  try {
+    cwd = validateProjectPath(params.projectPath);
+  } catch (err) {
+    return buildPreflightErrorResult(args, err);
+  }
   const result = await runCoaFn(args, { cwd, parseJson: true });
   return buildResult(args, result);
 }
@@ -222,9 +254,14 @@ export async function coaListProjectNodesHandler(
   params: z.infer<typeof ProjectPathParam>,
   runCoaFn: RunCoaFn = runCoa
 ): Promise<CoaToolResult> {
-  const cwd = validateProjectPath(params.projectPath);
-  const args = ["--json", "create", "--dir", cwd, "--list-nodes"];
+  const args = ["--json", "create", "--dir", params.projectPath, "--list-nodes"];
   pushIf(args, "--workspace", params.workspace);
+  let cwd: string;
+  try {
+    cwd = validateProjectPath(params.projectPath);
+  } catch (err) {
+    return buildPreflightErrorResult(args, err);
+  }
   const result = await runCoaFn(args, { cwd, parseJson: true });
   return buildResult(args, result);
 }
@@ -235,11 +272,16 @@ export async function coaDryRunCreateHandler(
   params: z.infer<typeof DryRunParams>,
   runCoaFn: RunCoaFn = runCoa
 ): Promise<CoaToolResult> {
-  const cwd = validateProjectPath(params.projectPath);
-  const args = ["--verbose", "create", "--dir", cwd, "--dry-run"];
+  const args = ["--verbose", "create", "--dir", params.projectPath, "--dry-run"];
   pushIf(args, "--workspace", params.workspace);
   pushIf(args, "--include", params.include);
   pushIf(args, "--exclude", params.exclude);
+  let cwd: string;
+  try {
+    cwd = validateProjectPath(params.projectPath);
+  } catch (err) {
+    return buildPreflightErrorResult(args, err);
+  }
   const result = await runCoaFn(args, { cwd });
   return buildResult(args, result);
 }
@@ -248,11 +290,16 @@ export async function coaDryRunRunHandler(
   params: z.infer<typeof DryRunParams>,
   runCoaFn: RunCoaFn = runCoa
 ): Promise<CoaToolResult> {
-  const cwd = validateProjectPath(params.projectPath);
-  const args = ["--verbose", "run", "--dir", cwd, "--dry-run"];
+  const args = ["--verbose", "run", "--dir", params.projectPath, "--dry-run"];
   pushIf(args, "--workspace", params.workspace);
   pushIf(args, "--include", params.include);
   pushIf(args, "--exclude", params.exclude);
+  let cwd: string;
+  try {
+    cwd = validateProjectPath(params.projectPath);
+  } catch (err) {
+    return buildPreflightErrorResult(args, err);
+  }
   const result = await runCoaFn(args, { cwd });
   return buildResult(args, result);
 }
