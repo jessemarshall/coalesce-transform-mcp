@@ -22,7 +22,12 @@
  * (see {@link findMatchingBaseColumn} in column-helpers.ts).
  */
 
-import { stripIdentifierQuotes } from "../pipelines/sql-tokenizer.js";
+import {
+	stripIdentifierQuotes,
+	findClosingParen,
+	findLastTopLevelOpenParen,
+	findTopLevelKeywordIndex,
+} from "../pipelines/sql-tokenizer.js";
 import { parseSqlSelectItems } from "../pipelines/select-parsing.js";
 import { parseSqlSourceRefs } from "../pipelines/source-parsing.js";
 import { inferDatatype } from "../workspace/join-helpers.js";
@@ -127,18 +132,118 @@ export function parseCreateTableColumns(sql: string): ParsedSqlColumn[] | undefi
 }
 
 /**
- * Parse a DML-shaped SQL document (the output of `coa_dry_run_run` — typically
- * an INSERT INTO … SELECT …) and extract the SELECT-list as parsed columns.
+ * Strip leading whitespace and comments and return whether the SQL starts
+ * with `MERGE INTO`. Coalesce dimension / Type-2 SCD nodes always render as
+ * MERGE, so the apply path needs to recognize them as DML.
+ */
+export function isMergeShape(sql: string): boolean {
+	const stripped = sql.replace(/^(?:\s|--[^\n]*\n|\/\*[\s\S]*?\*\/)+/, "");
+	return /^merge\s+into\s+/i.test(stripped);
+}
+
+/**
+ * Strip leading whitespace and comments and return whether the SQL starts
+ * with `INSERT`. Coalesce fact / staging / work nodes typically render as
+ * `INSERT INTO target ( cols ) ( SELECT ... )`, where the SELECT is wrapped
+ * in parens — those need envelope peeling for the SELECT-list parser.
+ */
+export function isInsertShape(sql: string): boolean {
+	const stripped = sql.replace(/^(?:\s|--[^\n]*\n|\/\*[\s\S]*?\*\/)+/, "");
+	return /^insert\s+/i.test(stripped);
+}
+
+/**
+ * Peel a MERGE envelope down to its inner SELECT. Returns the inner SELECT
+ * as a standalone string, or undefined when the input isn't a MERGE or the
+ * envelope can't be parsed.
+ *
+ * Coalesce typically renders dim nodes as
+ *   MERGE INTO <target> "TGT" USING ( ( SELECT ... FROM ... ) ) "SRC" ON ...
+ * The SELECT can be wrapped in one or more layers of parens. We find the
+ * USING ( ... ), capture the balanced body, then peel any single-paren
+ * wrappers until we land on a string starting with SELECT or WITH.
+ *
+ * Everything outside the inner SELECT (the MERGE header, ON condition, WHEN
+ * MATCHED / WHEN NOT MATCHED clauses, target alias) is discarded — those are
+ * Coalesce-managed and not editable via the apply path.
+ */
+export function peelMergeEnvelope(sql: string): string | undefined {
+	if (!isMergeShape(sql)) { return undefined; }
+	const usingIdx = findTopLevelKeywordIndex(sql, "using");
+	if (usingIdx < 0) { return undefined; }
+	let i = usingIdx + "using".length;
+	while (i < sql.length && /\s/.test(sql[i]!)) { i++; }
+	if (sql[i] !== "(") { return undefined; }
+	const closeIdx = findClosingParen(sql, i + 1);
+	if (closeIdx < 0) { return undefined; }
+	let inner = sql.slice(i + 1, closeIdx).trim();
+	// Peel single-paren wrappers (only when the trailing `)` closes the
+	// leading `(` — guarded by re-running findClosingParen on the leading
+	// paren so `(a) OR (b)` doesn't get mis-peeled).
+	while (inner.startsWith("(")) {
+		const innerClose = findClosingParen(inner, 1);
+		if (innerClose !== inner.length - 1) { break; }
+		inner = inner.slice(1, -1).trim();
+	}
+	return inner;
+}
+
+/**
+ * Peel an INSERT envelope down to its inner SELECT. Returns the inner
+ * SELECT, or undefined when the input isn't an INSERT or the envelope
+ * doesn't wrap the SELECT in parens (i.e. plain `INSERT INTO target SELECT
+ * ...` — already top-level, no peel needed).
+ *
+ * Coalesce typically renders fact / staging / work nodes as
+ *   INSERT INTO <target> ( <cols> ) ( SELECT ... FROM ... GROUP BY ... )
+ * The SELECT is in the LAST top-level paren; the FIRST is the column list.
+ * If the SQL is INSERT but already has a top-level SELECT (no parens around
+ * it), we return undefined so callers fall through to using the raw SQL.
+ */
+export function peelInsertEnvelope(sql: string): string | undefined {
+	if (!isInsertShape(sql)) { return undefined; }
+	if (findTopLevelKeywordIndex(sql, "select") >= 0) { return undefined; }
+	const lastOpen = findLastTopLevelOpenParen(sql);
+	if (lastOpen < 0) { return undefined; }
+	const closeIdx = findClosingParen(sql, lastOpen + 1);
+	if (closeIdx < 0) { return undefined; }
+	let inner = sql.slice(lastOpen + 1, closeIdx).trim();
+	while (inner.startsWith("(")) {
+		const innerClose = findClosingParen(inner, 1);
+		if (innerClose !== inner.length - 1) { break; }
+		inner = inner.slice(1, -1).trim();
+	}
+	return inner;
+}
+
+/**
+ * Peel any DML envelope (MERGE or INSERT-with-paren-wrapped-SELECT) down to
+ * its inner SELECT. Returns undefined when no peel is needed (plain SELECT,
+ * `INSERT INTO target SELECT ...` without paren wrapping, etc.) — callers
+ * should fall back to the raw SQL in that case.
+ */
+export function peelDmlEnvelope(sql: string): string | undefined {
+	return peelMergeEnvelope(sql) ?? peelInsertEnvelope(sql);
+}
+
+/**
+ * Parse a DML-shaped SQL document (the output of `coa_dry_run_run` — an
+ * INSERT INTO … SELECT, a bare SELECT, or a MERGE INTO … USING ( SELECT … ))
+ * and extract the SELECT-list as parsed columns. Both MERGE and
+ * paren-wrapped INSERT envelopes are peeled to the inner SELECT before
+ * parsing, so the user's editable surface is the SELECT only.
+ *
  * Each column's `expression` is populated so the apply path can pass it to
  * source-mapping inference; `dataType` is best-effort via {@link inferDatatype}
  * and may be empty when no pattern matches (callers should fall back to the
  * existing column's dataType for those).
  *
- * Returns undefined when the input has no recognizable top-level SELECT.
+ * Returns undefined when the input has no recognizable SELECT-list.
  */
 export function parseSelectColumnsForApply(sql: string): ParsedSqlColumn[] | undefined {
-	const sourceParse = parseSqlSourceRefs(sql);
-	const { selectItems } = parseSqlSelectItems(sql, sourceParse.refs);
+	const target = peelDmlEnvelope(sql) ?? sql;
+	const sourceParse = parseSqlSourceRefs(target);
+	const { selectItems } = parseSqlSelectItems(target, sourceParse.refs);
 	if (selectItems.length === 0) { return undefined; }
 
 	const columns: ParsedSqlColumn[] = [];

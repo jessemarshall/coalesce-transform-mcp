@@ -19,6 +19,7 @@ import {
 import {
   applyColumnDiff,
   diffColumns,
+  isMergeShape,
   normalizeColumnKey,
   parseCreateTableColumns,
   parseSelectColumnsForApply,
@@ -237,9 +238,12 @@ const ApplySqlInputSchema = z.object({
     .describe(
       "The edited SQL to apply. Accepts either: (a) a CREATE [OR REPLACE] TABLE statement "
         + "(`coa_dry_run_create` output) — name + dataType per column, no transforms; or "
-        + "(b) a SELECT/INSERT statement (`coa_dry_run_run` output) — name + expression per "
-        + "column, dataType inferred from the expression. The tool extracts the column list "
-        + "and diffs it against the node's current metadata.columns[].",
+        + "(b) a SELECT/INSERT/MERGE statement (`coa_dry_run_run` output) — name + expression "
+        + "per column, dataType inferred from the expression. For MERGE shapes (Coalesce "
+        + "dim / Type-2 SCD nodes) only the inner SELECT inside USING (...) is editable; the "
+        + "MERGE envelope (target, ON, WHEN MATCHED / WHEN NOT MATCHED) is Coalesce-managed and "
+        + "ignored by the apply path. The tool extracts the column list and diffs it against "
+        + "the node's current metadata.columns[].",
     ),
   dryRun: z
     .boolean()
@@ -340,7 +344,13 @@ function defineApplySqlToWorkspaceNode(client: CoalesceClient): ToolDefinition {
         // never intended.
         const sqlPreamble = params.sql.replace(/^(?:\s|--[^\n]*\n|\/\*[\s\S]*?\*\/)*/, "");
         const isDdl = /^create\s+/i.test(sqlPreamble);
-        const isDml = /^(?:insert|select|with|\()\s*/i.test(sqlPreamble);
+        const isDml = /^(?:insert|merge|select|with|\()\s*/i.test(sqlPreamble);
+        // MERGE shapes (Coalesce dim / Type-2 SCD) flow through the same
+        // column-level diff path as INSERT/SELECT — but the structural
+        // diffs (joinDiff, tailDiff, limitDiff, insertHeaderDiff) don't
+        // apply: the MERGE envelope is Coalesce-managed, not user-editable.
+        // Track the shape so we can skip those branches below.
+        const isMerge = isDml && isMergeShape(params.sql);
         let parsed: ParsedSqlColumn[] | undefined;
         let inputKind: "ddl" | "dml";
         if (isDdl) {
@@ -357,14 +367,18 @@ function defineApplySqlToWorkspaceNode(client: CoalesceClient): ToolDefinition {
           inputKind = "dml";
           if (!parsed) {
             throw new Error(
-              "SQL appears to be DML but no SELECT-list could be extracted. Pass the full "
-                + "INSERT/SELECT statement (the output of coa_dry_run_run).",
+              isMerge
+                ? "SQL is a MERGE but no SELECT-list could be extracted from the USING (…) "
+                  + "clause. Pass the full MERGE statement (the output of coa_dry_run_run on a "
+                  + "dim / Type-2 SCD node)."
+                : "SQL appears to be DML but no SELECT-list could be extracted. Pass the full "
+                  + "INSERT/SELECT statement (the output of coa_dry_run_run).",
             );
           }
         } else {
           throw new Error(
             "Could not classify the SQL. Expected either a CREATE TABLE statement "
-              + "(coa_dry_run_create output) or a SELECT/INSERT statement "
+              + "(coa_dry_run_create output) or a SELECT/INSERT/MERGE statement "
               + "(coa_dry_run_run output).",
           );
         }
@@ -509,7 +523,12 @@ function defineApplySqlToWorkspaceNode(client: CoalesceClient): ToolDefinition {
         let updatedSourceMapping: unknown[] | undefined;
         let updatedConfig: Record<string, unknown> | undefined;
         let updatedTopLevel: Record<string, unknown> | undefined;
-        if (inputKind === "dml") {
+        if (inputKind === "dml" && !isMerge) {
+          // MERGE shapes (Coalesce dim / Type-2 SCD) skip structural diffs:
+          // the MERGE envelope (USING, ON, WHEN MATCHED/NOT MATCHED) is
+          // Coalesce-managed and not user-editable. Only column-level edits
+          // inside the inner SELECT round-trip via the column diff above.
+          //
           // Compute the tail diff first so the joinDiff rejection branch
           // (a few lines below) can include it in the response.
           const existingConfig = isPlainObject(current.config)
@@ -589,7 +608,7 @@ function defineApplySqlToWorkspaceNode(client: CoalesceClient): ToolDefinition {
             }
           }
         }
-        if (inputKind === "dml") {
+        if (inputKind === "dml" && !isMerge) {
           const sourceMapping = Array.isArray(metadata.sourceMapping) ? metadata.sourceMapping : [];
           const firstSm = sourceMapping[0];
           const firstJoin = isPlainObject(firstSm) && isPlainObject(firstSm.join) ? firstSm.join : undefined;
@@ -748,8 +767,10 @@ function defineApplySqlToWorkspaceNode(client: CoalesceClient): ToolDefinition {
 
         // Iteration 5: detect edits to the INSERT INTO header — target
         // identifier (database/locationName/name) and column-list
-        // consistency check. DML-only.
-        if (inputKind === "dml") {
+        // consistency check. DML-only, and skipped for MERGE shapes (the
+        // MERGE INTO target is the same field but the column list isn't
+        // present in MERGE syntax).
+        if (inputKind === "dml" && !isMerge) {
           const selectColNames = parsed.map((p) => p.name);
           insertHeaderDiff = diffInsertHeader(
             params.sql,

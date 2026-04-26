@@ -333,3 +333,41 @@ describe("parseOrderByItems: quote-aware dot splitting (pass-3 fix)", () => {
 		expect(result.groupBy).toEqual({ kind: "identical" });
 	});
 });
+
+describe("diffTailClauses: INSERT-envelope GROUP BY (regression)", () => {
+	// Without envelope peeling, the GROUP BY inside an INSERT envelope's
+	// inner paren is invisible to `findTopLevelKeywordIndex`. That would
+	// make `userHasGroupBy = false` and, against an existing
+	// `groupByAll: true` config, fire `kind: "removed"` and silently flip
+	// the node's auto-GROUP BY off. This test locks in the peel guard.
+	const insertEnvelopeWithGroupBy = `INSERT INTO "DB"."L"."N" (
+		"CUSTOMER_KEY",
+		"TOTAL_ORDERS"
+	) (
+		SELECT NULL AS "CUSTOMER_KEY",
+			COUNT("U"."ORDER_KEY") AS "TOTAL_ORDERS"
+		FROM "DB"."L"."U" U
+		GROUP BY U.CUSTOMER_KEY
+	)`;
+
+	it("extracts GROUP BY from inside an INSERT envelope's inner SELECT", () => {
+		expect(extractGroupByClause(insertEnvelopeWithGroupBy)).toBe("U.CUSTOMER_KEY");
+	});
+
+	it("reports identical GROUP BY when the SQL has GROUP BY and the node has groupByAll: true", () => {
+		const result = diffTailClauses(insertEnvelopeWithGroupBy, { groupByAll: true });
+		expect(result.groupBy).toEqual({ kind: "identical" });
+	});
+
+	it("does NOT mistakenly fire 'removed' on INSERT-envelope SQL with a GROUP BY", () => {
+		const result = diffTailClauses(insertEnvelopeWithGroupBy, { groupByAll: true });
+		expect(result.groupBy.kind).not.toBe("removed");
+	});
+
+	it("extracts GROUP BY from inside a MERGE envelope's inner SELECT", () => {
+		const mergeWithGroupBy = `MERGE INTO t TGT USING (
+			(SELECT u.k AS K, COUNT(*) AS C FROM u U GROUP BY u.k)
+		) SRC ON TGT.K = SRC.K`;
+		expect(extractGroupByClause(mergeWithGroupBy)).toBe("u.k");
+	});
+});

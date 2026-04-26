@@ -471,3 +471,48 @@ export function extractParenBody(sql: string, startIndex: number): string | null
   if (closeIdx < 0) return null;
   return sql.slice(startIndex, closeIdx).trim();
 }
+
+/**
+ * Find the LAST `(` outside strings / comments / inner parens. Returns -1
+ * when no top-level `(` exists. Used by the DML-envelope peelers to locate
+ * the inner SELECT body of an `INSERT INTO target (cols) (SELECT ...)`
+ * shape — the LAST top-level paren is the SELECT body; the FIRST is the
+ * column list.
+ */
+export function findLastTopLevelOpenParen(s: string): number {
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inBacktick = false;
+  let inBracket = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let parenDepth = 0;
+  let lastIdx = -1;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]!;
+    const next = s[i + 1];
+    if (inLineComment) { if (c === "\n") { inLineComment = false; } continue; }
+    if (inBlockComment) { if (c === "*" && next === "/") { inBlockComment = false; i++; } continue; }
+    if (inSingleQuote) {
+      if (c === "'" && next === "'") { i++; }
+      else if (c === "'") { inSingleQuote = false; }
+      continue;
+    }
+    if (inDoubleQuote) { if (c === '"') { inDoubleQuote = false; } continue; }
+    if (inBacktick) { if (c === "`") { inBacktick = false; } continue; }
+    if (inBracket) { if (c === "]") { inBracket = false; } continue; }
+    if (c === "'") { inSingleQuote = true; continue; }
+    if (c === '"') { inDoubleQuote = true; continue; }
+    if (c === "`") { inBacktick = true; continue; }
+    if (c === "[") { inBracket = true; continue; }
+    if (c === "-" && next === "-") { inLineComment = true; i++; continue; }
+    if (c === "/" && next === "*") { inBlockComment = true; i++; continue; }
+    if (c === "(") {
+      if (parenDepth === 0) { lastIdx = i; }
+      parenDepth++;
+      continue;
+    }
+    if (c === ")") { if (parenDepth > 0) { parenDepth--; } continue; }
+  }
+  return lastIdx;
+}
