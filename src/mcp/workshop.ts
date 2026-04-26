@@ -30,7 +30,7 @@ export function defineWorkshopTools(
       "to bootstrap the session with initial nodes.\n\n" +
       "Returns a sessionID that must be passed to subsequent workshop calls.",
     inputSchema: z.object({
-      workspaceID: z.string().describe("The workspace ID to build the pipeline in"),
+      workspaceID: z.string().min(1, "workspaceID must not be empty").describe("The workspace ID to build the pipeline in"),
       intent: z
         .string()
         .optional()
@@ -60,8 +60,8 @@ export function defineWorkshopTools(
       "Each instruction is processed against the current session state, " +
       "and the updated plan is returned.",
     inputSchema: z.object({
-      sessionID: z.string().describe("The workshop session ID from pipeline_workshop_open"),
-      instruction: z.string().describe("Natural language instruction to modify the plan"),
+      sessionID: z.string().min(1, "sessionID must not be empty").describe("The workshop session ID from pipeline_workshop_open"),
+      instruction: z.string().min(1, "instruction must not be empty").describe("Natural language instruction to modify the plan"),
     }),
     annotations: WRITE_ANNOTATIONS,
   }, workshopInstruct),
@@ -72,7 +72,7 @@ export function defineWorkshopTools(
       "Get the current state of a pipeline workshop session, including all planned nodes, " +
       "their configuration, and the instruction history.",
     inputSchema: z.object({
-      sessionID: z.string().describe("The workshop session ID"),
+      sessionID: z.string().min(1, "sessionID must not be empty").describe("The workshop session ID"),
     }),
     annotations: READ_ONLY_ANNOTATIONS,
   }, (params) => {
@@ -92,7 +92,7 @@ export function defineWorkshopTools(
       "If there are uncreated nodes in the plan, use build_pipeline_from_intent or plan_pipeline " +
       "to create them before closing.",
     inputSchema: z.object({
-      sessionID: z.string().describe("The workshop session ID to close"),
+      sessionID: z.string().min(1, "sessionID must not be empty").describe("The workshop session ID to close"),
     }),
     annotations: WRITE_ANNOTATIONS,
   }, (params) => workshopClose(params.sessionID)),

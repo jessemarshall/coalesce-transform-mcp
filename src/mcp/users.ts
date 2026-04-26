@@ -49,9 +49,9 @@ export function defineUserTools(
     description:
       "Get roles assigned to a specific user, optionally scoped to a project or environment.\n\nArgs:\n  - userID (string, required): The user ID\n  - projectID (string, optional): Scope to a specific project\n  - environmentID (string, optional): Scope to a specific environment\n\nReturns:\n  Role assignments for the user.",
     inputSchema: z.object({
-      userID: z.string().describe("The user ID"),
-      projectID: z.string().optional().describe("Optional project scope filter"),
-      environmentID: z.string().optional().describe("Optional environment scope filter"),
+      userID: z.string().min(1, "userID must not be empty").describe("The user ID"),
+      projectID: z.string().min(1, "projectID must not be empty when provided").optional().describe("Optional project scope filter"),
+      environmentID: z.string().min(1, "environmentID must not be empty when provided").optional().describe("Optional environment scope filter"),
     }),
     annotations: READ_ONLY_ANNOTATIONS,
   }, getUserRoles),
@@ -72,8 +72,8 @@ export function defineUserTools(
     description:
       "Set the organization-level role for a user. Idempotent — safe to call multiple times.\n\nArgs:\n  - userID (string, required): The user ID\n  - role (string, required): Role to assign (e.g., 'admin', 'member', 'viewer')\n\nReturns:\n  Updated role assignment.",
     inputSchema: z.object({
-      userID: z.string().describe("The user ID"),
-      role: z.string().describe("The organization role to assign (e.g., 'admin', 'member', 'viewer')"),
+      userID: z.string().min(1, "userID must not be empty").describe("The user ID"),
+      role: z.string().min(1, "role must not be empty").describe("The organization role to assign (e.g., 'admin', 'member', 'viewer')"),
     }),
     annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
   }, (client, params) => {
@@ -86,9 +86,9 @@ export function defineUserTools(
     description:
       "Set a user's role for a specific project. Idempotent.\n\nArgs:\n  - userID (string, required): The user ID\n  - projectID (string, required): The project ID\n  - role (string, required): Role to assign (e.g., 'admin', 'developer', 'viewer')\n\nReturns:\n  Updated role assignment.",
     inputSchema: z.object({
-      userID: z.string().describe("The user ID"),
-      projectID: z.string().describe("The project ID"),
-      role: z.string().describe("The project role to assign (e.g., 'admin', 'developer', 'viewer')"),
+      userID: z.string().min(1, "userID must not be empty").describe("The user ID"),
+      projectID: z.string().min(1, "projectID must not be empty").describe("The project ID"),
+      role: z.string().min(1, "role must not be empty").describe("The project role to assign (e.g., 'admin', 'developer', 'viewer')"),
     }),
     annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
   }, (client, params) => {
@@ -101,8 +101,8 @@ export function defineUserTools(
     description:
       "Remove a user's role from a specific project. Destructive — the user will lose project access immediately.\n\nArgs:\n  - userID (string, required): The user ID\n  - projectID (string, required): The project ID\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms the role removal\n\nReturns:\n  Confirmation message.",
     inputSchema: z.object({
-      userID: z.string().describe("The user ID"),
-      projectID: z.string().describe("The project ID"),
+      userID: z.string().min(1, "userID must not be empty").describe("The user ID"),
+      projectID: z.string().min(1, "projectID must not be empty").describe("The project ID"),
       confirmed: z
         .boolean()
         .optional()
@@ -139,9 +139,9 @@ export function defineUserTools(
     description:
       "Set a user's role for a specific environment. Idempotent.\n\nArgs:\n  - userID (string, required): The user ID\n  - environmentID (string, required): The environment ID\n  - role (string, required): Role to assign\n\nReturns:\n  Updated role assignment.",
     inputSchema: z.object({
-      userID: z.string().describe("The user ID"),
-      environmentID: z.string().describe("The environment ID"),
-      role: z.string().describe("The environment role to assign (e.g., 'admin', 'developer', 'viewer')"),
+      userID: z.string().min(1, "userID must not be empty").describe("The user ID"),
+      environmentID: z.string().min(1, "environmentID must not be empty").describe("The environment ID"),
+      role: z.string().min(1, "role must not be empty").describe("The environment role to assign (e.g., 'admin', 'developer', 'viewer')"),
     }),
     annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
   }, (client, params) => {
@@ -154,8 +154,8 @@ export function defineUserTools(
     description:
       "Remove a user's role from a specific environment. Destructive — the user will lose environment access immediately.\n\nArgs:\n  - userID (string, required): The user ID\n  - environmentID (string, required): The environment ID\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms the role removal\n\nReturns:\n  Confirmation message.",
     inputSchema: z.object({
-      userID: z.string().describe("The user ID"),
-      environmentID: z.string().describe("The environment ID"),
+      userID: z.string().min(1, "userID must not be empty").describe("The user ID"),
+      environmentID: z.string().min(1, "environmentID must not be empty").describe("The environment ID"),
       confirmed: z
         .boolean()
         .optional()

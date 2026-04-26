@@ -26,8 +26,8 @@ export function defineSubgraphTools(
     description:
       "Get details of a specific subgraph.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - subgraphID (string, required): The subgraph ID\n\nReturns:\n  Subgraph object with name and node steps.",
     inputSchema: z.object({
-      workspaceID: z.string().describe("The workspace ID"),
-      subgraphID: z.string().describe("The subgraph ID"),
+      workspaceID: z.string().min(1, "workspaceID must not be empty").describe("The workspace ID"),
+      subgraphID: z.string().min(1, "subgraphID must not be empty").describe("The subgraph ID"),
     }),
     annotations: READ_ONLY_ANNOTATIONS,
   }, getWorkspaceSubgraph),
@@ -37,10 +37,10 @@ export function defineSubgraphTools(
     description:
       "Create a subgraph in a Coalesce workspace. Subgraphs group nodes visually. The assigned UUID is cached locally so future edits can reference the subgraph by name.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - name (string, required): Subgraph name\n  - steps (string[], required): Array of node IDs to include\n\nReturns:\n  { subgraphID, subgraph, cached, message } — subgraphID is the UUID; cache it if you need to edit this subgraph later.",
     inputSchema: z.object({
-      workspaceID: z.string().describe("The workspace ID"),
-      name: z.string().describe("Name for the subgraph"),
+      workspaceID: z.string().min(1, "workspaceID must not be empty").describe("The workspace ID"),
+      name: z.string().min(1, "name must not be empty").describe("Name for the subgraph"),
       steps: z
-        .array(z.string())
+        .array(z.string().min(1, "node ID must not be empty"))
         .describe("Array of node IDs to include in the subgraph"),
     }),
     annotations: WRITE_ANNOTATIONS,
@@ -51,13 +51,15 @@ export function defineSubgraphTools(
     description:
       "Update a subgraph's name and member nodes. Replaces the entire steps array. Pass either subgraphID (fastest) or subgraphName — if only the name is given, the ID is resolved from (1) the local UUID cache, (2) {repoPath}/subgraphs/*.yml. The public Coalesce API has no subgraph list endpoint, so a subgraph created outside this MCP session cannot be resolved by name without a repo checkout.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - subgraphID (string, optional): The subgraph ID. Preferred when known.\n  - subgraphName (string, optional): The subgraph name. Used to resolve the ID when subgraphID is absent.\n  - repoPath (string, optional): Coalesce repo path for subgraph YAML lookup.\n  - name (string, required): Updated name\n  - steps (string[], required): Updated node IDs\n\nReturns:\n  { subgraphID, subgraph, resolvedFrom } where resolvedFrom is \"input\" | \"cache\" | \"repo\".",
     inputSchema: z.object({
-      workspaceID: z.string().describe("The workspace ID"),
+      workspaceID: z.string().min(1, "workspaceID must not be empty").describe("The workspace ID"),
       subgraphID: z
         .string()
+        .min(1, "subgraphID must not be empty when provided")
         .optional()
         .describe("The subgraph ID. Preferred when known — fastest path."),
       subgraphName: z
         .string()
+        .min(1, "subgraphName must not be empty when provided")
         .optional()
         .describe(
           "The subgraph name. Used to resolve the ID from the local cache or repo subgraphs/ folder when subgraphID is absent (the Coalesce API has no subgraph list endpoint)."
@@ -68,9 +70,9 @@ export function defineSubgraphTools(
         .describe(
           "Optional Coalesce repo path for subgraph YAML lookup. Falls back to COALESCE_REPO_PATH or the coa profile."
         ),
-      name: z.string().describe("Updated name for the subgraph"),
+      name: z.string().min(1, "name must not be empty").describe("Updated name for the subgraph"),
       steps: z
-        .array(z.string())
+        .array(z.string().min(1, "node ID must not be empty"))
         .describe("Updated array of node IDs to include in the subgraph"),
     }),
     annotations: WRITE_ANNOTATIONS,
@@ -81,13 +83,15 @@ export function defineSubgraphTools(
     description:
       "Delete a subgraph from a workspace. Destructive — the subgraph is removed but its member nodes are NOT deleted. Pass either subgraphID (preferred) or subgraphName with optional repoPath.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - subgraphID (string, optional): The subgraph ID. Preferred when known.\n  - subgraphName (string, optional): The subgraph name. Resolved via cache \u2192 repo when subgraphID is absent (the Coalesce API has no subgraph list endpoint).\n  - repoPath (string, optional): Coalesce repo path for subgraph YAML lookup.\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms deletion\n\nReturns:\n  Confirmation message.",
     inputSchema: z.object({
-      workspaceID: z.string().describe("The workspace ID"),
+      workspaceID: z.string().min(1, "workspaceID must not be empty").describe("The workspace ID"),
       subgraphID: z
         .string()
+        .min(1, "subgraphID must not be empty when provided")
         .optional()
         .describe("The subgraph ID to delete. Preferred when known."),
       subgraphName: z
         .string()
+        .min(1, "subgraphName must not be empty when provided")
         .optional()
         .describe(
           "The subgraph name. Resolved via cache \u2192 repo when subgraphID is absent (the Coalesce API has no subgraph list endpoint)."

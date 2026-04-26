@@ -38,7 +38,7 @@ export function defineProjectTools(
     description:
       "Get details of a specific Coalesce project.\n\nArgs:\n  - projectID (string, required): The project ID\n  - includeWorkspaces (boolean, optional): Include nested workspace data\n  - includeJobs (boolean, optional): Include nested job data\n\nReturns:\n  Full project object with ID, name, description, git configuration.",
     inputSchema: z.object({
-      projectID: z.string().describe("The project ID"),
+      projectID: z.string().min(1, "projectID must not be empty").describe("The project ID"),
       includeWorkspaces: z.boolean().optional().describe("Include nested workspace data with workspace IDs"),
       includeJobs: z.boolean().optional().describe("Include nested job data for all workspaces"),
     }),
@@ -50,7 +50,7 @@ export function defineProjectTools(
     description:
       "Create a new Coalesce project.\n\nArgs:\n  - name (string, required): Project name\n  - platformKind (enum, required): Target platform — 'snowflake', 'databricks', 'starburst', or 'spark'\n  - description (string, optional): Project description\n  - gitAccountID (string, optional): Git account to link\n  - gitRepo (string, optional): Git repository URL\n  - gitBranch (string, optional): Default git branch\n\nReturns:\n  Created project object with assigned ID.",
     inputSchema: z.object({
-      name: z.string().describe("Name for the new project"),
+      name: z.string().min(1, "name must not be empty").describe("Name for the new project"),
       platformKind: z.enum(["snowflake", "databricks", "starburst", "spark"]).describe("Target platform for the project"),
       description: z.string().optional().describe("Optional project description"),
       gitAccountID: z.string().optional().describe("Git account ID to link to the project"),
@@ -65,8 +65,8 @@ export function defineProjectTools(
     description:
       "Update an existing Coalesce project. Partial update — only provided fields are changed.\n\nArgs:\n  - projectID (string, required): The project ID\n  - name (string, optional): Updated name\n  - description (string, optional): Updated description\n  - gitAccountID, gitRepo, gitBranch (string, optional): Updated git settings\n  - includeWorkspaces, includeJobs (boolean, optional): Expand response\n\nReturns:\n  Updated project object.",
     inputSchema: z.object({
-      projectID: z.string().describe("The project ID"),
-      name: z.string().optional().describe("Updated project name"),
+      projectID: z.string().min(1, "projectID must not be empty").describe("The project ID"),
+      name: z.string().min(1, "name must not be empty when provided").optional().describe("Updated project name"),
       description: z.string().optional().describe("Updated project description"),
       gitAccountID: z.string().optional().describe("Git account ID to link to the project"),
       gitRepo: z.string().optional().describe("Git repository URL"),
@@ -85,7 +85,7 @@ export function defineProjectTools(
     description:
       "Permanently delete a Coalesce project. This is destructive and cannot be undone.\n\nArgs:\n  - projectID (string, required): The project ID\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms deletion\n\nReturns:\n  Confirmation message.",
     inputSchema: z.object({
-      projectID: z.string().describe("The project ID"),
+      projectID: z.string().min(1, "projectID must not be empty").describe("The project ID"),
       confirmed: z
         .boolean()
         .optional()
