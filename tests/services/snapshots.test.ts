@@ -3,9 +3,16 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, w
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
+  cacheEnvironmentNodes,
+  cacheOrgUsers,
+  cacheRuns,
+  cacheWorkspaceNodes,
+  fetchAllEnvironmentNodes,
+  fetchAllRuns,
   fetchAllWorkspaceNodes,
   promoteSnapshotArtifacts,
   streamAllPaginatedToDisk,
+  toNodeSummaries,
 } from "../../src/services/cache/snapshots.js";
 
 function createMockClient() {
@@ -234,5 +241,384 @@ describe("streamAllPaginatedToDisk", () => {
     await expect(
       streamAllPaginatedToDisk(fetchPage, {}, {}, { ndjsonPath, metaPath })
     ).rejects.toThrow("Pagination repeated cursor cursor-2");
+  });
+});
+
+describe("toNodeSummaries", () => {
+  it("returns name/nodeType pairs for well-formed entries", () => {
+    expect(
+      toNodeSummaries([
+        { id: "n1", name: "STG_A", nodeType: "Stage" },
+        { id: "n2", name: "DIM_B", nodeType: "Dimension" },
+      ])
+    ).toEqual([
+      { name: "STG_A", nodeType: "Stage" },
+      { name: "DIM_B", nodeType: "Dimension" },
+    ]);
+  });
+
+  it("filters out entries missing name or nodeType", () => {
+    expect(
+      toNodeSummaries([
+        { id: "n1", name: "STG_A", nodeType: "Stage" },
+        { id: "n2", name: "no_type" },
+        { id: "n3", nodeType: "Stage" },
+        { id: "n4", name: "DIM_B", nodeType: "Dimension" },
+      ])
+    ).toEqual([
+      { name: "STG_A", nodeType: "Stage" },
+      { name: "DIM_B", nodeType: "Dimension" },
+    ]);
+  });
+
+  it("filters out non-object entries (string, null, array)", () => {
+    expect(
+      toNodeSummaries([
+        "raw-string",
+        null,
+        [{ name: "x", nodeType: "y" }],
+        { name: "OK", nodeType: "Stage" },
+      ])
+    ).toEqual([{ name: "OK", nodeType: "Stage" }]);
+  });
+
+  it("rejects non-string name/nodeType (numeric ID, boolean type)", () => {
+    expect(
+      toNodeSummaries([
+        { name: 42, nodeType: "Stage" },
+        { name: "OK", nodeType: true },
+        { name: "VALID", nodeType: "Stage" },
+      ])
+    ).toEqual([{ name: "VALID", nodeType: "Stage" }]);
+  });
+
+  it("returns an empty array when given an empty input", () => {
+    expect(toNodeSummaries([])).toEqual([]);
+  });
+});
+
+describe("fetchAllEnvironmentNodes", () => {
+  it("paginates with environmentID and detail params", async () => {
+    const client = createMockClient();
+    client.get.mockImplementation((_path: string, params?: Record<string, unknown>) => {
+      if (!params?.startingFrom) {
+        return Promise.resolve({ data: [{ id: "e-1" }, { id: "e-2" }], next: "cur-2" });
+      }
+      return Promise.resolve({ data: [{ id: "e-3" }] });
+    });
+
+    const result = await fetchAllEnvironmentNodes(client as any, {
+      environmentID: "env-1",
+      detail: true,
+    });
+
+    expect(result.items).toHaveLength(3);
+    expect(result.pageCount).toBe(2);
+    // detail=true forces an extended timeout — first call should pass it through
+    expect(client.get).toHaveBeenCalledWith(
+      "/api/v1/environments/env-1/nodes",
+      expect.objectContaining({ detail: true, limit: 250, orderBy: "id" }),
+      expect.objectContaining({ timeoutMs: expect.any(Number) })
+    );
+  });
+
+  it("rejects empty environmentID before any HTTP call", async () => {
+    const client = createMockClient();
+    await expect(
+      fetchAllEnvironmentNodes(client as any, { environmentID: "" })
+    ).rejects.toThrow(/environmentID/);
+    expect(client.get).not.toHaveBeenCalled();
+  });
+
+  it("rejects environmentID containing path separators", async () => {
+    const client = createMockClient();
+    await expect(
+      fetchAllEnvironmentNodes(client as any, { environmentID: "../escape" })
+    ).rejects.toThrow(/path separators|control characters/);
+    expect(client.get).not.toHaveBeenCalled();
+  });
+});
+
+describe("fetchAllRuns", () => {
+  it("forwards filter params (runType, runStatus, environmentID) to listRuns", async () => {
+    const client = createMockClient();
+    client.get.mockResolvedValue({ data: [{ id: "r-1", runStatus: "completed" }] });
+
+    await fetchAllRuns(client as any, {
+      runType: "refresh",
+      runStatus: "completed",
+      environmentID: "env-9",
+    });
+
+    expect(client.get).toHaveBeenCalledWith(
+      "/api/v1/runs",
+      expect.objectContaining({
+        runType: "refresh",
+        runStatus: "completed",
+        environmentID: "env-9",
+        limit: 250,
+        orderBy: "id",
+      })
+    );
+  });
+
+  it("omits environmentID from query when not provided", async () => {
+    const client = createMockClient();
+    client.get.mockResolvedValue({ data: [] });
+
+    await fetchAllRuns(client as any, {});
+
+    const call = client.get.mock.calls[0];
+    expect(call[1]).not.toHaveProperty("environmentID");
+  });
+});
+
+// Cache* tools route through streamAllPaginatedToDisk with a real fs path. We
+// give them a writable temp dir, mock the network layer, and assert both the
+// returned metadata and the on-disk artifacts.
+describe("cacheWorkspaceNodes (full pipeline to disk)", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    for (const dir of tempDirs.splice(0, tempDirs.length)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  function createTempDir(): string {
+    const dir = mkdtempSync(join(tmpdir(), "snapshots-cache-test-"));
+    tempDirs.push(dir);
+    return dir;
+  }
+
+  it("writes nodes.ndjson and meta to a workspace-scoped subdir", async () => {
+    const baseDir = createTempDir();
+    const client = createMockClient();
+    client.get.mockResolvedValue({
+      data: [
+        { id: "n1", name: "STG_A", nodeType: "Stage" },
+        { id: "n2", name: "DIM_B", nodeType: "Dimension" },
+      ],
+    });
+
+    const result = await cacheWorkspaceNodes(
+      client as any,
+      { workspaceID: "ws-42", detail: true },
+      { baseDir }
+    );
+
+    expect(result.workspaceID).toBe("ws-42");
+    expect(result.detail).toBe(true);
+    expect(result.totalNodes).toBe(2);
+    expect(result.filePath).toMatch(/workspace-ws-42\/nodes\/nodes\.ndjson$/);
+    expect(result.metaPath).toMatch(/workspace-ws-42\/nodes\/nodes\.meta\.json$/);
+    const lines = readFileSync(result.filePath, "utf8").trimEnd().split("\n");
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0])).toEqual({ id: "n1", name: "STG_A", nodeType: "Stage" });
+  });
+
+  it("uses nodes-summary.ndjson when detail=false", async () => {
+    const baseDir = createTempDir();
+    const client = createMockClient();
+    client.get.mockResolvedValue({ data: [{ id: "n1" }] });
+
+    const result = await cacheWorkspaceNodes(
+      client as any,
+      { workspaceID: "ws-1", detail: false },
+      { baseDir }
+    );
+
+    expect(result.filePath).toMatch(/nodes-summary\.ndjson$/);
+    expect(result.detail).toBe(false);
+  });
+
+  it("rejects empty workspaceID before any HTTP call", async () => {
+    const baseDir = createTempDir();
+    const client = createMockClient();
+    await expect(
+      cacheWorkspaceNodes(client as any, { workspaceID: "" }, { baseDir })
+    ).rejects.toThrow(/workspaceID/);
+    expect(client.get).not.toHaveBeenCalled();
+  });
+});
+
+describe("cacheEnvironmentNodes (full pipeline to disk)", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0, tempDirs.length)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  function createTempDir(): string {
+    const dir = mkdtempSync(join(tmpdir(), "snapshots-cache-env-test-"));
+    tempDirs.push(dir);
+    return dir;
+  }
+
+  it("writes nodes.ndjson and meta to an environment-scoped subdir", async () => {
+    const baseDir = createTempDir();
+    const client = createMockClient();
+    client.get.mockResolvedValue({
+      data: [{ id: "en1", name: "DIM_C", nodeType: "Dimension" }],
+    });
+
+    const result = await cacheEnvironmentNodes(
+      client as any,
+      { environmentID: "env-7", detail: true },
+      { baseDir }
+    );
+
+    expect(result.environmentID).toBe("env-7");
+    expect(result.totalNodes).toBe(1);
+    expect(result.filePath).toMatch(/environment-env-7\/nodes\/nodes\.ndjson$/);
+    expect(JSON.parse(readFileSync(result.filePath, "utf8").trim())).toEqual({
+      id: "en1",
+      name: "DIM_C",
+      nodeType: "Dimension",
+    });
+  });
+
+  it("rejects empty environmentID before any HTTP call", async () => {
+    const baseDir = createTempDir();
+    const client = createMockClient();
+    await expect(
+      cacheEnvironmentNodes(client as any, { environmentID: "" }, { baseDir })
+    ).rejects.toThrow(/environmentID/);
+    expect(client.get).not.toHaveBeenCalled();
+  });
+});
+
+describe("cacheRuns (security-critical: sanitizes credentials before disk write)", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0, tempDirs.length)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  function createTempDir(): string {
+    const dir = mkdtempSync(join(tmpdir(), "snapshots-cache-runs-test-"));
+    tempDirs.push(dir);
+    return dir;
+  }
+
+  // The itemTransform = sanitizeResponse applies SANITIZED_KEYS redaction on
+  // each cached run — if anyone removes that transform, run snapshots would
+  // start including userCredentials, accessTokens, snowflakePassword, etc.
+  // This test fails loudly if the redaction is dropped.
+  it("strips userCredentials, accessToken, snowflakeKeyPairKey, snowflakeKeyPairPass, snowflakePassword, gitToken from cached runs", async () => {
+    const baseDir = createTempDir();
+    const client = createMockClient();
+    client.get.mockResolvedValue({
+      data: [
+        {
+          id: "run-1",
+          runStatus: "completed",
+          runDetails: {
+            userCredentials: { snowflakePassword: "PLAINTEXT-DO-NOT-LOG" },
+            snowflakeKeyPairKey: "BEGIN-RSA-PRIVATE-KEY",
+            accessToken: "secret-token",
+          },
+          gitToken: "ghp_REDACTME",
+          metadata: { harmless: "ok" },
+        },
+      ],
+    });
+
+    const result = await cacheRuns(client as any, { detail: true }, { baseDir });
+    const onDisk = readFileSync(result.filePath, "utf8").trim();
+    const parsed = JSON.parse(onDisk) as Record<string, unknown>;
+
+    expect(parsed.id).toBe("run-1");
+    expect(parsed.runStatus).toBe("completed");
+    expect(parsed.metadata).toEqual({ harmless: "ok" });
+    // None of the SANITIZED_KEYS should appear anywhere in the serialized payload.
+    for (const sensitive of [
+      "userCredentials",
+      "snowflakeKeyPairKey",
+      "snowflakeKeyPairPass",
+      "snowflakePassword",
+      "gitToken",
+      "accessToken",
+      "PLAINTEXT-DO-NOT-LOG",
+      "BEGIN-RSA-PRIVATE-KEY",
+      "secret-token",
+      "ghp_REDACTME",
+    ]) {
+      expect(onDisk).not.toContain(sensitive);
+    }
+  });
+
+  it("uses runs-{filters}-summary.ndjson naming when filters and detail=false are passed", async () => {
+    const baseDir = createTempDir();
+    const client = createMockClient();
+    client.get.mockResolvedValue({ data: [{ id: "run-2" }] });
+
+    const result = await cacheRuns(
+      client as any,
+      { runType: "refresh", runStatus: "failed", environmentID: "env-3", detail: false },
+      { baseDir }
+    );
+
+    expect(result.filePath).toMatch(/runs-env-env-3-refresh-failed-summary\.ndjson$/);
+    expect(result.environmentID).toBe("env-3");
+    expect(result.runType).toBe("refresh");
+    expect(result.runStatus).toBe("failed");
+  });
+
+  it("rejects environmentID containing path separators", async () => {
+    const baseDir = createTempDir();
+    const client = createMockClient();
+    await expect(
+      cacheRuns(client as any, { environmentID: "..\\evil" }, { baseDir })
+    ).rejects.toThrow(/path separators|control characters/);
+  });
+});
+
+describe("cacheOrgUsers (full pipeline to disk)", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0, tempDirs.length)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("writes org-users.ndjson and meta in the users dir", async () => {
+    const baseDir = mkdtempSync(join(tmpdir(), "snapshots-cache-users-test-"));
+    tempDirs.push(baseDir);
+    const client = createMockClient();
+    client.get.mockResolvedValue({
+      data: [
+        { id: "u-1", email: "alice@example.com" },
+        { id: "u-2", email: "bob@example.com" },
+      ],
+    });
+
+    const result = await cacheOrgUsers(client as any, {}, { baseDir });
+
+    expect(result.totalUsers).toBe(2);
+    expect(result.filePath).toMatch(/users\/org-users\.ndjson$/);
+    expect(result.metaPath).toMatch(/users\/org-users\.meta\.json$/);
+    const lines = readFileSync(result.filePath, "utf8").trimEnd().split("\n");
+    expect(lines).toHaveLength(2);
+  });
+
+  it("respects custom pageSize and orderBy", async () => {
+    const baseDir = mkdtempSync(join(tmpdir(), "snapshots-cache-users-test-"));
+    tempDirs.push(baseDir);
+    const client = createMockClient();
+    client.get.mockResolvedValue({ data: [] });
+
+    await cacheOrgUsers(client as any, { pageSize: 50, orderBy: "name" }, { baseDir });
+
+    expect(client.get).toHaveBeenCalledWith(
+      "/api/v1/users",
+      expect.objectContaining({ limit: 50, orderBy: "name" })
+    );
   });
 });
