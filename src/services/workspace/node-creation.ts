@@ -45,6 +45,10 @@ import {
 } from "./duplicate-detection.js";
 import { invalidateWorkspaceInventory } from "../cache/workspace-inventory.js";
 import { invalidateWorkspaceNodeIndex } from "../cache/workspace-node-index.js";
+import {
+  getCachedOrFetchWorkspaceNodeDetail,
+  invalidateWorkspaceNodeDetailIndex,
+} from "../cache/workspace-node-detail-index.js";
 
 type ScratchNodeCompletionLevel = "created" | "named" | "configured";
 
@@ -329,6 +333,7 @@ async function createWorkspaceNodeFromScratchInner(
   });
   invalidateWorkspaceInventory(params.workspaceID);
   invalidateWorkspaceNodeIndex(params.workspaceID);
+  invalidateWorkspaceNodeDetailIndex(params.workspaceID);
 
   if (!isPlainObject(created) || typeof created.id !== "string") {
     throw new Error("Workspace node creation did not return a node ID");
@@ -617,10 +622,11 @@ async function createWorkspaceNodeFromPredecessorInner(
     }),
     Promise.all(
       effectivePredecessorNodeIDs.map(async (nodeID) => {
-        const predecessor = await getWorkspaceNode(client, {
-          workspaceID: params.workspaceID,
-          nodeID,
-        });
+        const predecessor = await getCachedOrFetchWorkspaceNodeDetail(
+          client,
+          params.workspaceID,
+          nodeID
+        );
         if (!isPlainObject(predecessor)) {
           throw new Error(
             `Predecessor node response was not an object for nodeID ${nodeID}`
@@ -640,6 +646,7 @@ async function createWorkspaceNodeFromPredecessorInner(
   });
   invalidateWorkspaceInventory(params.workspaceID);
   invalidateWorkspaceNodeIndex(params.workspaceID);
+  invalidateWorkspaceNodeDetailIndex(params.workspaceID);
 
   if (!isPlainObject(created) || typeof created.id !== "string") {
     throw new Error("Workspace node creation did not return a node ID");

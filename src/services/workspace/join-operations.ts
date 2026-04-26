@@ -1,5 +1,6 @@
 import { type CoalesceClient } from "../../client.js";
 import { getWorkspaceNode } from "../../coalesce/api/nodes.js";
+import { getCachedOrFetchWorkspaceNodeDetail } from "../cache/workspace-node-detail-index.js";
 import { isPlainObject } from "../../utils.js";
 import { normalizeColumnName } from "./node-inspection.js";
 import type { ConfigCompletionResult } from "../config/intelligent.js";
@@ -81,7 +82,7 @@ export async function convertJoinToAggregation(
     const fetched = await Promise.all(
       predecessorNodeIDs.map(async (nodeID) => ({
         nodeID,
-        node: await getWorkspaceNode(client, { workspaceID: params.workspaceID, nodeID }),
+        node: await getCachedOrFetchWorkspaceNodeDetail(client, params.workspaceID, nodeID),
       }))
     );
     for (const { nodeID, node: predecessor } of fetched) {

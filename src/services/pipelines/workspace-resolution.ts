@@ -1,11 +1,9 @@
 import { type CoalesceClient } from "../../client.js";
-import {
-  getWorkspaceNode,
-} from "../../coalesce/api/nodes.js";
 import { listWorkspaceNodeTypes } from "../workspace/mutations.js";
 import { isPlainObject, rethrowNonRecoverableOrServerError } from "../../utils.js";
 import { type WorkspaceNodeIndexEntry } from "../shared/node-helpers.js";
 import { getWorkspaceNodeIndex } from "../cache/workspace-node-index.js";
+import { getCachedOrFetchWorkspaceNodeDetail } from "../cache/workspace-node-detail-index.js";
 import {
   type PipelinePlan,
   type ParsedSqlSourceRef,
@@ -112,10 +110,11 @@ export async function resolveSqlRefsToWorkspaceNodes(
       try {
         detailedMatches = await Promise.all(
           matches.map(async (match) => {
-            const node = await getWorkspaceNode(client, {
+            const node = await getCachedOrFetchWorkspaceNodeDetail(
+              client,
               workspaceID,
-              nodeID: match.id,
-            });
+              match.id
+            );
             return {
               match,
               node: isPlainObject(node) ? node : null,
@@ -176,10 +175,11 @@ export async function resolveSqlRefsToWorkspaceNodes(
     }
     let predecessor: unknown;
     try {
-      predecessor = await getWorkspaceNode(client, {
+      predecessor = await getCachedOrFetchWorkspaceNodeDetail(
+        client,
         workspaceID,
-        nodeID: ref.nodeID,
-      });
+        ref.nodeID
+      );
     } catch (error) {
       rethrowNonRecoverableOrServerError(error);
       const reason = error instanceof Error ? error.message : String(error);
@@ -228,10 +228,11 @@ export async function getSourceNodesByID(
   const warnings: string[] = [];
 
   for (const sourceNodeID of sourceNodeIDs) {
-    const node = await getWorkspaceNode(client, {
+    const node = await getCachedOrFetchWorkspaceNodeDetail(
+      client,
       workspaceID,
-      nodeID: sourceNodeID,
-    });
+      sourceNodeID
+    );
     if (!isPlainObject(node)) {
       openQuestions.push(
         `Could not read source node ${sourceNodeID} in workspace ${workspaceID}.`

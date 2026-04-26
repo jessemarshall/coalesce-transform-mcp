@@ -1,5 +1,5 @@
 import { type CoalesceClient } from "../../client.js";
-import { getWorkspaceNode } from "../../coalesce/api/nodes.js";
+import { getCachedOrFetchWorkspaceNodeDetail } from "../cache/workspace-node-detail-index.js";
 import { isPlainObject, uniqueInOrder, rethrowNonRecoverableApiError } from "../../utils.js";
 import {
   normalizeSqlIdentifier,
@@ -249,10 +249,11 @@ export async function buildPipelinePlanFromIntent(
         // Fetch the predecessor node for column passthrough
         if (!predecessorNodesByPlanID.has(entity.resolvedNodeID)) {
           try {
-            const node = await getWorkspaceNode(client, {
-              workspaceID: params.workspaceID,
-              nodeID: entity.resolvedNodeID,
-            });
+            const node = await getCachedOrFetchWorkspaceNodeDetail(
+              client,
+              params.workspaceID,
+              entity.resolvedNodeID
+            );
             if (isPlainObject(node)) {
               predecessorNodesByPlanID.set(entity.resolvedNodeID, node);
             }

@@ -741,6 +741,7 @@ If `~/.coa/config` doesn't exist the server runs env-only - startup never fails 
 | `COALESCE_MCP_DETAIL_FETCH_TIMEOUT_MS` | Per-page timeout for detail=true paginated fetches of large node lists. | `180000` |
 | `COALESCE_MCP_INVENTORY_CACHE_TTL_MS` | In-memory TTL for the workspace node-type inventory. Set to `0` to disable. | `300000` |
 | `COALESCE_MCP_NODE_INDEX_CACHE_TTL_MS` | In-memory TTL for the workspace node-index (id/name/type/location) cache used by SQL- and intent-ref resolution. Set to `0` to disable. | `300000` |
+| `COALESCE_MCP_NODE_DETAIL_CACHE_TTL_MS` | In-memory TTL for the workspace node-detail (full body) cache used by review and predecessor lookups. Set to `0` to disable. | `300000` |
 | `COALESCE_MCP_READ_ONLY` | When `true`, hides all write/mutation tools during registration. Only read, list, search, cache, analyze, review, diagnose, and plan tools are exposed. | `false` |
 | `COALESCE_MCP_SKILLS_DIR` | Directory for customizable AI skill resources. When set, reads context resources from this directory and seeds defaults on first run. Users can augment or override any skill. | — |
 <!-- ENV_METADATA_CORE_TABLE_END -->

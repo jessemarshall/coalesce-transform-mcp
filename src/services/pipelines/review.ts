@@ -1,7 +1,7 @@
 import type { CoalesceClient } from "../../client.js";
-import { isPlainObject, rethrowNonRecoverableApiError } from "../../utils.js";
-import { listWorkspaceNodes, getWorkspaceNode } from "../../coalesce/api/nodes.js";
-import { extractNodeArray, isPassthroughTransform } from "../shared/node-helpers.js";
+import { isPlainObject } from "../../utils.js";
+import { getWorkspaceNodeDetailIndex } from "../cache/workspace-node-detail-index.js";
+import { isPassthroughTransform } from "../shared/node-helpers.js";
 import {
   getNodeColumnArray,
   getColumnNamesFromNode,
@@ -97,31 +97,27 @@ export async function reviewPipeline(
   const { workspaceID } = params;
   const warnings: string[] = [];
 
-  // Fetch all workspace nodes (summary)
-  const allNodesRaw = await listWorkspaceNodes(client, { workspaceID });
-  const allNodesList = extractNodeArray(allNodesRaw);
+  // One paginated `list?detail=true` call returns the same payload as a
+  // per-node `get` would, so build the in-scope detail set in a single pass.
+  const detailIndex = await getWorkspaceNodeDetailIndex(client, workspaceID);
 
-  // Determine scope
-  const scopeNodeIDs = params.nodeIDs
-    ? new Set(params.nodeIDs)
-    : null;
+  const scopeNodeIDs = params.nodeIDs ? new Set(params.nodeIDs) : null;
 
-  // Build graph index from summary data
   const nodeIndex = new Map<string, { id: string; name: string; nodeType: string; locationName: string | null; predecessorIDs: string[] }>();
-  for (const raw of allNodesList) {
-    const id = typeof raw.id === "string" ? raw.id : null;
-    const name = typeof raw.name === "string" ? raw.name : "UNKNOWN";
-    const nodeType = typeof raw.nodeType === "string" ? raw.nodeType : "Unknown";
-    const locationName = typeof raw.locationName === "string" ? raw.locationName : null;
-    if (!id) continue;
+  const detailMap = new Map<string, NodeDetail>();
+
+  for (const [id, fullNode] of detailIndex) {
     if (scopeNodeIDs && !scopeNodeIDs.has(id)) continue;
 
-    // Extract predecessors from columns' source references or from node data
-    const predecessorIDs = extractPredecessorIDs(raw);
+    const name = typeof fullNode.name === "string" ? fullNode.name : "UNKNOWN";
+    const nodeType = typeof fullNode.nodeType === "string" ? fullNode.nodeType : "Unknown";
+    const locationName = typeof fullNode.locationName === "string" ? fullNode.locationName : null;
+    const predecessorIDs = extractPredecessorIDs(fullNode);
+
     nodeIndex.set(id, { id, name, nodeType, locationName, predecessorIDs });
   }
 
-  // Build successor map
+  // Build successor map (depends on nodeIndex completing)
   const successorMap = new Map<string, string[]>();
   for (const [id, node] of nodeIndex) {
     for (const predID of node.predecessorIDs) {
@@ -131,82 +127,38 @@ export async function reviewPipeline(
     }
   }
 
-  // Fetch full detail for scoped nodes (limit to 50 to avoid API overload)
-  const nodeIDs = Array.from(nodeIndex.keys());
-  const fetchIDs = nodeIDs.slice(0, 50);
-  if (nodeIDs.length > 50) {
-    warnings.push(
-      `Workspace has ${nodeIDs.length} nodes in scope — only the first 50 are analyzed in detail. ` +
-        `Use nodeIDs to scope the review to a specific pipeline section.`
-    );
-  }
+  // Now compose NodeDetail entries with successor info populated
+  for (const [id, summary] of nodeIndex) {
+    const fullNode = detailIndex.get(id)!;
+    const columns = getNodeColumnArray(fullNode);
+    const { passthroughCount, transformCount } = analyzeColumnTransforms(columns);
 
-  const detailMap = new Map<string, NodeDetail>();
-  let fetchFailureCount = 0;
+    const sm = isPlainObject(fullNode.metadata) && isPlainObject((fullNode.metadata as Record<string, unknown>).sourceMapping)
+      ? (fullNode.metadata as Record<string, unknown>).sourceMapping as Record<string, unknown>
+      : null;
 
-  // Fetch in batches of 10 to avoid overwhelming the API with concurrent requests
-  const BATCH_SIZE = 10;
-  for (let i = 0; i < fetchIDs.length; i += BATCH_SIZE) {
-    const batch = fetchIDs.slice(i, i + BATCH_SIZE);
-    const batchPromises = batch.map(async (nodeID) => {
-      try {
-        const fullNode = await getWorkspaceNode(client, { workspaceID, nodeID });
-        if (!isPlainObject(fullNode)) return;
+    const joinObj = sm && isPlainObject(sm.join) ? sm.join : null;
+    const joinCondition = joinObj && typeof (joinObj as Record<string, unknown>).joinCondition === "string"
+      ? (joinObj as Record<string, unknown>).joinCondition as string
+      : null;
 
-        const summary = nodeIndex.get(nodeID)!;
-        const columns = getNodeColumnArray(fullNode);
-        const { passthroughCount, transformCount } = analyzeColumnTransforms(columns);
-
-        const sm = isPlainObject(fullNode.metadata) && isPlainObject((fullNode.metadata as Record<string, unknown>).sourceMapping)
-          ? (fullNode.metadata as Record<string, unknown>).sourceMapping as Record<string, unknown>
-          : null;
-
-        const joinObj = sm && isPlainObject(sm.join) ? sm.join : null;
-        const joinCondition = joinObj && typeof (joinObj as Record<string, unknown>).joinCondition === "string"
-          ? (joinObj as Record<string, unknown>).joinCondition as string
-          : null;
-
-        detailMap.set(nodeID, {
-          id: nodeID,
-          name: summary.name,
-          nodeType: summary.nodeType,
-          locationName: summary.locationName,
-          layer: inferNodeLayer({ nodeType: summary.nodeType, name: summary.name }),
-          predecessorIDs: summary.predecessorIDs,
-          successorIDs: successorMap.get(nodeID) ?? [],
-          columns,
-          columnCount: columns.length,
-          passthroughCount,
-          transformCount,
-          hasJoinCondition: joinCondition !== null && joinCondition.trim().length > 0,
-          joinCondition,
-          hasConfig: isPlainObject(fullNode.config) && Object.keys(fullNode.config as Record<string, unknown>).length > 0,
-          sourceMapping: sm,
-        });
-      } catch (error) {
-        rethrowNonRecoverableApiError(error);
-        fetchFailureCount += 1;
-        warnings.push(
-          `Could not fetch node ${nodeID}: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
+    detailMap.set(id, {
+      id,
+      name: summary.name,
+      nodeType: summary.nodeType,
+      locationName: summary.locationName,
+      layer: inferNodeLayer({ nodeType: summary.nodeType, name: summary.name }),
+      predecessorIDs: summary.predecessorIDs,
+      successorIDs: successorMap.get(id) ?? [],
+      columns,
+      columnCount: columns.length,
+      passthroughCount,
+      transformCount,
+      hasJoinCondition: joinCondition !== null && joinCondition.trim().length > 0,
+      joinCondition,
+      hasConfig: isPlainObject(fullNode.config) && Object.keys(fullNode.config as Record<string, unknown>).length > 0,
+      sourceMapping: sm,
     });
-
-    const batchResults = await Promise.allSettled(batchPromises);
-    for (const result of batchResults) {
-      if (result.status === "rejected") {
-        rethrowNonRecoverableApiError(result.reason);
-      }
-    }
-  }
-
-  // Flag degraded review if too many nodes could not be fetched
-  const reviewDegraded = fetchIDs.length > 0 && fetchFailureCount / fetchIDs.length > 0.2;
-  if (reviewDegraded) {
-    warnings.unshift(
-      `Review is degraded: ${fetchFailureCount} of ${fetchIDs.length} nodes could not be fetched. ` +
-        `Findings may be incomplete. Check API connectivity and retry.`
-    );
   }
 
   // Detect methodology for context

@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { reviewPipeline } from "../../src/services/pipelines/review.js";
+import { clearWorkspaceNodeDetailIndexCache } from "../../src/services/cache/workspace-node-detail-index.js";
 import { CoalesceApiError } from "../../src/client.js";
 import { createMockClient } from "../helpers/fixtures.js";
 
@@ -55,17 +56,19 @@ function setupMockClient(
   summaries: Array<Record<string, unknown>>,
   fullNodes: Map<string, Record<string, unknown>>
 ) {
+  // The detail-index cache fetches a single paginated `list?detail=true`,
+  // expecting each item to carry both summary fields (id/name/nodeType/
+  // locationName/predecessorNodeIDs) and the full body (metadata, config).
+  const merged = summaries.map((summary) => {
+    const id = typeof summary.id === "string" ? summary.id : null;
+    const full = id ? fullNodes.get(id) : undefined;
+    return full ? { ...summary, ...full } : summary;
+  });
+
   const client = createMockClient();
   client.get.mockImplementation((path: string) => {
-    // List workspace nodes
     if (path.match(/\/nodes$/) && !path.includes("/nodes/")) {
-      return Promise.resolve({ data: summaries });
-    }
-    // Get specific node
-    for (const [nodeID, node] of fullNodes) {
-      if (path.includes(`/nodes/${nodeID}`)) {
-        return Promise.resolve(node);
-      }
+      return Promise.resolve({ data: merged });
     }
     return Promise.resolve({ data: [] });
   });
@@ -73,6 +76,10 @@ function setupMockClient(
 }
 
 describe("reviewPipeline", () => {
+  beforeEach(() => {
+    clearWorkspaceNodeDetailIndexCache();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -322,35 +329,9 @@ describe("reviewPipeline", () => {
     expect(result.nodeCount).toBe(2);
   });
 
-  it("handles node fetch failure gracefully", async () => {
-    const summaries = [
-      buildNodeSummary("n1", "NODE_A", "Stage"),
-    ];
+  it("propagates list errors (auth, transport)", async () => {
     const client = createMockClient();
-    client.get.mockImplementation((path: string) => {
-      if (path.match(/\/nodes$/) && !path.includes("/nodes/")) {
-        return Promise.resolve({ data: summaries });
-      }
-      if (path.includes("/nodes/n1")) {
-        return Promise.reject(new Error("timeout"));
-      }
-      return Promise.resolve({ data: [] });
-    });
-
-    const result = await reviewPipeline(client as any, { workspaceID: "ws-1" });
-
-    expect(result.warnings.some((w) => w.includes("Could not fetch node n1"))).toBe(true);
-  });
-
-  it("re-throws auth errors", async () => {
-    const summaries = [buildNodeSummary("n1", "NODE_A", "Stage")];
-    const client = createMockClient();
-    client.get.mockImplementation((path: string) => {
-      if (path.match(/\/nodes$/) && !path.includes("/nodes/")) {
-        return Promise.resolve({ data: summaries });
-      }
-      return Promise.reject(new CoalesceApiError("Forbidden", 403));
-    });
+    client.get.mockRejectedValue(new CoalesceApiError("Forbidden", 403));
 
     await expect(
       reviewPipeline(client as any, { workspaceID: "ws-1" })

@@ -10,6 +10,7 @@ import {
   type ToolDefinition,
 } from "../coalesce/types.js";
 import { getWorkspaceNode } from "../coalesce/api/nodes.js";
+import { getCachedOrFetchWorkspaceNodeDetail } from "../services/cache/workspace-node-detail-index.js";
 import { setWorkspaceNodeAndInvalidate } from "../services/workspace/mutations.js";
 import {
   cloudNodeToDisk,
@@ -398,10 +399,11 @@ function defineApplySqlToWorkspaceNode(client: CoalesceClient): ToolDefinition {
             const predIDs = Array.from(upstreamNodeIDs);
             const settled = await Promise.allSettled(
               predIDs.map((predID) =>
-                getWorkspaceNode(client, {
-                  workspaceID: params.workspaceID,
-                  nodeID: predID,
-                }),
+                getCachedOrFetchWorkspaceNodeDetail(
+                  client,
+                  params.workspaceID,
+                  predID,
+                ),
               ),
             );
             for (let i = 0; i < predIDs.length; i++) {

@@ -6,12 +6,12 @@
     "url": "https://github.com/jessemarshall/coalesce-transform-mcp",
     "source": "github"
   },
-  "version": "0.8.0-preview.0",
+  "version": "0.8.1-preview.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "coalesce-transform-mcp",
-      "version": "0.8.0-preview.0",
+      "version": "0.8.1-preview.2",
       "transport": {
         "type": "stdio"
       },
@@ -106,6 +106,13 @@
           "format": "string",
           "isSecret": false,
           "name": "COALESCE_MCP_NODE_INDEX_CACHE_TTL_MS"
+        },
+        {
+          "description": "In-memory TTL for the workspace node-detail (full body) cache used by review and predecessor lookups. Set to `0` to disable. Defaults to 300000.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "COALESCE_MCP_NODE_DETAIL_CACHE_TTL_MS"
         },
         {
           "description": "When `true`, hides all write/mutation tools during registration. Only read, list, search, cache, analyze, review, diagnose, and plan tools are exposed. Defaults to false.",

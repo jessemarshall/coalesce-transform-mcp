@@ -11,6 +11,7 @@ import {
   type WorkspaceNodeInventoryEntry,
 } from "../cache/workspace-inventory.js";
 import { invalidateWorkspaceNodeIndex } from "../cache/workspace-node-index.js";
+import { invalidateWorkspaceNodeDetailIndex } from "../cache/workspace-node-detail-index.js";
 import { assertNoSqlOverridePayload } from "../policies/sql-override.js";
 import { isPlainObject } from "../../utils.js";
 import {
@@ -81,6 +82,7 @@ export async function setWorkspaceNodeAndInvalidate(
   const result = await setWorkspaceNode(client, params);
   invalidateWorkspaceInventory(params.workspaceID);
   invalidateWorkspaceNodeIndex(params.workspaceID);
+  invalidateWorkspaceNodeDetailIndex(params.workspaceID);
   return result;
 }
 
@@ -91,6 +93,7 @@ export async function deleteWorkspaceNode(
   const result = await deleteWorkspaceNodeApi(client, params);
   invalidateWorkspaceInventory(params.workspaceID);
   invalidateWorkspaceNodeIndex(params.workspaceID);
+  invalidateWorkspaceNodeDetailIndex(params.workspaceID);
   return result;
 }
 

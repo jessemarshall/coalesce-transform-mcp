@@ -117,6 +117,15 @@ export const ENV_METADATA = [
     isSecret: false,
   },
   {
+    name: "COALESCE_MCP_NODE_DETAIL_CACHE_TTL_MS",
+    group: "core",
+    description: "In-memory TTL for the workspace node-detail (full body) cache used by review and predecessor lookups. Set to `0` to disable.",
+    defaultValue: "300000",
+    requiredForServer: false,
+    requiredForRunTools: false,
+    isSecret: false,
+  },
+  {
     name: "COALESCE_MCP_READ_ONLY",
     group: "core",
     description: "When `true`, hides all write/mutation tools during registration. Only read, list, search, cache, analyze, review, diagnose, and plan tools are exposed.",
