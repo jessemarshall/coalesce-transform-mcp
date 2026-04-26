@@ -51,8 +51,8 @@ export function defineLineageTools(
         "Requires a lineage cache — will fetch all workspace nodes with detail=true on first call (may take a moment for large workspaces). Subsequent calls use the cached graph (default TTL: 30 min).",
       ].join("\n"),
       inputSchema: z.object({
-        workspaceID: z.string().describe("Workspace ID"),
-        nodeID: z.string().describe("Node ID to trace upstream from"),
+        workspaceID: z.string().min(1, "workspaceID must not be empty").describe("Workspace ID"),
+        nodeID: z.string().min(1, "nodeID must not be empty").describe("Node ID to trace upstream from"),
       }),
       outputSchema: getToolOutputSchema("get_upstream_nodes"),
       annotations: READ_ONLY_ANNOTATIONS,
@@ -110,8 +110,8 @@ export function defineLineageTools(
         "Requires a lineage cache — will fetch all workspace nodes with detail=true on first call.",
       ].join("\n"),
       inputSchema: z.object({
-        workspaceID: z.string().describe("Workspace ID"),
-        nodeID: z.string().describe("Node ID to trace downstream from"),
+        workspaceID: z.string().min(1, "workspaceID must not be empty").describe("Workspace ID"),
+        nodeID: z.string().min(1, "nodeID must not be empty").describe("Node ID to trace downstream from"),
       }),
       outputSchema: getToolOutputSchema("get_downstream_nodes"),
       annotations: READ_ONLY_ANNOTATIONS,
@@ -170,9 +170,9 @@ export function defineLineageTools(
         "Requires a lineage cache — will fetch all workspace nodes with detail=true on first call.",
       ].join("\n"),
       inputSchema: z.object({
-        workspaceID: z.string().describe("Workspace ID"),
-        nodeID: z.string().describe("Node ID containing the column"),
-        columnID: z.string().describe("Column ID to trace lineage for"),
+        workspaceID: z.string().min(1, "workspaceID must not be empty").describe("Workspace ID"),
+        nodeID: z.string().min(1, "nodeID must not be empty").describe("Node ID containing the column"),
+        columnID: z.string().min(1, "columnID must not be empty").describe("Column ID to trace lineage for"),
       }),
       outputSchema: getToolOutputSchema("get_column_lineage"),
       annotations: READ_ONLY_ANNOTATIONS,
@@ -245,9 +245,13 @@ export function defineLineageTools(
         "Requires a lineage cache — will fetch all workspace nodes with detail=true on first call.",
       ].join("\n"),
       inputSchema: z.object({
-        workspaceID: z.string().describe("Workspace ID"),
-        nodeID: z.string().describe("Node ID to analyze impact for"),
-        columnID: z.string().optional().describe("Optional column ID — if provided, only analyzes impact of that specific column"),
+        workspaceID: z.string().min(1, "workspaceID must not be empty").describe("Workspace ID"),
+        nodeID: z.string().min(1, "nodeID must not be empty").describe("Node ID to analyze impact for"),
+        columnID: z
+          .string()
+          .min(1, "columnID must not be empty when provided")
+          .optional()
+          .describe("Optional column ID — if provided, only analyzes impact of that specific column"),
       }),
       outputSchema: getToolOutputSchema("analyze_impact"),
       annotations: READ_ONLY_ANNOTATIONS,
@@ -308,9 +312,9 @@ export function defineLineageTools(
         "if the workspace structure has changed recently.",
       ].join("\n"),
       inputSchema: z.object({
-        workspaceID: z.string().describe("Workspace ID"),
-        nodeID: z.string().describe("Node ID containing the source column"),
-        columnID: z.string().describe("Column ID that was changed"),
+        workspaceID: z.string().min(1, "workspaceID must not be empty").describe("Workspace ID"),
+        nodeID: z.string().min(1, "nodeID must not be empty").describe("Node ID containing the source column"),
+        columnID: z.string().min(1, "columnID must not be empty").describe("Column ID that was changed"),
         changes: z.object({
           columnName: z.string().optional().describe("New column name to propagate"),
           dataType: z.string().optional().describe("New data type to propagate"),
@@ -475,7 +479,7 @@ export function defineLineageTools(
         "Requires a populated lineage cache — will fetch all workspace nodes with detail=true on first call (may take a moment for large workspaces). Subsequent calls use the cached data (default TTL: 30 min).",
       ].join("\n"),
       inputSchema: z.object({
-        workspaceID: z.string().describe("Workspace ID"),
+        workspaceID: z.string().min(1, "workspaceID must not be empty").describe("Workspace ID"),
         query: z.string().min(1).describe("Search text (case-insensitive)"),
         fields: z
           .array(z.enum(["name", "nodeType", "sql", "columnName", "columnDataType", "description", "config"]))
@@ -541,7 +545,7 @@ export function defineLineageTools(
         "(may take a moment for large workspaces). Subsequent calls use the cached graph (default TTL: 30 min).",
       ].join("\n"),
       inputSchema: z.object({
-        workspaceID: z.string().describe("Workspace ID to audit"),
+        workspaceID: z.string().min(1, "workspaceID must not be empty").describe("Workspace ID to audit"),
       }),
       outputSchema: getToolOutputSchema("audit_documentation_coverage"),
       annotations: READ_ONLY_ANNOTATIONS,

@@ -19,12 +19,14 @@ export const RunDetailsSchema = z
   .object({
     environmentID: z
       .string()
+      .min(1, "environmentID must not be empty when provided")
       .optional()
       .describe(
         "Numeric ID of the deployed environment to run against. Provide either environmentID or workspaceID, not both."
       ),
     workspaceID: z
       .string()
+      .min(1, "workspaceID must not be empty when provided")
       .optional()
       .describe(
         "Numeric ID of the workspace to run against (development run). Provide either environmentID or workspaceID, not both."
@@ -37,7 +39,11 @@ export const RunDetailsSchema = z
       .string()
       .optional()
       .describe("Nodes excluded for an ad-hoc job"),
-    jobID: z.string().optional().describe("The ID of a job being run"),
+    jobID: z
+      .string()
+      .min(1, "jobID must not be empty when provided")
+      .optional()
+      .describe("The ID of a job being run"),
     parallelism: z
       .number()
       .int()

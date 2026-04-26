@@ -21,7 +21,11 @@ export function defineGitAccountTools(
   server: McpServer,
   client: CoalesceClient
 ): ToolDefinition[] {
-  const accountOwnerParam = z.string().optional().describe("User ID of the account owner (org admins can manage other users' accounts)");
+  const accountOwnerParam = z
+    .string()
+    .min(1, "accountOwner must not be empty when provided")
+    .optional()
+    .describe("User ID of the account owner (org admins can manage other users' accounts)");
 
   return [
   defineSimpleTool(client, "list_git_accounts", {
