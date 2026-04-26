@@ -130,7 +130,7 @@ export function defineRunTools(
         .string()
         .optional()
         .describe("The organization ID. Optional if COALESCE_ORG_ID is set, or if `orgID` is present in the active ~/.coa/config profile."),
-      environmentID: z.string().describe("The environment ID the run belongs to"),
+      environmentID: z.string().min(1, "environmentID must not be empty").describe("The environment ID the run belongs to"),
       confirmed: z
         .boolean()
         .optional()

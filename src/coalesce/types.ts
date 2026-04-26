@@ -142,12 +142,12 @@ export function validatePathSegment(value: string, name: string): string {
   }
   if (/[\u0000-\u001F\u007F]/.test(value)) {
     throw new Error(
-      `Invalid ${name}: must not contain control characters`
+      `Invalid ${name}: must not contain control characters. Pass the raw ID returned by a list_/get_ tool, e.g. "abc123" or "env-456".`
     );
   }
   if (/[\/\\?#%]|\.\./.test(value)) {
     throw new Error(
-      `Invalid ${name}: must not contain path separators, '..', or URI delimiters like '?', '#', or '%'`
+      `Invalid ${name}: must not contain path separators, '..', or URI delimiters like '?', '#', or '%'. Pass the raw ID returned by a list_/get_ tool (e.g. "env-1", "ws-abc"), not a URL or path.`
     );
   }
   return value;

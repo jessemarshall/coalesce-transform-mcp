@@ -99,7 +99,7 @@ export function defineNodeTypeCorpusTools(
     title: "Get Node Type Variant",
     description: "Get one node-type corpus variant from the committed snapshot by variantKey. Use search_node_type_variants first when you need discovery.",
     inputSchema: z.object({
-      variantKey: z.string().describe("The exact node-type corpus variant key."),
+      variantKey: z.string().min(1, "variantKey must not be empty").describe("The exact node-type corpus variant key."),
     }),
     annotations: READ_ONLY_LOCAL_ANNOTATIONS,
   }, (params) => {
@@ -117,7 +117,7 @@ export function defineNodeTypeCorpusTools(
       title: "Generate Set Workspace Node Template from Variant",
       description: "Generate a set_workspace_node body template from a node-type corpus variant stored in the committed snapshot. This avoids requiring the original external node source repo at runtime, rejects partial variants unless allowPartial=true, and can optionally compare the inferred template against a live workspace node. SQL override controls are removed from returned templates because they are disallowed in this project.",
       inputSchema: z.object({
-        variantKey: z.string().describe("The exact node-type corpus variant key."),
+        variantKey: z.string().min(1, "variantKey must not be empty").describe("The exact node-type corpus variant key."),
         nodeName: z
           .string()
           .optional()

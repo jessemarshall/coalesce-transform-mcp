@@ -4,6 +4,15 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { defineNodeTools } from "../src/mcp/nodes.js";
 import { definePipelineTools } from "../src/mcp/pipelines.js";
 import { defineCoaTools } from "../src/mcp/coa.js";
+import { defineEnvironmentTools } from "../src/mcp/environments.js";
+import { defineWorkspaceTools } from "../src/mcp/workspaces.js";
+import { defineProjectTools } from "../src/mcp/projects.js";
+import { defineJobTools } from "../src/mcp/jobs.js";
+import { defineUserTools } from "../src/mcp/users.js";
+import { defineGitAccountTools } from "../src/mcp/git-accounts.js";
+import { defineSubgraphTools } from "../src/mcp/subgraphs.js";
+import { defineCacheTools } from "../src/mcp/cache.js";
+import { defineWorkshopTools } from "../src/mcp/workshop.js";
 
 function createMockClient() {
   return {
@@ -184,6 +193,85 @@ describe("COA Cloud Tool Input Schemas", () => {
       const result = schema.safeParse({ environmentID: "" });
       expect(result.success, `${toolName} should reject empty environmentID`).toBe(false);
     }
+  });
+});
+
+describe("Required-string validation across MCP tools", () => {
+  // Locks in the contract that required ID/name params reject empty strings at
+  // the schema layer instead of forwarding `""` to the Coalesce API where it
+  // surfaces as a confusing 4xx.
+  it("rejects empty required IDs across read/write/destructive tools", () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "registerTool");
+
+    const client = createMockClient() as any;
+    defineEnvironmentTools(server, client).forEach(t => server.registerTool(...t));
+    defineWorkspaceTools(server, client).forEach(t => server.registerTool(...t));
+    defineProjectTools(server, client).forEach(t => server.registerTool(...t));
+    defineJobTools(server, client).forEach(t => server.registerTool(...t));
+    defineUserTools(server, client).forEach(t => server.registerTool(...t));
+    defineGitAccountTools(server, client).forEach(t => server.registerTool(...t));
+    defineSubgraphTools(server, client).forEach(t => server.registerTool(...t));
+    defineCacheTools(server, client).forEach(t => server.registerTool(...t));
+    defineNodeTools(server, client).forEach(t => server.registerTool(...t));
+    defineWorkshopTools(server, client).forEach(t => server.registerTool(...t));
+
+    const cases: Array<{ tool: string; input: Record<string, unknown> }> = [
+      { tool: "get_environment", input: { environmentID: "" } },
+      { tool: "create_environment", input: { projectID: "", name: "qa" } },
+      { tool: "create_environment", input: { projectID: "p1", name: "" } },
+      { tool: "delete_environment", input: { environmentID: "", confirmed: true } },
+      { tool: "get_workspace", input: { workspaceID: "" } },
+      { tool: "get_project", input: { projectID: "" } },
+      { tool: "delete_project", input: { projectID: "", confirmed: true } },
+      { tool: "list_environment_jobs", input: { environmentID: "" } },
+      { tool: "create_workspace_job", input: { workspaceID: "", name: "j", includeSelector: "", excludeSelector: "" } },
+      { tool: "create_workspace_job", input: { workspaceID: "ws", name: "", includeSelector: "", excludeSelector: "" } },
+      { tool: "get_environment_job", input: { environmentID: "", jobID: "j" } },
+      { tool: "get_environment_job", input: { environmentID: "e", jobID: "" } },
+      { tool: "delete_workspace_job", input: { workspaceID: "", jobID: "j", confirmed: true } },
+      { tool: "get_user_roles", input: { userID: "" } },
+      { tool: "set_org_role", input: { userID: "u", role: "" } },
+      { tool: "set_project_role", input: { userID: "u", projectID: "", role: "admin" } },
+      { tool: "set_env_role", input: { userID: "u", environmentID: "", role: "admin" } },
+      { tool: "delete_env_role", input: { userID: "", environmentID: "e", confirmed: true } },
+      { tool: "get_git_account", input: { gitAccountID: "" } },
+      { tool: "get_workspace_subgraph", input: { workspaceID: "ws", subgraphID: "" } },
+      { tool: "create_workspace_subgraph", input: { workspaceID: "ws", name: "", steps: [] } },
+      { tool: "create_workspace_subgraph", input: { workspaceID: "", name: "n", steps: [] } },
+      { tool: "create_workspace_subgraph", input: { workspaceID: "ws", name: "n", steps: [""] } },
+      { tool: "cache_workspace_nodes", input: { workspaceID: "" } },
+      { tool: "cache_environment_nodes", input: { environmentID: "" } },
+      { tool: "list_environment_nodes", input: { environmentID: "" } },
+      { tool: "list_workspace_nodes", input: { workspaceID: "" } },
+      { tool: "get_environment_node", input: { environmentID: "", nodeID: "n" } },
+      { tool: "get_workspace_node", input: { workspaceID: "ws", nodeID: "" } },
+      { tool: "delete_workspace_node", input: { workspaceID: "ws", nodeID: "", confirmed: true } },
+      { tool: "complete_node_configuration", input: { workspaceID: "", nodeID: "n" } },
+      { tool: "pipeline_workshop_open", input: { workspaceID: "" } },
+      { tool: "pipeline_workshop_instruct", input: { sessionID: "", instruction: "go" } },
+      { tool: "pipeline_workshop_instruct", input: { sessionID: "s", instruction: "" } },
+      { tool: "pipeline_workshop_close", input: { sessionID: "" } },
+    ];
+
+    for (const { tool, input } of cases) {
+      const schema = getToolParamsSchema(toolSpy, tool);
+      const result = schema.safeParse(input);
+      expect(result.success, `${tool} should reject input ${JSON.stringify(input)}`).toBe(false);
+    }
+  });
+
+  // Sanity check: the same tools accept non-empty IDs so we don't lock in over-strict schemas.
+  it("accepts non-empty required IDs (no over-rejection)", () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "registerTool");
+
+    const client = createMockClient() as any;
+    defineEnvironmentTools(server, client).forEach(t => server.registerTool(...t));
+    defineWorkspaceTools(server, client).forEach(t => server.registerTool(...t));
+
+    expect(getToolParamsSchema(toolSpy, "get_environment").safeParse({ environmentID: "env-1" }).success).toBe(true);
+    expect(getToolParamsSchema(toolSpy, "get_workspace").safeParse({ workspaceID: "ws-1" }).success).toBe(true);
   });
 });
 
