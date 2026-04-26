@@ -23,11 +23,27 @@
  */
 
 import { stripIdentifierQuotes } from "../pipelines/sql-tokenizer.js";
+import { parseSqlSelectItems } from "../pipelines/select-parsing.js";
+import { parseSqlSourceRefs } from "../pipelines/source-parsing.js";
+import { inferDatatype } from "../workspace/join-helpers.js";
 import { isPlainObject } from "../../utils.js";
+import type {
+	InferredColumn,
+	ResolvedColumnSource,
+} from "./infer-source-mapping.js";
 
 export interface ParsedSqlColumn {
 	name: string;
 	dataType: string;
+	/**
+	 * SELECT expression that produces this column. Populated for DML inputs
+	 * (`parseSelectColumnsForApply`); undefined for DDL inputs
+	 * (`parseCreateTableColumns`) — DDL doesn't carry transforms.
+	 *
+	 * The apply path uses this to feed source-mapping inference for newly
+	 * added columns; without it, adds fall back to the bare-column path.
+	 */
+	expression?: string;
 }
 
 export interface ColumnDiff {
@@ -35,13 +51,28 @@ export interface ColumnDiff {
 	unchanged: string[];
 	/** Columns whose dataType was updated. */
 	typeChanged: Array<{ name: string; from: string; to: string }>;
+	/**
+	 * Columns whose output name changed but whose source mapping (transform
+	 * expression) is the same. Detected only for DML inputs — DDL inputs
+	 * carry no expressions, so renames there look like drop+add. The apply
+	 * path preserves the existing column id / lineage and just renames.
+	 */
+	renamed: Array<{ from: string; to: string; expression: string }>;
+	/**
+	 * Columns where the name is unchanged but the SQL expression (transform)
+	 * has been edited. Detected only for DML inputs. The apply path updates
+	 * `sources[0].transform` in place; if the new expression references
+	 * different upstream columns, the apply path also re-runs source-mapping
+	 * inference to refresh `columnReferences`.
+	 */
+	expressionChanged: Array<{ name: string; from: string; to: string }>;
 	/** Columns dropped from the node (present in YAML, missing in SQL). */
 	removed: string[];
 	/**
 	 * Columns present in the SQL but not in the YAML. Returned for caller
-	 * inspection but applying them would require source mappings we can't
-	 * infer from the SQL alone — applyColumnDiff will refuse if this array
-	 * is non-empty unless the caller passes `allowAddsAsBareColumns: true`.
+	 * inspection. The apply path is expected to build cloud-shape entries
+	 * (via source-mapping inference for DML, or empty `sources` for DDL)
+	 * and pass them to `applyColumnDiff` via `options.addedColumnsByName`.
 	 */
 	added: ParsedSqlColumn[];
 }
@@ -96,9 +127,46 @@ export function parseCreateTableColumns(sql: string): ParsedSqlColumn[] | undefi
 }
 
 /**
+ * Parse a DML-shaped SQL document (the output of `coa_dry_run_run` — typically
+ * an INSERT INTO … SELECT …) and extract the SELECT-list as parsed columns.
+ * Each column's `expression` is populated so the apply path can pass it to
+ * source-mapping inference; `dataType` is best-effort via {@link inferDatatype}
+ * and may be empty when no pattern matches (callers should fall back to the
+ * existing column's dataType for those).
+ *
+ * Returns undefined when the input has no recognizable top-level SELECT.
+ */
+export function parseSelectColumnsForApply(sql: string): ParsedSqlColumn[] | undefined {
+	const sourceParse = parseSqlSourceRefs(sql);
+	const { selectItems } = parseSqlSelectItems(sql, sourceParse.refs);
+	if (selectItems.length === 0) { return undefined; }
+
+	const columns: ParsedSqlColumn[] = [];
+	for (const item of selectItems) {
+		// Wildcards (`*` / `ALIAS.*`) don't map to a single output column —
+		// the rendered DML expands them, but we shouldn't fabricate a column
+		// for the unexpanded form. Skip silently; type-changes/removes still
+		// work for everything else.
+		if (item.sourceColumnName === "*") { continue; }
+		const name = item.outputName ?? item.sourceColumnName;
+		if (!name) { continue; }
+		columns.push({
+			name,
+			dataType: inferDatatype(item.expression) ?? "",
+			expression: item.expression,
+		});
+	}
+	return columns.length > 0 ? columns : undefined;
+}
+
+/**
  * Diff a parsed SQL column list against an existing cloud node's
  * `metadata.columns[]`. The diff is name-keyed — column names are the
  * stable identity from the user's perspective.
+ *
+ * When a parsed column has no `dataType` (e.g. DML where {@link inferDatatype}
+ * couldn't match), type-change detection is skipped for that column — we'd
+ * rather report `unchanged` than spurious type churn.
  */
 export function diffColumns(
 	parsed: ParsedSqlColumn[],
@@ -119,84 +187,332 @@ export function diffColumns(
 
 	const unchanged: string[] = [];
 	const typeChanged: Array<{ name: string; from: string; to: string }> = [];
-	const removed: string[] = [];
+	const expressionChanged: Array<{ name: string; from: string; to: string }> = [];
+	const tentativelyRemoved: Array<{ name: string; expression: string }> = [];
+	const tentativelyAdded: ParsedSqlColumn[] = [];
 
+	// Pass 1 — name-keyed match. Columns matched here can move into
+	// unchanged / typeChanged / expressionChanged buckets.
 	for (const [normName, existingCol] of existingByName) {
-		const parsedCol = parsedByName.get(normName);
 		const displayName = typeof existingCol.name === 'string' ? existingCol.name : normName;
+		const parsedCol = parsedByName.get(normName);
 		if (!parsedCol) {
-			removed.push(displayName);
+			tentativelyRemoved.push({
+				name: displayName,
+				expression: extractExistingTransform(existingCol),
+			});
 			continue;
 		}
 		const existingType = typeof existingCol.dataType === 'string' ? existingCol.dataType : '';
-		if (normalizeType(existingType) !== normalizeType(parsedCol.dataType)) {
+		// dataType comparison: only flag a type change when the parsed
+		// column actually carries a type (DML inputs may have empty
+		// dataType when `inferDatatype` couldn't match). Same rule as
+		// before — preserves existing types on round-trips.
+		const typeWasChanged = parsedCol.dataType
+			&& normalizeType(existingType) !== normalizeType(parsedCol.dataType);
+
+		// Expression comparison runs only when the parsed column carries
+		// an expression (DML path). DDL inputs leave it undefined so we
+		// silently skip — type-changes and renames-by-name still work.
+		const existingTransform = extractExistingTransform(existingCol);
+		const exprWasChanged =
+			parsedCol.expression !== undefined
+			&& parsedCol.expression !== ""
+			&& existingTransform !== ""
+			&& normalizeExpression(parsedCol.expression) !== normalizeExpression(existingTransform);
+
+		if (typeWasChanged) {
 			typeChanged.push({ name: displayName, from: existingType, to: parsedCol.dataType });
-		} else {
+		}
+		if (exprWasChanged) {
+			expressionChanged.push({
+				name: displayName,
+				from: existingTransform,
+				to: parsedCol.expression!,
+			});
+		}
+		if (!typeWasChanged && !exprWasChanged) {
 			unchanged.push(displayName);
 		}
 	}
 
-	const added: ParsedSqlColumn[] = [];
 	for (const [normName, parsedCol] of parsedByName) {
 		if (!existingByName.has(normName)) {
-			added.push(parsedCol);
+			tentativelyAdded.push(parsedCol);
 		}
 	}
 
-	return { unchanged, typeChanged, removed, added };
+	// Pass 2 — pair tentative removes with tentative adds when their
+	// expressions match exactly. That's a rename: same column, new output
+	// name. Lineage is preserved by the apply path.
+	//
+	// The migration-agents pipeline_builder/column_builder reuses an
+	// existing columnID only when the *name* matches (positional reuse is
+	// unsafe — see column_builder.py:281). That rule is correct for
+	// regenerate-from-SQL flows where the user's intent is to rebuild.
+	// Here we extend it with a transform-pair check so interactive renames
+	// preserve lineage instead of dropping+re-adding (which loses the
+	// downstream column references). The check is conservative: ambiguous
+	// matches (multiple removes or adds sharing the same expression) are
+	// NOT paired — left as drop+add for the user to disambiguate.
+	//
+	// Skipped entirely when expressions are missing on either side (DDL
+	// inputs, or existing columns with no `sources[0].transform`).
+	const renamed: Array<{ from: string; to: string; expression: string }> = [];
+	const removedByExpr = bucketByExpression(tentativelyRemoved.map(r => ({
+		key: r.name,
+		expression: r.expression,
+	})));
+	const addedByExpr = bucketByExpression(tentativelyAdded
+		.filter(a => a.expression !== undefined && a.expression !== "")
+		.map(a => ({ key: a.name, expression: a.expression! })));
+
+	// Re-index existing + parsed by name so a paired rename can also pick up
+	// a simultaneous dataType change. Without this, a rename whose type is
+	// also being modified would silently land the new dataType (the apply
+	// path applies it via the rename entry's parsed dataType) but the diff
+	// returned to the user would NOT mention the type change — `dryRun: true`
+	// would mislead about what the apply will write. So when we pair a
+	// rename, also compare the from/to dataTypes and append a typeChanged
+	// entry under the *new* name when they differ.
+	const existingByDisplayName = new Map<string, Record<string, unknown>>();
+	for (const col of existingByName.values()) {
+		const display = typeof col.name === 'string' ? col.name : '';
+		if (display) { existingByDisplayName.set(display, col); }
+	}
+	const parsedByDisplayName = new Map<string, ParsedSqlColumn>();
+	for (const col of parsed) { parsedByDisplayName.set(col.name, col); }
+
+	const renamedFromKeys = new Set<string>();
+	const renamedToKeys = new Set<string>();
+	for (const [expr, removedKeys] of removedByExpr) {
+		const addedKeys = addedByExpr.get(expr);
+		if (!addedKeys) { continue; }
+		if (removedKeys.length === 1 && addedKeys.length === 1) {
+			const fromName = removedKeys[0];
+			const toName = addedKeys[0];
+			renamed.push({ from: fromName, to: toName, expression: expr });
+			renamedFromKeys.add(fromName);
+			renamedToKeys.add(toName);
+
+			const oldCol = existingByDisplayName.get(fromName);
+			const newCol = parsedByDisplayName.get(toName);
+			const oldType = typeof oldCol?.dataType === 'string' ? oldCol.dataType : '';
+			const newType = newCol?.dataType ?? '';
+			if (newType && normalizeType(oldType) !== normalizeType(newType)) {
+				typeChanged.push({ name: toName, from: oldType, to: newType });
+			}
+		}
+	}
+
+	const removed = tentativelyRemoved
+		.filter(r => !renamedFromKeys.has(r.name))
+		.map(r => r.name);
+	const added = tentativelyAdded.filter(a => !renamedToKeys.has(a.name));
+
+	return { unchanged, typeChanged, renamed, expressionChanged, removed, added };
 }
 
 /**
- * Build a new `metadata.columns[]` array applying the diff. Preserves the
- * original column ordering; removed columns are filtered out, and matching
- * columns get their `dataType` updated in place (so existing
- * `columnReference`, `sources`, `sourceColumnReferences`, and other lineage
- * metadata is preserved).
+ * Extract a column's first-source transform from a cloud-shape column
+ * record. Returns "" when no source / transform is set so callers can do
+ * an empty-check rather than worrying about nesting.
+ */
+function extractExistingTransform(col: Record<string, unknown>): string {
+	const sources = Array.isArray(col.sources) ? col.sources : undefined;
+	if (!sources || sources.length === 0) { return ""; }
+	const first = sources[0];
+	if (!isPlainObject(first)) { return ""; }
+	return typeof first.transform === 'string' ? first.transform : "";
+}
+
+/**
+ * Normalize an expression for comparison. Conservative on purpose —
+ * Coalesce's renderer is consistent with quoting and casing, so two
+ * expressions that should match will only differ in whitespace, not
+ * case or quote style.
  *
- * If `diff.added` is non-empty, this function refuses by default. New
- * columns can't be synthesized without a source mapping. Pass
- * `allowAddsAsBareColumns: true` to write them with empty `sources` — only
- * useful if the caller also plans to populate sources separately.
+ *   1. Trim and collapse internal whitespace runs to single spaces
+ *      (so `COUNT(X,\n  Y)` matches `COUNT(X, Y)`).
+ *   2. Drop whitespace adjacent to non-word punctuation
+ *      (so `COUNT( X.A )` matches `COUNT(X.A)` and `X . A` matches `X.A`).
+ *
+ * Whitespace BETWEEN two identifier characters is preserved so keyword
+ * boundaries like `X AND Y` don't collapse to `XANDY`.
+ */
+function normalizeExpression(expr: string): string {
+	return expr
+		.trim()
+		.replace(/\s+/g, ' ')
+		.replace(/\s*([^\w\s])\s*/g, '$1');
+}
+
+function bucketByExpression(
+	items: Array<{ key: string; expression: string }>,
+): Map<string, string[]> {
+	const out = new Map<string, string[]>();
+	for (const item of items) {
+		const norm = normalizeExpression(item.expression);
+		if (!norm) { continue; }
+		const list = out.get(norm) ?? [];
+		list.push(item.key);
+		out.set(norm, list);
+	}
+	return out;
+}
+
+/**
+ * Build a new `metadata.columns[]` array applying the diff. Output is
+ * ordered to match the parsed SQL — a reorder in the SELECT list is
+ * reflected in the node's column order. Existing column metadata
+ * (`id`/`columnID`, `nullable`, `description`, …) is preserved across
+ * unchanged, type-changed, expression-changed, and renamed columns so
+ * downstream nodes that reference these columns by id keep working.
+ *
+ * Per-column behavior:
+ *   - **unchanged / type-changed** — copy existing entry; update `dataType`
+ *     when the parsed column carries one.
+ *   - **renamed** — copy existing entry under the new name (id preserved).
+ *   - **expression-changed** — copy existing entry; replace `sources[]`
+ *     with `options.updatedSourcesByName.get(name)` when supplied (the
+ *     apply path re-runs source-mapping inference for the new transform);
+ *     otherwise patch `sources[0].transform` only and warn that lineage
+ *     refs may be stale.
+ *   - **added** — use `options.addedColumnsByName.get(name)`; the apply
+ *     path builds these via source-mapping inference.
+ *   - **removed** — silently dropped.
+ *
+ * Throws when adds exist but no `addedColumnsByName` is provided — it's a
+ * caller bug to ignore the diff's adds, and silently dropping them would be
+ * worse than erroring.
+ *
+ * **Aliasing:** the returned entries are shallow-copies of the input
+ * `existing` rows (`{ ...existingCol }`). Nested arrays/objects — notably
+ * `sources[]` and the entries inside it — are reference-shared with the
+ * input. The current single-pass apply-and-write flow doesn't mutate the
+ * result before sending to `set_workspace_node`, so this is safe in practice;
+ * future callers that mutate the returned columns must `structuredClone`
+ * first or accept that they're modifying the original cloud body in place.
  */
 export function applyColumnDiff(
 	parsed: ParsedSqlColumn[],
 	existing: unknown[],
 	diff: ColumnDiff,
-	options?: { allowAddsAsBareColumns?: boolean },
+	options?: {
+		/**
+		 * Pre-built cloud-shape entries for added columns, keyed by
+		 * {@link normalizeColumnKey}. Build via {@link inferColumnFromAddedItem}
+		 * in the apply path. Required when `diff.added.length > 0`.
+		 */
+		addedColumnsByName?: Map<string, InferredColumn["column"]>;
+		/**
+		 * For expression-changed columns: the re-resolved `sources[]` array
+		 * (cloud shape — `[{ transform, columnReferences }]`), keyed by
+		 * {@link normalizeColumnKey}. The apply path builds these by running
+		 * `resolveColumnSources` against the new transform; without it, we
+		 * fall back to patching only the transform string on `sources[0]`,
+		 * which can leave stale `columnReferences`.
+		 */
+		updatedSourcesByName?: Map<string, ResolvedColumnSource[]>;
+	},
 ): unknown[] {
-	if (diff.added.length > 0 && !options?.allowAddsAsBareColumns) {
+	const addedColumnsByName = options?.addedColumnsByName;
+	const updatedSourcesByName = options?.updatedSourcesByName;
+	if (diff.added.length > 0 && !addedColumnsByName) {
 		throw new Error(
 			`Cannot apply edits: ${diff.added.length} new column(s) (${diff.added.map(a => a.name).join(', ')}) `
-			+ `appear in the SQL but not on the node. New columns need a source mapping (which upstream column they come from) `
-			+ `that the SQL alone doesn't carry. Edit the YAML or add the columns via the cloud UI first, then re-render.`,
+			+ `appear in the SQL but no inferred column entries were supplied. The apply path is `
+			+ `responsible for building these — pass them via options.addedColumnsByName.`,
 		);
 	}
 
-	const parsedByName = new Map<string, ParsedSqlColumn>();
-	for (const col of parsed) {
-		parsedByName.set(normalizeName(col.name), col);
-	}
-
-	const out: unknown[] = [];
+	const existingByName = new Map<string, Record<string, unknown>>();
 	for (const col of existing) {
 		if (!isPlainObject(col)) { continue; }
 		const name = typeof col.name === 'string' ? col.name : undefined;
 		if (!name) { continue; }
-		const parsedCol = parsedByName.get(normalizeName(name));
-		if (!parsedCol) { continue; }	// removed
-		// Update dataType in place; preserve everything else.
-		out.push({ ...col, dataType: parsedCol.dataType });
+		existingByName.set(normalizeName(name), col);
 	}
 
-	if (options?.allowAddsAsBareColumns) {
-		for (const added of diff.added) {
+	// rename: new-name → old-name lookup so we can pull the existing
+	// entry when a parsed column appears under a fresh alias.
+	const renameToFrom = new Map<string, string>();
+	for (const r of diff.renamed) {
+		renameToFrom.set(normalizeName(r.to), r.from);
+	}
+	const expressionChangedByName = new Set<string>();
+	for (const e of diff.expressionChanged) {
+		expressionChangedByName.add(normalizeName(e.name));
+	}
+
+	const out: unknown[] = [];
+	// Iterate in parsed-SQL order so reorders in the SELECT list flow
+	// through to the node's column order.
+	for (const parsedCol of parsed) {
+		const norm = normalizeName(parsedCol.name);
+
+		// 1. Rename: pull the existing entry by its OLD name, rename it.
+		const renamedFromName = renameToFrom.get(norm);
+		if (renamedFromName !== undefined) {
+			const existingCol = existingByName.get(normalizeName(renamedFromName));
+			if (!existingCol) {
+				// Invariant: a `renamed` entry was paired in `diffColumns`
+				// against a row that exists in `existingByName`. If we get
+				// here, the caller passed mismatched `parsed` / `existing` /
+				// `diff` arguments — silently dropping the column would lose
+				// data, so fail loudly.
+				throw new Error(
+					`applyColumnDiff invariant: rename target "${parsedCol.name}" was paired `
+					+ `with source "${renamedFromName}", but that row is missing from the `
+					+ `existing columns. Re-run diffColumns against the same existing array.`,
+				);
+			}
 			out.push({
-				name: added.name,
-				dataType: added.dataType,
-				nullable: true,
-				sources: [],
+				...existingCol,
+				name: parsedCol.name,
+				...(parsedCol.dataType ? { dataType: parsedCol.dataType } : {}),
 			});
+			continue;
 		}
+
+		// 2. Add: use the pre-built cloud-shape entry.
+		const built = addedColumnsByName?.get(norm);
+		if (built !== undefined) {
+			out.push(built);
+			continue;
+		}
+
+		// 3. Match by name — unchanged / type-changed / expression-changed.
+		const existingCol = existingByName.get(norm);
+		if (!existingCol) { continue; }
+
+		const updated: Record<string, unknown> = { ...existingCol };
+		if (parsedCol.dataType) { updated.dataType = parsedCol.dataType; }
+
+		if (expressionChangedByName.has(norm)) {
+			const newSources = updatedSourcesByName?.get(norm);
+			if (newSources) {
+				updated.sources = newSources;
+			} else {
+				// Caller didn't pass re-resolved sources — patch the
+				// transform on the first source so the node still renders
+				// the user's edited expression. `columnReferences` may be
+				// stale; a warning at the apply-path level should surface
+				// that to the user.
+				const sources = Array.isArray(existingCol.sources) ? existingCol.sources : [];
+				const first = sources[0];
+				if (isPlainObject(first)) {
+					updated.sources = [
+						{ ...first, transform: parsedCol.expression ?? first.transform },
+						...sources.slice(1),
+					];
+				} else {
+					updated.sources = [{ transform: parsedCol.expression ?? "", columnReferences: [] }];
+				}
+			}
+		}
+
+		out.push(updated);
 	}
 
 	return out;
@@ -255,9 +571,19 @@ function splitTopLevelCommas(s: string): string[] {
 	return out;
 }
 
-function normalizeName(s: string): string {
+/**
+ * Canonical column-name key used everywhere this module compares names.
+ * Strips identifier quotes (`"FOO"` → `FOO`) and uppercases. Exported so
+ * external callers (e.g. the apply path's `addedColumnsByName` map) build
+ * keys the same way as `applyColumnDiff`'s lookups — otherwise quoted or
+ * mixed-case names from a future parser variant would silently miss.
+ */
+export function normalizeColumnKey(s: string): string {
 	return stripIdentifierQuotes(s).toUpperCase();
 }
+
+// Internal alias preserved so the rest of this file's call sites stay readable.
+const normalizeName = normalizeColumnKey;
 
 function normalizeType(s: string): string {
 	return s.replace(/\s+/g, ' ').trim().toUpperCase();
