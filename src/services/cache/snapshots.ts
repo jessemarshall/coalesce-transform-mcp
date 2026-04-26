@@ -553,6 +553,11 @@ export async function cacheOrgUsers(
   const ndjsonPath = join(directory, "org-users.ndjson");
   const metaPath = join(directory, "org-users.meta.json");
 
+  // Intentionally no `itemTransform: sanitizeResponse` here — org-user
+  // records don't carry credentials. cacheRuns sanitizes because run payloads
+  // embed Snowflake auth from the refresh request. If a future API change
+  // starts returning OAuth state or tokens on org-users, add the transform
+  // and a parallel test under tests/services/snapshots.test.ts.
   const result = await streamAllPaginatedToDisk(
     (queryParams) => listOrgUsers(client, queryParams),
     {},

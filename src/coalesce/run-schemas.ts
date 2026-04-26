@@ -57,6 +57,10 @@ export const RunDetailsSchema = z
         "Allow refresh even if last deploy failed (API default: false). Use with caution."
       ),
   })
+  // .refine relies on the field-level .min(1) above — empty strings are
+  // rejected before reaching here. If you drop the field-level constraints,
+  // rewrite this check to use `(d.environmentID == null) !== (d.workspaceID == null)`
+  // so empties don't get coerced to "absent."
   .refine(
     (d) => Boolean(d.environmentID) !== Boolean(d.workspaceID),
     {
