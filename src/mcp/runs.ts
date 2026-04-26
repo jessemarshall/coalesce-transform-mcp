@@ -20,8 +20,9 @@ import {
   DESTRUCTIVE_ANNOTATIONS,
   type ToolDefinition,
 } from "../coalesce/types.js";
+import { RunIDSchema } from "../coalesce/run-schemas.js";
 import { defineSimpleTool, defineDestructiveTool, extractEntityName } from "./tool-helpers.js";
-import { RUN_STATUS_VALUES } from "../constants.js";
+import { DOCUMENTED_RUN_STATUSES } from "../constants.js";
 
 // NOTE: runID (string) and runCounter (number) are both Coalesce API concepts, not a naming inconsistency.
 // The REST API (/api/v1/runs/{runID}) uses runID; the scheduler (/scheduler/runStatus) uses runCounter.
@@ -38,7 +39,7 @@ export function defineRunTools(
       "List Coalesce runs with optional filters for type, status, and environment.\n\nArgs:\n  - runType ('deploy'|'refresh', optional): Filter by type\n  - runStatus ('completed'|'failed'|'canceled'|'running'|'waitingToRun', optional): Filter by status\n  - environmentID (string, optional): Filter by environment\n  - detail (boolean, optional): Include full run details\n  - limit, startingFrom, orderBy, orderByDirection: Pagination controls\n\nReturns:\n  { data: Run[], next?: string, total?: number }",
     inputSchema: PaginationParams.extend({
       runType: z.enum(["deploy", "refresh"]).optional().describe("Filter by run type"),
-      runStatus: z.enum(RUN_STATUS_VALUES).optional().describe("Filter by run status"),
+      runStatus: z.enum(DOCUMENTED_RUN_STATUSES).optional().describe("Filter by run status"),
       environmentID: z.string().optional().describe("Filter by environment ID"),
       detail: z.boolean().optional().describe("Include full run details in response"),
     }),
@@ -51,7 +52,7 @@ export function defineRunTools(
     description:
       "Get details of a specific Coalesce run.\n\nArgs:\n  - runID (string, required): Numeric run ID (integer, e.g. '401'). Use the runCounter value from start_run or run_status — not the UUID from run URLs.\n\nReturns:\n  Full run object with status, timing, node results, and configuration.",
     inputSchema: z.object({
-      runID: z.string().describe("The numeric run ID (integer, e.g. '401'). Use the runCounter value from start_run or run_status responses — not the UUID from run URLs."),
+      runID: RunIDSchema.describe("The numeric run ID (integer, e.g. '401'). Use the runCounter value from start_run or run_status responses — not the UUID from run URLs."),
     }),
     annotations: READ_ONLY_ANNOTATIONS,
     sanitize: true,
@@ -62,7 +63,7 @@ export function defineRunTools(
     description:
       "Get the execution results of a specific Coalesce run.\n\nArgs:\n  - runID (string, required): Numeric run ID (integer). Use runCounter, not the UUID.\n\nReturns:\n  Run results including per-node execution status, row counts, and errors.",
     inputSchema: z.object({
-      runID: z.string().describe("The numeric run ID (integer, e.g. '401'). Use the runCounter value from start_run or run_status responses — not the UUID from run URLs."),
+      runID: RunIDSchema.describe("The numeric run ID (integer, e.g. '401'). Use the runCounter value from start_run or run_status responses — not the UUID from run URLs."),
     }),
     annotations: READ_ONLY_ANNOTATIONS,
     sanitize: true,
@@ -82,7 +83,11 @@ export function defineRunTools(
     description:
       "Get the current status of a Coalesce run by run counter.\n\nTerminal statuses: completed, failed, canceled. Non-terminal: waitingToRun, running.\n\nArgs:\n  - runCounter (number, required): The numeric run counter\n\nReturns:\n  { runCounter, runStatus, message }",
     inputSchema: z.object({
-      runCounter: z.number().describe("The run counter number"),
+      runCounter: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe("The run counter number (non-negative integer)"),
     }),
     annotations: READ_ONLY_ANNOTATIONS,
     sanitize: true,
@@ -107,7 +112,7 @@ export function defineRunTools(
       "Works best with completed (failed) runs — for in-progress runs, use run_status instead.\n\n" +
       "Returns: run summary, per-node failure diagnosis with error classification, and prioritized recommendations.",
     inputSchema: z.object({
-      runID: z.string().describe(
+      runID: RunIDSchema.describe(
         "The numeric run ID (integer, e.g. '401'). Use the runCounter value from start_run or run_status responses — not the UUID from run URLs."
       ),
     }),
@@ -120,12 +125,12 @@ export function defineRunTools(
     description:
       "Cancel an in-progress Coalesce run. Destructive — the run will be terminated immediately. Canceling a running pipeline mid-execution can leave data in an inconsistent state (partial loads, half-transformed tables). There is no 'undo cancel'.\n\nArgs:\n  - runID (string, required): Numeric run ID to cancel\n  - environmentID (string, required): Environment the run belongs to\n  - orgID (string, optional): Organization ID. Falls back to COALESCE_ORG_ID env var or `orgID` in the active ~/.coa/config profile.\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms cancellation\n\nReturns:\n  Confirmation with updated run status.",
     inputSchema: z.object({
-      runID: z.string().describe("The numeric run ID (integer) of the run to cancel"),
+      runID: RunIDSchema.describe("The numeric run ID (integer) of the run to cancel"),
       orgID: z
         .string()
         .optional()
         .describe("The organization ID. Optional if COALESCE_ORG_ID is set, or if `orgID` is present in the active ~/.coa/config profile."),
-      environmentID: z.string().describe("The environment ID the run belongs to"),
+      environmentID: z.string().min(1, "environmentID must not be empty").describe("The environment ID the run belongs to"),
       confirmed: z
         .boolean()
         .optional()

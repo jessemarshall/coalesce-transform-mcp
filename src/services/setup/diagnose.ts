@@ -383,15 +383,16 @@ export async function diagnoseSetup(
  * Run the offline preflight scanner against the configured repo path to surface
  * workspaces.yml shape typos, stale location keys, and other footguns before
  * the user ever invokes a coa_* tool. Returns [] when there is no usable repo.
+ *
+ * runPreflight is contractually total — every fs / YAML / scanner call inside
+ * src/services/coa/preflight.ts is individually try/caught and converted to a
+ * *_PARSE_FAILED / *_READ_FAILED warning. See the contract test in
+ * tests/services/coa/preflight.test.ts.
  */
 function collectProjectWarnings(repoPath: RepoPathStatus): PreflightIssue[] {
   if (repoPath.status !== "ok" || !repoPath.isCoaProject) return [];
-  try {
-    const report = runPreflight(repoPath.path, { requireWorkspacesYml: false });
-    return report.warnings;
-  } catch {
-    return [];
-  }
+  const report = runPreflight(repoPath.path, { requireWorkspacesYml: false });
+  return report.warnings;
 }
 
 function buildNextSteps(parts: {

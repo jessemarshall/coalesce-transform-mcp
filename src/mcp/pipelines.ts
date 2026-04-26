@@ -378,7 +378,7 @@ export function definePipelineTools(
       title: "Plan Pipeline",
       description: "Plan a Coalesce pipeline by discovering and ranking all available node types from the repo. ALWAYS call this before creating nodes to get the correct node type.\n\nThe planner scans the repo for all committed node type definitions, scores them against your use case, and returns ranked candidates. When available, it also returns a cached `planSummaryUri` MCP resource for the ranked node type summary so you can reuse that guidance throughout the pipeline without calling the planner again.\n\nIMPORTANT — DO NOT WRITE SQL: The `sql` parameter is ONLY for converting SQL that the USER provided (pasted or typed). If you are building a pipeline yourself, provide `goal` + `sourceNodeIDs` instead.\n\nPREREQUISITE: Before calling this tool, use list_workspace_nodes to discover available source/upstream nodes and their IDs in the workspace.\n\nPreferred approach: Provide `goal` AND `sourceNodeIDs`. The planner selects the best node type and scaffolds the pipeline. Without sourceNodeIDs, the planner returns clarification questions.\n\nUser-provided SQL: When a user pastes SQL, pass it in `sql`. The planner parses refs and column projections.\n\nConsult coalesce://context/node-type-corpus for node type patterns and metadata structures.",
       inputSchema: z.object({
-        workspaceID: z.string().describe("The workspace ID"),
+        workspaceID: z.string().min(1, "workspaceID must not be empty").describe("The workspace ID"),
         goal: z.string().optional().describe("Optional natural-language pipeline goal"),
         sql: z.string().optional().describe("The user's EXACT SQL, copied verbatim. It may use raw table names or existing Coalesce {{ ref() }} syntax. Do NOT rewrite between SQL styles or modify the query. If you are building a pipeline yourself, do NOT write SQL — use goal + sourceNodeIDs instead."),
         targetName: z.string().optional().describe("Optional target node name override"),
@@ -476,7 +476,7 @@ export function definePipelineTools(
       title: "Create Pipeline from Plan",
       description: "Create a Coalesce pipeline from a previously approved plan. Pass the exact plan object returned by plan_pipeline. Projection-capable node types execute by creating predecessor-based nodes first and then persisting the final full node body via set_workspace_node.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - plan (object, required): The exact plan object returned by plan_pipeline\n  - confirmed (boolean, optional): Set to true after user approves the plan. Must be paired with confirmationToken\n  - confirmationToken (string, optional): Token from prior STOP_AND_CONFIRM response. Required when confirmed=true\n  - dryRun (boolean, optional): When true, validate without creating nodes\n\nReturns:\n  { created: boolean, nodes?: CreatedNode[], warnings?: string[] }",
       inputSchema: z.object({
-        workspaceID: z.string().describe("The workspace ID"),
+        workspaceID: z.string().min(1, "workspaceID must not be empty").describe("The workspace ID"),
         plan: PipelinePlanSchema.describe("The plan object returned by plan_pipeline."),
         confirmed: z
           .boolean()
@@ -531,8 +531,8 @@ export function definePipelineTools(
       title: "Create Pipeline from SQL",
       description: "Plan and create a Coalesce pipeline from user-provided SQL. Pass the user's EXACT SQL unchanged. The SQL may use raw table names or already contain Coalesce {{ ref() }} syntax if that is what the user provided. Do NOT rewrite between styles or otherwise modify the query. The planner resolves workspace sources automatically and generates a Coalesce-compatible joinCondition for the final node.\n\nIf you are building a pipeline yourself, use declarative tools directly: create_workspace_node_from_predecessor → convert_join_to_aggregation → replace_workspace_node_columns.\n\nThis tool validates candidate node types against currently observed workspace nodes. If a selected type is not observed, the plan will include a warning asking the user to confirm installation in Coalesce.\n\nConsult coalesce://context/node-type-corpus for node type patterns and metadata structures.",
       inputSchema: z.object({
-        workspaceID: z.string().describe("The workspace ID"),
-        sql: z.string().describe("The user's EXACT SQL, copied verbatim. It may use raw table names or existing Coalesce {{ ref() }} syntax. Do NOT rewrite between SQL styles or modify it in any way. Pass it exactly as the user provided it."),
+        workspaceID: z.string().min(1, "workspaceID must not be empty").describe("The workspace ID"),
+        sql: z.string().min(1, "sql must not be empty").describe("The user's EXACT SQL, copied verbatim. It may use raw table names or existing Coalesce {{ ref() }} syntax. Do NOT rewrite between SQL styles or modify it in any way. Pass it exactly as the user provided it."),
         goal: z.string().optional().describe("Optional business goal or context for the SQL"),
         targetName: z.string().optional().describe("Optional target node name override"),
         targetNodeType: z
@@ -624,9 +624,10 @@ export function definePipelineTools(
       title: "Build Pipeline from Intent",
       description: "Build a Coalesce pipeline from a natural language description. Describe what you want in plain English and this tool resolves workspace nodes, selects node types, and creates the pipeline nodes.\n\nExamples:\n- \"combine customers and orders by customer_id, aggregate total revenue by region\"\n- \"stage the raw payments table\"\n- \"join products with inventory on product_id\"\n\nThe tool parses the intent, fuzzy-matches entity names to existing workspace nodes, and selects appropriate node types. When confirmed, it creates the pipeline nodes directly. Alternatively, set dryRun=true to get the plan without creating nodes, then pass it to create_pipeline_from_plan.\n\nIf entity names cannot be resolved or the intent is ambiguous, the tool returns clarification questions instead of a plan.",
       inputSchema: z.object({
-        workspaceID: z.string().describe("The workspace ID"),
+        workspaceID: z.string().min(1, "workspaceID must not be empty").describe("The workspace ID"),
         intent: z
           .string()
+          .min(1, "intent must not be empty")
           .describe(
             "Natural language description of the pipeline to build. Mention table/node names, join keys, aggregations, and filters."
           ),
@@ -748,9 +749,9 @@ export function definePipelineTools(
         "- Unused columns (>50% not referenced downstream)\n\n" +
         "Use nodeIDs to scope the review to a specific pipeline section (e.g., from a subgraph).",
       inputSchema: z.object({
-        workspaceID: z.string().describe("The workspace ID to review"),
+        workspaceID: z.string().min(1, "workspaceID must not be empty").describe("The workspace ID to review"),
         nodeIDs: z
-          .array(z.string())
+          .array(z.string().min(1, "nodeID must not be empty"))
           .optional()
           .describe(
             "Optional list of node IDs to scope the review. If omitted, reviews the entire workspace (up to 50 nodes in detail)."
@@ -788,7 +789,7 @@ export function definePipelineTools(
         "For non-CTE SQL, returns the parsed source refs and SELECT items with column/expression classification.\n\n" +
         "This tool is pure parsing — no workspace reads, no node type selection, no mutations.",
       inputSchema: z.object({
-        sql: z.string().describe("The SQL statement to parse. Pass it exactly as provided — do not rewrite or modify it."),
+        sql: z.string().min(1, "sql must not be empty").describe("The SQL statement to parse. Pass it exactly as provided — do not rewrite or modify it."),
       }),
       outputSchema: getToolOutputSchema("parse_sql_structure"),
       annotations: READ_ONLY_ANNOTATIONS,
@@ -955,7 +956,7 @@ export function definePipelineTools(
         "Use the selectedNodeType in subsequent plan_pipeline, create_workspace_node_from_predecessor, or create_workspace_node_from_scratch calls.\n\n" +
         "This tool reads workspace node type inventory for ranking but does not mutate anything.",
       inputSchema: z.object({
-        workspaceID: z.string().describe("The workspace ID — used to fetch observed node types for ranking context."),
+        workspaceID: z.string().min(1, "workspaceID must not be empty").describe("The workspace ID — used to fetch observed node types for ranking context."),
         goal: z.string().optional().describe(
           "Natural-language description of what this pipeline step does. Be specific — " +
           "'staging layer for raw customer data' is better than 'stage'. " +
@@ -963,7 +964,7 @@ export function definePipelineTools(
         ),
         targetName: z.string().optional().describe("Optional target node name — used for naming-signal scoring."),
         sql: z.string().optional().describe("Optional SQL for this step — used for structural analysis during scoring."),
-        sourceCount: z.number().describe("Number of source/predecessor nodes feeding into this step."),
+        sourceCount: z.number().int().nonnegative().describe("Number of source/predecessor nodes feeding into this step."),
         hasJoin: z.boolean().optional().describe("Does this step involve a JOIN? Prevents view-family selection and provides structural context for ranking."),
         hasGroupBy: z.boolean().optional().describe("Does this step involve a GROUP BY? Influences selection toward aggregation-capable types."),
         hasBusinessKeys: z.boolean().optional().describe("Are business keys explicitly defined? Influences dimensional/data-vault type selection."),

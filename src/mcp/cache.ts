@@ -20,7 +20,7 @@ import {
   cacheWorkspaceNodes,
 } from "../services/cache/snapshots.js";
 import { defineSimpleTool } from "./tool-helpers.js";
-import { RUN_STATUS_VALUES } from "../constants.js";
+import { DOCUMENTED_RUN_STATUSES } from "../constants.js";
 
 const SnapshotPaginationShape = {
   pageSize: z
@@ -50,7 +50,7 @@ export function defineCacheTools(
     description:
       "Fetch and cache all workspace nodes to disk for efficient repeated access. Useful when working with large workspaces where inline responses exceed the auto-cache threshold.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n  - detail (boolean, optional): Fetch expanded node details. Defaults to true\n  - pageSize (number, optional): API page size for collection. Defaults to 250, max 500\n  - orderBy (string, optional): Sort field for paginated collection. Defaults to id\n  - orderByDirection ('asc'|'desc', optional): Sort direction\n\nReturns:\n  Cache metadata with resourceUri (coalesce://cache/...) for accessing the cached data via MCP resource read.",
     inputSchema: z.object({
-      workspaceID: z.string().describe("The workspace ID"),
+      workspaceID: z.string().min(1, "workspaceID must not be empty").describe("The workspace ID"),
       detail: z
         .boolean()
         .optional()
@@ -65,7 +65,7 @@ export function defineCacheTools(
     description:
       "Fetch and cache all environment nodes to disk for efficient repeated access.\n\nArgs:\n  - environmentID (string, required): The environment ID\n  - detail (boolean, optional): Fetch expanded node details. Defaults to true\n  - pageSize (number, optional): API page size for collection. Defaults to 250, max 500\n  - orderBy (string, optional): Sort field for paginated collection. Defaults to id\n  - orderByDirection ('asc'|'desc', optional): Sort direction\n\nReturns:\n  Cache metadata with resourceUri (coalesce://cache/...) for accessing the cached data via MCP resource read.",
     inputSchema: z.object({
-      environmentID: z.string().describe("The environment ID"),
+      environmentID: z.string().min(1, "environmentID must not be empty").describe("The environment ID"),
       detail: z
         .boolean()
         .optional()
@@ -82,7 +82,7 @@ export function defineCacheTools(
     inputSchema: z.object({
       runType: z.enum(["deploy", "refresh"]).optional().describe("Optional run type filter"),
       runStatus: z
-        .enum(RUN_STATUS_VALUES)
+        .enum(DOCUMENTED_RUN_STATUSES)
         .optional()
         .describe("Optional run status filter"),
       environmentID: z.string().optional().describe("Optional environment ID filter"),

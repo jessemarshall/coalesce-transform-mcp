@@ -1,7 +1,28 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { defineWorkshopTools } from "../../src/mcp/workshop.js";
 import { deleteSession } from "../../src/services/pipelines/workshop.js";
+
+// Per-file cache dir — see tests/services/workshop.test.ts for rationale.
+let workshopToolsTestCacheDir: string;
+const savedCacheDir = process.env.COALESCE_CACHE_DIR;
+
+beforeEach(() => {
+  workshopToolsTestCacheDir = mkdtempSync(join(tmpdir(), "workshop-tools-cache-test-"));
+  process.env.COALESCE_CACHE_DIR = workshopToolsTestCacheDir;
+});
+
+afterEach(() => {
+  if (savedCacheDir === undefined) {
+    delete process.env.COALESCE_CACHE_DIR;
+  } else {
+    process.env.COALESCE_CACHE_DIR = savedCacheDir;
+  }
+  rmSync(workshopToolsTestCacheDir, { recursive: true, force: true });
+});
 
 function createMockClient(nodes: Array<{ id: string; name: string; locationName?: string }> = []) {
   const client = {

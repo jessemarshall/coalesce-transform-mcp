@@ -36,7 +36,7 @@ export function defineEnvironmentTools(
     description:
       "Get details of a specific Coalesce environment by ID.\n\nReturns full environment configuration including connection details, runtime parameters, and tag colors.\n\nArgs:\n  - environmentID (string, required): The environment ID\n\nReturns:\n  Full environment object with ID, name, project, connection settings, and configuration.",
     inputSchema: z.object({
-      environmentID: z.string().describe("The environment ID"),
+      environmentID: z.string().min(1, "environmentID must not be empty").describe("The environment ID"),
     }),
     annotations: READ_ONLY_ANNOTATIONS,
   }, getEnvironment),
@@ -46,8 +46,8 @@ export function defineEnvironmentTools(
     description:
       "Create a new Coalesce environment within a project.\n\nArgs:\n  - projectID (string, required): The project to create the environment in\n  - name (string, required): Name for the new environment\n  - oauthEnabled (boolean, optional): Enable OAuth (default: false)\n  - devEnv (boolean, optional): Mark as development environment (default: false)\n  - connectionAccount (string, optional): Connection account identifier\n  - runTimeParameters (object, optional): Runtime parameters for the environment\n  - tagColors (object, optional): UI tag colors { backgroundColor, textColor }\n\nReturns:\n  Created environment object with assigned ID.",
     inputSchema: z.object({
-      projectID: z.string().describe("The project ID to create the environment in"),
-      name: z.string().describe("Name for the new environment"),
+      projectID: z.string().min(1, "projectID must not be empty").describe("The project ID to create the environment in"),
+      name: z.string().min(1, "name must not be empty").describe("Name for the new environment"),
       oauthEnabled: z.boolean().optional().describe("Whether OAuth is enabled. Defaults to false."),
       devEnv: z.boolean().optional().describe("Defaults to false."),
       connectionAccount: z.string().optional().describe("Optional connection account identifier"),
@@ -71,7 +71,7 @@ export function defineEnvironmentTools(
     description:
       "Permanently delete a Coalesce environment. This is destructive and cannot be undone.\n\nArgs:\n  - environmentID (string, required): The environment ID to delete\n  - confirmed (boolean, optional): Set to true after the user explicitly confirms deletion\n\nReturns:\n  Confirmation message.",
     inputSchema: z.object({
-      environmentID: z.string().describe("The environment ID to delete"),
+      environmentID: z.string().min(1, "environmentID must not be empty").describe("The environment ID to delete"),
       confirmed: z
         .boolean()
         .optional()

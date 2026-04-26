@@ -273,7 +273,13 @@ function checkLocationsYml(
   let raw: string;
   try {
     raw = readFileSync(path, "utf8");
-  } catch {
+  } catch (err) {
+    warnings.push({
+      level: "warning",
+      code: "LOCATIONS_YML_READ_FAILED",
+      message: `locations.yml exists but could not be read: ${err instanceof Error ? err.message : String(err)}. Check file permissions.`,
+      path,
+    });
     return;
   }
   let parsed: unknown;
@@ -339,7 +345,13 @@ function checkWorkspacesYmlShape(
   let raw: string;
   try {
     raw = readFileSync(path, "utf8");
-  } catch {
+  } catch (err) {
+    warnings.push({
+      level: "warning",
+      code: "WORKSPACES_YML_READ_FAILED",
+      message: `workspaces.yml exists but could not be read: ${err instanceof Error ? err.message : String(err)}. Check file permissions.`,
+      path,
+    });
     return;
   }
   let parsed: unknown;
@@ -450,7 +462,13 @@ function checkWorkspacesYmlGitignore(
   } else {
     try {
       contents = readFileSync(gitignorePath, "utf8");
-    } catch {
+    } catch (err) {
+      warnings.push({
+        level: "warning",
+        code: "GITIGNORE_READ_FAILED",
+        message: `.gitignore exists but could not be read: ${err instanceof Error ? err.message : String(err)}. Cannot confirm whether workspaces.yml is ignored — check file permissions.`,
+        path: gitignorePath,
+      });
       return;
     }
   }
@@ -503,12 +521,18 @@ export function readLocationNames(projectPath: string): string[] {
   try {
     raw = readFileSync(locationsPath, "utf8");
   } catch {
+    // Intentional: callers needing the read/parse failure surfaced go through
+    // checkLocationsYml, which emits LOCATIONS_YML_READ_FAILED /
+    // LOCATIONS_YML_PARSE_FAILED. Cross-ref callers (checkWorkspacesYml) treat
+    // "no declared names" the same as "file missing" and skip the lookup.
     return [];
   }
   let parsed: unknown;
   try {
     parsed = YAML.parse(raw);
   } catch {
+    // Intentional: see comment above — parse failures are reported by
+    // checkLocationsYml, not by this lookup helper.
     return [];
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [];
@@ -536,6 +560,9 @@ function scanSqlFiles(
     try {
       content = readFileSync(filePath, "utf8");
     } catch {
+      // Intentional: best-effort scan over potentially hundreds of files —
+      // per-file read errors (permissions, unlinked mid-scan) shouldn't block
+      // the preflight. The file is simply skipped.
       continue;
     }
     inspectSqlFile(filePath, content, errors, warnings);
@@ -563,6 +590,8 @@ function collectSqlFiles(directory: string, out: string[]): boolean {
   try {
     names = readdirSync(directory);
   } catch {
+    // Intentional: best-effort traversal. Inaccessible directories are skipped
+    // rather than aborting the whole preflight.
     return false;
   }
   for (const name of names) {
@@ -572,6 +601,8 @@ function collectSqlFiles(directory: string, out: string[]): boolean {
     try {
       stat = statSync(entryPath);
     } catch {
+      // Intentional: a single unstattable entry (broken symlink, permissions)
+      // shouldn't abort the scan. Skip it.
       continue;
     }
     if (stat.isDirectory()) {

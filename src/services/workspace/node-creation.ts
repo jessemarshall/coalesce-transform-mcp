@@ -199,9 +199,8 @@ function buildScratchNodeNextSteps(
   const steps: string[] = [];
   const family = inferFamily([nodeType]);
 
-  // Naming convention
   const currentName = typeof node.name === "string" ? node.name : "";
-  if (!currentName || currentName === nodeType || /^[A-Z]+_\d+$/.test(currentName)) {
+  if (shouldSuggestNamingConvention(currentName, nodeType)) {
     steps.push(`Name this node following conventions: ${suggestNamingConvention(family)}`);
   }
 
@@ -214,21 +213,8 @@ function buildScratchNodeNextSteps(
     );
   }
 
-  // Family-specific guidance
-  if (family === "fact" || family === "dimension") {
-    steps.push(
-      `Verify materialization: ${family === "fact" ? "Fact" : "Dimension"} nodes should typically materialize as tables, not views. ` +
-      "Check that materializationType is 'table' in the config."
-    );
-    if (family === "dimension") {
-      steps.push(
-        "For dimensions: identify the business key (natural key from the source system) and mark it isBusinessKey = true. " +
-        "If this is a slowly changing dimension (SCD Type 2), ensure START_DATE/END_DATE/IS_CURRENT columns exist."
-      );
-    }
-  }
+  steps.push(...buildFamilyMaterializationGuidance(family, 0));
 
-  // Verification
   steps.push(
     "Verify the node: call get_workspace_node to confirm columns and config are correct before proceeding."
   );
@@ -410,6 +396,57 @@ async function createWorkspaceNodeFromScratchInner(
 }
 
 
+// Single source of truth for the placeholder-name pattern. The COA UI emits
+// names like "Stage_42" / "Dimension_7" before the user renames a node, and
+// agents may also leave the bare nodeType as the name. Both branches of node
+// creation (scratch and predecessor-based) need the same predicate so their
+// nextSteps stay in sync.
+const PLACEHOLDER_NAME_PATTERN = /^[A-Z]+_\d+$/;
+
+export function shouldSuggestNamingConvention(
+  currentName: string,
+  nodeType: string
+): boolean {
+  return (
+    !currentName ||
+    currentName === nodeType ||
+    PLACEHOLDER_NAME_PATTERN.test(currentName)
+  );
+}
+
+// Family-specific materialization + business-key/grain guidance shared between
+// the scratch and predecessor-based node-creation flows. Grain guidance only
+// applies to multi-predecessor fact tables (predecessorCount > 1) — scratch
+// nodes always pass 0.
+export function buildFamilyMaterializationGuidance(
+  family: string,
+  predecessorCount: number
+): string[] {
+  if (family !== "fact" && family !== "dimension") return [];
+
+  const steps: string[] = [
+    `Verify materialization: ${family === "fact" ? "Fact" : "Dimension"} nodes should typically materialize as tables, not views. ` +
+    "Check that materializationType is 'table' in the config.",
+  ];
+
+  if (family === "fact" && predecessorCount > 1) {
+    steps.push(
+      "For fact tables: define the grain (the set of columns that uniquely identify each row). " +
+      "These grain columns become your GROUP BY columns in convert_join_to_aggregation. " +
+      "Mark them as isBusinessKey = true."
+    );
+  }
+
+  if (family === "dimension") {
+    steps.push(
+      "For dimensions: identify the business key (natural key from the source system) and mark it isBusinessKey = true. " +
+      "If this is a slowly changing dimension (SCD Type 2), ensure START_DATE/END_DATE/IS_CURRENT columns exist."
+    );
+  }
+
+  return steps;
+}
+
 export function suggestNamingConvention(family: string): string {
   const conventions: Record<string, string> = {
     stage: "STG_<SOURCE_NAME> (e.g., STG_CUSTOMERS, STG_ORDERS)",
@@ -433,9 +470,8 @@ export function buildPostCreationNextSteps(
   const steps: string[] = [];
   const family = inferFamily([nodeType]);
 
-  // Naming convention
   const currentName = typeof node.name === "string" ? node.name : "";
-  if (!currentName || currentName === nodeType || /^[A-Z]+_\d+$/.test(currentName)) {
+  if (shouldSuggestNamingConvention(currentName, nodeType)) {
     steps.push(`Name this node following conventions: ${suggestNamingConvention(family)}`);
   }
 
@@ -465,26 +501,7 @@ export function buildPostCreationNextSteps(
     }
   }
 
-  // Family-specific guidance
-  if (family === "fact" || family === "dimension") {
-    steps.push(
-      `Verify materialization: ${family === "fact" ? "Fact" : "Dimension"} nodes should typically materialize as tables, not views. ` +
-      "Check that materializationType is 'table' in the config."
-    );
-    if (family === "fact" && predecessorCount > 1) {
-      steps.push(
-        "For fact tables: define the grain (the set of columns that uniquely identify each row). " +
-        "These grain columns become your GROUP BY columns in convert_join_to_aggregation. " +
-        "Mark them as isBusinessKey = true."
-      );
-    }
-    if (family === "dimension") {
-      steps.push(
-        "For dimensions: identify the business key (natural key from the source system) and mark it isBusinessKey = true. " +
-        "If this is a slowly changing dimension (SCD Type 2), ensure START_DATE/END_DATE/IS_CURRENT columns exist."
-      );
-    }
-  }
+  steps.push(...buildFamilyMaterializationGuidance(family, predecessorCount));
 
   // Single predecessor: simpler guidance
   if (predecessorCount === 1) {

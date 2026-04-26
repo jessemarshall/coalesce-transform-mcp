@@ -23,7 +23,7 @@ export function defineWorkspaceTools(
     description:
       "Get details of a specific Coalesce workspace by ID.\n\nArgs:\n  - workspaceID (string, required): The workspace ID\n\nReturns:\n  Full workspace object with ID, name, project association, and settings.",
     inputSchema: z.object({
-      workspaceID: z.string().describe("The workspace ID"),
+      workspaceID: z.string().min(1, "workspaceID must not be empty").describe("The workspace ID"),
     }),
     annotations: READ_ONLY_ANNOTATIONS,
   }, getWorkspace),

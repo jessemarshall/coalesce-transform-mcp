@@ -2,18 +2,31 @@ import { z } from "zod";
 
 import { resolveSnowflakeAuth } from "../services/config/credentials.js";
 
+// Shared validator: runID must be a numeric run ID string, not a UUID.
+// The REST API rejects non-numeric IDs with an opaque HTTP error; this surfaces
+// the constraint at the MCP validation boundary with a helpful message.
+export const RunIDSchema = z
+  .string()
+  .min(1)
+  .regex(
+    /^\d+$/,
+    "runID must be a numeric run ID (integer), e.g. '401' — not the UUID from a run URL."
+  );
+
 // --- startRun / run-and-wait schemas ---
 
 export const RunDetailsSchema = z
   .object({
     environmentID: z
       .string()
+      .min(1, "environmentID must not be empty when provided")
       .optional()
       .describe(
         "Numeric ID of the deployed environment to run against. Provide either environmentID or workspaceID, not both."
       ),
     workspaceID: z
       .string()
+      .min(1, "workspaceID must not be empty when provided")
       .optional()
       .describe(
         "Numeric ID of the workspace to run against (development run). Provide either environmentID or workspaceID, not both."
@@ -26,7 +39,11 @@ export const RunDetailsSchema = z
       .string()
       .optional()
       .describe("Nodes excluded for an ad-hoc job"),
-    jobID: z.string().optional().describe("The ID of a job being run"),
+    jobID: z
+      .string()
+      .min(1, "jobID must not be empty when provided")
+      .optional()
+      .describe("The ID of a job being run"),
     parallelism: z
       .number()
       .int()
@@ -40,6 +57,10 @@ export const RunDetailsSchema = z
         "Allow refresh even if last deploy failed (API default: false). Use with caution."
       ),
   })
+  // .refine relies on the field-level .min(1) above — empty strings are
+  // rejected before reaching here. If you drop the field-level constraints,
+  // rewrite this check to use `(d.environmentID == null) !== (d.workspaceID == null)`
+  // so empties don't get coerced to "absent."
   .refine(
     (d) => Boolean(d.environmentID) !== Boolean(d.workspaceID),
     {
@@ -97,7 +118,7 @@ export type StartRunInput = z.infer<typeof StartRunParams>;
 // --- rerun / retry-and-wait schemas ---
 
 export const RerunDetailsSchema = z.object({
-  runID: z.string().describe("The run ID to retry"),
+  runID: RunIDSchema.describe("The numeric run ID (integer, e.g. '401') to retry — not the UUID from a run URL."),
   forceIgnoreWorkspaceStatus: z
     .boolean()
     .optional()
