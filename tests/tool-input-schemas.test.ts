@@ -14,6 +14,49 @@ import { defineSubgraphTools } from "../src/mcp/subgraphs.js";
 import { defineCacheTools } from "../src/mcp/cache.js";
 import { defineWorkshopTools } from "../src/mcp/workshop.js";
 import { defineLineageTools } from "../src/mcp/lineage.js";
+import { defineRunTools } from "../src/mcp/runs.js";
+import { registerRunAndWait } from "../src/workflows/run-and-wait.js";
+
+const VALID_PIPELINE_PLAN = {
+  version: 1,
+  intent: "goal",
+  status: "ready",
+  workspaceID: "ws-1",
+  platform: null,
+  goal: "Build a customer stage",
+  sql: null,
+  nodes: [
+    {
+      planNodeID: "plan-1",
+      name: "STG_CUSTOMER",
+      nodeType: "base-nodes:::Stage",
+      nodeTypeFamily: "stage",
+      predecessorNodeIDs: ["src-1"],
+      predecessorPlanNodeIDs: [],
+      predecessorNodeNames: ["CUSTOMER"],
+      description: null,
+      sql: null,
+      selectItems: [],
+      outputColumnNames: ["CUSTOMER_ID"],
+      configOverrides: { testsEnabled: true },
+      sourceRefs: [
+        {
+          locationName: "RAW",
+          nodeName: "CUSTOMER",
+          alias: null,
+          nodeID: "src-1",
+        },
+      ],
+      joinCondition: null,
+      location: {},
+      requiresFullSetNode: false,
+    },
+  ],
+  assumptions: [],
+  openQuestions: [],
+  warnings: [],
+  supportedNodeTypes: ["base-nodes:::Stage"],
+};
 
 function createMockClient() {
   return {
@@ -219,6 +262,8 @@ describe("Required-string validation across MCP tools", () => {
     defineWorkshopTools(server, client).forEach(t => server.registerTool(...t));
     definePipelineTools(server, client).forEach(t => server.registerTool(...t));
     defineLineageTools(server, client).forEach(t => server.registerTool(...t));
+    defineRunTools(server, client).forEach(t => server.registerTool(...t));
+    registerRunAndWait(server, client);
 
     const cases: Array<{ tool: string; input: Record<string, unknown> }> = [
       { tool: "get_environment", input: { environmentID: "" } },
@@ -284,6 +329,19 @@ describe("Required-string validation across MCP tools", () => {
       { tool: "create_pipeline_from_sql", input: { workspaceID: "ws", sql: "" } },
       { tool: "build_pipeline_from_intent", input: { workspaceID: "", intent: "stage customers" } },
       { tool: "build_pipeline_from_intent", input: { workspaceID: "ws", intent: "" } },
+      { tool: "create_pipeline_from_plan", input: { workspaceID: "", plan: VALID_PIPELINE_PLAN } },
+      { tool: "parse_sql_structure", input: { sql: "" } },
+      { tool: "review_pipeline", input: { workspaceID: "" } },
+      { tool: "select_pipeline_node_type", input: { workspaceID: "", sourceCount: 0 } },
+      // RunDetailsSchema empty-string rejection — locks in the field-level
+      // .min(1, "...when provided") in src/coalesce/run-schemas.ts so a
+      // future refactor can't silently re-allow empty strings to flow into
+      // the .refine() truthy check below it.
+      { tool: "start_run", input: { runDetails: { environmentID: "", workspaceID: "ws-1" }, confirmRunAllNodes: true } },
+      { tool: "start_run", input: { runDetails: { environmentID: "env-1", workspaceID: "" }, confirmRunAllNodes: true } },
+      { tool: "start_run", input: { runDetails: { environmentID: "env-1", jobID: "" }, confirmRunAllNodes: true } },
+      { tool: "run_and_wait", input: { runDetails: { environmentID: "", workspaceID: "ws-1" }, confirmRunAllNodes: true } },
+      { tool: "run_and_wait", input: { runDetails: { environmentID: "env-1", jobID: "" }, confirmRunAllNodes: true } },
       { tool: "get_upstream_nodes", input: { workspaceID: "", nodeID: "n-1" } },
       { tool: "get_upstream_nodes", input: { workspaceID: "ws-1", nodeID: "" } },
       { tool: "get_downstream_nodes", input: { workspaceID: "", nodeID: "n-1" } },
@@ -366,51 +424,10 @@ describe("Pipeline Tool Input Schemas", () => {
 
     const schema = getToolParamsSchema(toolSpy, "create_pipeline_from_plan");
 
-    const validPlan = {
-      version: 1,
-      intent: "goal",
-      status: "ready",
-      workspaceID: "ws-1",
-      platform: null,
-      goal: "Build a customer stage",
-      sql: null,
-      nodes: [
-        {
-          planNodeID: "plan-1",
-          name: "STG_CUSTOMER",
-          nodeType: "base-nodes:::Stage",
-          nodeTypeFamily: "stage",
-          predecessorNodeIDs: ["src-1"],
-          predecessorPlanNodeIDs: [],
-          predecessorNodeNames: ["CUSTOMER"],
-          description: null,
-          sql: null,
-          selectItems: [],
-          outputColumnNames: ["CUSTOMER_ID"],
-          configOverrides: { testsEnabled: true },
-          sourceRefs: [
-            {
-              locationName: "RAW",
-              nodeName: "CUSTOMER",
-              alias: null,
-              nodeID: "src-1",
-            },
-          ],
-          joinCondition: null,
-          location: {},
-          requiresFullSetNode: false,
-        },
-      ],
-      assumptions: [],
-      openQuestions: [],
-      warnings: [],
-      supportedNodeTypes: ["base-nodes:::Stage"],
-    };
-
     expect(
       schema.safeParse({
         workspaceID: "ws-1",
-        plan: validPlan,
+        plan: VALID_PIPELINE_PLAN,
       }).success
     ).toBe(true);
 
