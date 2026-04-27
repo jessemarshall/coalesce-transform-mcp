@@ -15,6 +15,7 @@ import { defineCacheTools } from "../src/mcp/cache.js";
 import { defineWorkshopTools } from "../src/mcp/workshop.js";
 import { defineLineageTools } from "../src/mcp/lineage.js";
 import { defineRunTools } from "../src/mcp/runs.js";
+import { defineRenderNodeTools } from "../src/mcp/render-node.js";
 import { registerRunAndWait } from "../src/workflows/run-and-wait.js";
 
 const VALID_PIPELINE_PLAN = {
@@ -263,6 +264,7 @@ describe("Required-string validation across MCP tools", () => {
     definePipelineTools(server, client).forEach(t => server.registerTool(...t));
     defineLineageTools(server, client).forEach(t => server.registerTool(...t));
     defineRunTools(server, client).forEach(t => server.registerTool(...t));
+    defineRenderNodeTools(server, client).forEach(t => server.registerTool(...t));
     registerRunAndWait(server, client);
 
     const cases: Array<{ tool: string; input: Record<string, unknown> }> = [
@@ -350,6 +352,10 @@ describe("Required-string validation across MCP tools", () => {
       { tool: "propagate_column_change", input: { workspaceID: "", nodeID: "n-1", columnID: "c-1", changes: { columnName: "X" }, confirmed: true } },
       { tool: "search_workspace_content", input: { workspaceID: "", query: "x" } },
       { tool: "audit_documentation_coverage", input: { workspaceID: "" } },
+      { tool: "serialize_workspace_node_to_disk_yaml", input: { workspaceID: "", nodeID: "n-1" } },
+      { tool: "serialize_workspace_node_to_disk_yaml", input: { workspaceID: "ws-1", nodeID: "" } },
+      { tool: "apply_sql_to_workspace_node", input: { workspaceID: "", nodeID: "n-1", sql: "select 1" } },
+      { tool: "apply_sql_to_workspace_node", input: { workspaceID: "ws-1", nodeID: "", sql: "select 1" } },
     ];
 
     for (const { tool, input } of cases) {

@@ -87,8 +87,14 @@ export function defineRenderNodeTools(
 // ── serialize_workspace_node_to_disk_yaml ─────────────────────────────────────
 
 const SerializeInputSchema = z.object({
-  workspaceID: z.string().describe("The workspace ID containing the node."),
-  nodeID: z.string().describe("The node ID to serialize."),
+  workspaceID: z
+    .string()
+    .min(1, "workspaceID must not be empty")
+    .describe("The workspace ID containing the node."),
+  nodeID: z
+    .string()
+    .min(1, "nodeID must not be empty")
+    .describe("The node ID to serialize."),
 });
 
 function defineSerializeWorkspaceNodeToDiskYaml(client: CoalesceClient): ToolDefinition {
@@ -210,8 +216,14 @@ function defineParseDiskNodeToWorkspaceBody(client: CoalesceClient): ToolDefinit
 // ── apply_sql_to_workspace_node ───────────────────────────────────────────────
 
 const ApplySqlInputSchema = z.object({
-  workspaceID: z.string().describe("The workspace ID containing the node."),
-  nodeID: z.string().describe("The node ID to update."),
+  workspaceID: z
+    .string()
+    .min(1, "workspaceID must not be empty")
+    .describe("The workspace ID containing the node."),
+  nodeID: z
+    .string()
+    .min(1, "nodeID must not be empty")
+    .describe("The node ID to update."),
   sql: z
     .string()
     .min(1)
