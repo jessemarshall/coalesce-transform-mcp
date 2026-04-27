@@ -375,17 +375,89 @@ describe("diffColumns: rename detection", () => {
 		expect(diff.added.map(a => a.name).sort()).toEqual(["C", "D"]);
 	});
 
-	it("skips rename detection for DDL (no expressions) — falls back to drop+add", () => {
+	it("pairs DDL rename positionally when dataTypes match (no expressions)", () => {
 		const existing = [
-			{ name: "OLD", sources: [{ transform: "X.foo" }] },
+			{ name: "OLD", dataType: "VARCHAR(40)", sources: [{ transform: "X.foo" }] },
 		];
 		const parsed = [
-			{ name: "NEW", dataType: "VARCHAR" }, // no expression — DDL path
+			{ name: "NEW", dataType: "VARCHAR(40)" }, // no expression — DDL path
+		];
+		const diff = diffColumns(parsed, existing);
+		expect(diff.renamed).toEqual([
+			{ from: "OLD", to: "NEW", expression: "X.foo" },
+		]);
+		expect(diff.removed).toEqual([]);
+		expect(diff.added).toEqual([]);
+	});
+
+	it("does NOT pair DDL rename when dataTypes differ — falls back to drop+add", () => {
+		// User changing both name and type is ambiguous (could be a true
+		// drop+add at the same index); be conservative and let the user
+		// disambiguate via the cloud UI.
+		const existing = [
+			{ name: "OLD", dataType: "VARCHAR(40)", sources: [{ transform: "X.foo" }] },
+		];
+		const parsed = [
+			{ name: "NEW", dataType: "NUMBER(38, 0)" },
 		];
 		const diff = diffColumns(parsed, existing);
 		expect(diff.renamed).toEqual([]);
 		expect(diff.removed).toEqual(["OLD"]);
 		expect(diff.added).toHaveLength(1);
+	});
+
+	it("pairs DDL renames per-position when multiple columns at different indices change name", () => {
+		const existing = [
+			{ name: "A", dataType: "NUMBER", sources: [{ transform: "X.a" }] },
+			{ name: "B", dataType: "VARCHAR", sources: [{ transform: "X.b" }] },
+			{ name: "C", dataType: "NUMBER", sources: [{ transform: "X.c" }] },
+		];
+		const parsed = [
+			{ name: "A_NEW", dataType: "NUMBER" },
+			{ name: "B", dataType: "VARCHAR" },
+			{ name: "C_NEW", dataType: "NUMBER" },
+		];
+		const diff = diffColumns(parsed, existing);
+		expect(diff.renamed.map(r => `${r.from}→${r.to}`).sort())
+			.toEqual(["A→A_NEW", "C→C_NEW"]);
+		expect(diff.removed).toEqual([]);
+		expect(diff.added).toEqual([]);
+	});
+
+	it("DDL rename + simultaneous true-add at the end: rename pairs, add stays", () => {
+		const existing = [
+			{ name: "OLD", dataType: "VARCHAR(40)", sources: [{ transform: "X.foo" }] },
+		];
+		const parsed = [
+			{ name: "NEW", dataType: "VARCHAR(40)" },
+			{ name: "EXTRA", dataType: "NUMBER" },
+		];
+		const diff = diffColumns(parsed, existing);
+		expect(diff.renamed).toEqual([
+			{ from: "OLD", to: "NEW", expression: "X.foo" },
+		]);
+		expect(diff.removed).toEqual([]);
+		expect(diff.added.map(a => a.name)).toEqual(["EXTRA"]);
+	});
+
+	it("DDL: drop+add at the same index where existing index doesn't match new index → not paired", () => {
+		// Existing has [A, B], parsed reorders A and renames B → [B_NEW, A].
+		// Pass 1 keeps A unchanged; B is tentatively-removed at existing index 1
+		// and B_NEW is tentatively-added at parsed index 0. Different indices
+		// → no positional pairing. Falls back to drop+add (acceptable: user can
+		// rename without reordering, or split the edit).
+		const existing = [
+			{ name: "A", dataType: "NUMBER", sources: [{ transform: "X.a" }] },
+			{ name: "B", dataType: "VARCHAR", sources: [{ transform: "X.b" }] },
+		];
+		const parsed = [
+			{ name: "B_NEW", dataType: "VARCHAR" },
+			{ name: "A", dataType: "NUMBER" },
+		];
+		const diff = diffColumns(parsed, existing);
+		expect(diff.renamed).toEqual([]);
+		expect(diff.removed).toEqual(["B"]);
+		expect(diff.added.map(a => a.name)).toEqual(["B_NEW"]);
 	});
 });
 
@@ -418,6 +490,69 @@ describe("applyColumnDiff: rename preserves lineage", () => {
 		expect(renamed.nullable).toBe(false);
 		expect(renamed.description).toBe("the order primary key");
 		expect(renamed.sources).toEqual(existing[0].sources);
+	});
+
+	it("DDL rename: preserves columnID and lineage when pairing positionally", () => {
+		// Reproduces the user-reported scenario: editing the rendered DDL of
+		// a SCD2 dimension to rename `MARKET_SEGMENT` → `MARKET_TEST_SEGMENT`.
+		// Without positional pairing this fell out as drop+add and the apply
+		// path emitted a brand-new column with no `columnID`, which the
+		// Coalesce REST API rejects.
+		const existing = [
+			{ name: "CUSTOMER_KEY", dataType: "NUMBER(38, 0)", columnID: "id-key" },
+			{
+				name: "MARKET_SEGMENT",
+				dataType: "VARCHAR(10)",
+				columnID: "id-mkt",
+				nullable: true,
+				description: "tpch market segment",
+				sources: [
+					{ transform: 'X."MKTSEGMENT"', columnReferences: [{ nodeID: "n1", columnID: "c1" }] },
+				],
+			},
+		];
+		const parsed = [
+			{ name: "CUSTOMER_KEY", dataType: "NUMBER(38, 0)" },
+			{ name: "MARKET_TEST_SEGMENT", dataType: "VARCHAR(10)" },
+		];
+		const diff = diffColumns(parsed, existing);
+		expect(diff.renamed).toEqual([
+			{ from: "MARKET_SEGMENT", to: "MARKET_TEST_SEGMENT", expression: 'X."MKTSEGMENT"' },
+		]);
+		const out = applyColumnDiff(parsed, existing, diff);
+		const renamedCol = out[1] as Record<string, unknown>;
+		expect(renamedCol.name).toBe("MARKET_TEST_SEGMENT");
+		expect(renamedCol.columnID).toBe("id-mkt");
+		expect(renamedCol.description).toBe("tpch market segment");
+		expect(renamedCol.sources).toEqual(existing[1].sources);
+	});
+
+	it("backfills empty description on renamed column when existing entry lacks one", () => {
+		// Reproduces a user-reported apply failure: the Coalesce REST PUT
+		// schema requires `description` on every metadata.columns[] entry,
+		// but older nodes (or columns added through paths that skipped it)
+		// can land in the cloud body without it. The rename branch's
+		// spread-from-existing then propagates the missing field, and the
+		// API rejects the whole apply with `must have required property
+		// 'description'`. Backfill to "" so the spread output always
+		// matches the schema.
+		const existing = [
+			{
+				name: "TOTAL_SPEND",
+				dataType: "NUMBER(38, 4)",
+				columnID: "id-spend",
+				nullable: true,
+				sources: [{ transform: 'X."SPEND"', columnReferences: [] }],
+			},
+		];
+		const parsed = [
+			{ name: "TOTAL_TEST_SPEND", dataType: "NUMBER(38, 4)" },
+		];
+		const diff = diffColumns(parsed, existing);
+		const out = applyColumnDiff(parsed, existing, diff);
+		const renamed = out[0] as Record<string, unknown>;
+		expect(renamed.name).toBe("TOTAL_TEST_SPEND");
+		expect(renamed.description).toBe("");
 	});
 
 	it("respects SQL order when a rename appears mid-list (reorder)", () => {
@@ -485,6 +620,46 @@ describe("diffColumns: expression-change detection", () => {
 		];
 		const diff = diffColumns(parsed, existing);
 		expect(diff.expressionChanged).toEqual([]);
+	});
+
+	it("flags adding a transform to a previously blank-transform column", () => {
+		const existing = [
+			{ name: "MAX_ORDER_VALUE", dataType: "NUMBER(38,4)", sources: [] },
+		];
+		const parsed = [
+			{ name: "MAX_ORDER_VALUE", dataType: "", expression: 'MIN("X"."TOTAL_PRICE")' },
+		];
+		const diff = diffColumns(parsed, existing);
+		expect(diff.expressionChanged).toEqual([
+			{ name: "MAX_ORDER_VALUE", from: "", to: 'MIN("X"."TOTAL_PRICE")' },
+		]);
+		expect(diff.unchanged).toEqual([]);
+	});
+
+	it("treats round-tripped NULL placeholder on a blank-transform column as unchanged", () => {
+		const existing = [
+			{ name: "MAX_ORDER_VALUE", dataType: "NUMBER(38,4)", sources: [] },
+		];
+		const parsed = [
+			{ name: "MAX_ORDER_VALUE", dataType: "", expression: "NULL" },
+		];
+		const diff = diffColumns(parsed, existing);
+		expect(diff.expressionChanged).toEqual([]);
+		expect(diff.unchanged).toEqual(["MAX_ORDER_VALUE"]);
+	});
+
+	it("flags clearing an existing transform via NULL", () => {
+		const existing = [
+			{ name: "X", sources: [{ transform: "MAX(Y.Z)" }] },
+		];
+		const parsed = [
+			{ name: "X", dataType: "", expression: "NULL" },
+		];
+		const diff = diffColumns(parsed, existing);
+		expect(diff.expressionChanged).toEqual([
+			{ name: "X", from: "MAX(Y.Z)", to: "NULL" },
+		]);
+		expect(diff.unchanged).toEqual([]);
 	});
 });
 

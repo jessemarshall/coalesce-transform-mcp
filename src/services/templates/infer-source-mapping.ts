@@ -33,6 +33,7 @@
  * Function-prefix exclusions (`SQL_FUNCTION_PREFIXES`) are mirrored verbatim
  * from sql_parser.py so behavior matches across the two implementations.
  */
+import { randomUUID } from "node:crypto";
 import { stripIdentifierQuotes } from "../pipelines/sql-tokenizer.js";
 
 /**
@@ -289,7 +290,9 @@ export interface InferredColumn {
 	column: {
 		name: string;
 		dataType: string;
+		columnID: string;
 		nullable: boolean;
+		description: string;
 		sources: ResolvedColumnSource[];
 	};
 	/** True when {@link resolveColumnSources} produced a result. False = bare column. */
@@ -302,11 +305,18 @@ export interface InferredColumn {
  * we still emit a single source entry with the transform but empty
  * `columnReferences` — that's the Phase-1 "bare add" fallback, kept here so
  * the apply path can use one code path for both outcomes.
+ *
+ * A fresh `columnID` is generated for every new column. The Coalesce REST PUT
+ * schema requires `columnID` on every entry in `metadata.columns[]`; existing
+ * columns flow theirs through (preserved by `applyColumnDiff`'s rename /
+ * unchanged branches), but adds need to provide one or the API rejects the
+ * whole request.
  */
 export function inferColumnFromAddedItem(
 	input: InferColumnInput,
 	resolveParams: Omit<ResolveColumnSourcesParams, "colName" | "transform">,
 ): InferredColumn {
+	const columnID = randomUUID();
 	const sources = resolveColumnSources({
 		colName: input.name,
 		transform: input.transform,
@@ -314,7 +324,7 @@ export function inferColumnFromAddedItem(
 	});
 	if (sources) {
 		return {
-			column: { name: input.name, dataType: input.dataType, nullable: true, sources },
+			column: { name: input.name, dataType: input.dataType, columnID, nullable: true, description: "", sources },
 			resolved: true,
 		};
 	}
@@ -322,7 +332,9 @@ export function inferColumnFromAddedItem(
 		column: {
 			name: input.name,
 			dataType: input.dataType,
+			columnID,
 			nullable: true,
+			description: "",
 			sources: [{ columnReferences: [], transform: input.transform }],
 		},
 		resolved: false,

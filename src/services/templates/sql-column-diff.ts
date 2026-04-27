@@ -57,10 +57,16 @@ export interface ColumnDiff {
 	/** Columns whose dataType was updated. */
 	typeChanged: Array<{ name: string; from: string; to: string }>;
 	/**
-	 * Columns whose output name changed but whose source mapping (transform
-	 * expression) is the same. Detected only for DML inputs — DDL inputs
-	 * carry no expressions, so renames there look like drop+add. The apply
-	 * path preserves the existing column id / lineage and just renames.
+	 * Columns whose output name changed but whose underlying lineage is
+	 * preserved. Detected via two strategies:
+	 *   - DML: matching transform expressions (`X.ORDERKEY` AS `OLD` →
+	 *     `X.ORDERKEY` AS `NEW`).
+	 *   - DDL: positional match at the same index when dataTypes agree
+	 *     (existing column at index i was dropped, parsed column at index i
+	 *     is new, types match).
+	 * Both strategies are conservative — ambiguous cases fall through to
+	 * drop+add for the user to disambiguate. The apply path preserves the
+	 * existing column id / lineage and just renames.
 	 */
 	renamed: Array<{ from: string; to: string; expression: string }>;
 	/**
@@ -293,8 +299,19 @@ export function diffColumns(
 	const unchanged: string[] = [];
 	const typeChanged: Array<{ name: string; from: string; to: string }> = [];
 	const expressionChanged: Array<{ name: string; from: string; to: string }> = [];
-	const tentativelyRemoved: Array<{ name: string; expression: string }> = [];
-	const tentativelyAdded: ParsedSqlColumn[] = [];
+	// Track each tentative remove/add's original index in `existing[]` / `parsed[]`
+	// so the positional rename pass below can pair `existing[i]` with `parsed[i]`
+	// when expression-based pairing isn't available (DDL inputs).
+	const tentativelyRemoved: Array<{ name: string; expression: string; index: number; dataType: string }> = [];
+	const tentativelyAdded: Array<{ col: ParsedSqlColumn; index: number }> = [];
+	const existingIndexByNorm = new Map<string, number>();
+	for (let i = 0; i < existing.length; i++) {
+		const col = existing[i];
+		if (!isPlainObject(col)) { continue; }
+		const name = typeof col.name === 'string' ? col.name : undefined;
+		if (!name) { continue; }
+		existingIndexByNorm.set(normalizeName(name), i);
+	}
 
 	// Pass 1 — name-keyed match. Columns matched here can move into
 	// unchanged / typeChanged / expressionChanged buckets.
@@ -305,6 +322,8 @@ export function diffColumns(
 			tentativelyRemoved.push({
 				name: displayName,
 				expression: extractExistingTransform(existingCol),
+				index: existingIndexByNorm.get(normName) ?? -1,
+				dataType: typeof existingCol.dataType === 'string' ? existingCol.dataType : '',
 			});
 			continue;
 		}
@@ -319,11 +338,18 @@ export function diffColumns(
 		// Expression comparison runs only when the parsed column carries
 		// an expression (DML path). DDL inputs leave it undefined so we
 		// silently skip — type-changes and renames-by-name still work.
+		//
+		// The renderer emits `NULL AS "X"` for columns with no transform,
+		// so a clean round-trip parses back as `NULL`. Treat that as
+		// equivalent to the empty existing transform — otherwise every
+		// blank-transform column would falsely flag as changed on every
+		// apply. A user who *adds* a real transform to a previously-blank
+		// column (e.g. `NULL` → `MIN(X)`) still flags correctly.
 		const existingTransform = extractExistingTransform(existingCol);
 		const exprWasChanged =
 			parsedCol.expression !== undefined
-			&& parsedCol.expression !== ""
-			&& existingTransform !== ""
+			&& !(existingTransform === ""
+				&& (parsedCol.expression === "" || isNullPlaceholder(parsedCol.expression)))
 			&& normalizeExpression(parsedCol.expression) !== normalizeExpression(existingTransform);
 
 		if (typeWasChanged) {
@@ -341,9 +367,11 @@ export function diffColumns(
 		}
 	}
 
-	for (const [normName, parsedCol] of parsedByName) {
-		if (!existingByName.has(normName)) {
-			tentativelyAdded.push(parsedCol);
+	for (let i = 0; i < parsed.length; i++) {
+		const parsedCol = parsed[i];
+		const norm = normalizeName(parsedCol.name);
+		if (!existingByName.has(norm)) {
+			tentativelyAdded.push({ col: parsedCol, index: i });
 		}
 	}
 
@@ -362,15 +390,16 @@ export function diffColumns(
 	// NOT paired — left as drop+add for the user to disambiguate.
 	//
 	// Skipped entirely when expressions are missing on either side (DDL
-	// inputs, or existing columns with no `sources[0].transform`).
+	// inputs, or existing columns with no `sources[0].transform`) — Pass 3
+	// below picks up that case via positional pairing.
 	const renamed: Array<{ from: string; to: string; expression: string }> = [];
 	const removedByExpr = bucketByExpression(tentativelyRemoved.map(r => ({
 		key: r.name,
 		expression: r.expression,
 	})));
 	const addedByExpr = bucketByExpression(tentativelyAdded
-		.filter(a => a.expression !== undefined && a.expression !== "")
-		.map(a => ({ key: a.name, expression: a.expression! })));
+		.filter(a => a.col.expression !== undefined && a.col.expression !== "")
+		.map(a => ({ key: a.col.name, expression: a.col.expression! })));
 
 	// Re-index existing + parsed by name so a paired rename can also pick up
 	// a simultaneous dataType change. Without this, a rename whose type is
@@ -410,10 +439,41 @@ export function diffColumns(
 		}
 	}
 
+	// Pass 3 — positional pairing for items Pass 2 couldn't handle. DDL inputs
+	// carry no expressions, so an interactive rename like `ADDRESS` →
+	// `STREET_ADDRESS` falls out as drop+add through Pass 2 and the apply path
+	// then sends a brand-new column with no `columnID` (rejected by the
+	// Coalesce REST API since v1's columnID-required validation). Pair them
+	// here when `existing[i]` and `parsed[i]` are both unmatched at the same
+	// index AND their dataTypes agree — the dataType match is the safety
+	// guard against silently treating a true drop+add at the same position as
+	// a rename. Renames that simultaneously change dataType still fall through
+	// to drop+add; users can do them in two edits or via the cloud UI.
+	for (const removed of tentativelyRemoved) {
+		if (renamedFromKeys.has(removed.name)) { continue; }
+		if (removed.index < 0) { continue; }
+		const addAtSamePos = tentativelyAdded.find(
+			a => a.index === removed.index && !renamedToKeys.has(a.col.name),
+		);
+		if (!addAtSamePos) { continue; }
+		const newType = addAtSamePos.col.dataType ?? '';
+		if (!newType) { continue; }
+		if (normalizeType(removed.dataType) !== normalizeType(newType)) { continue; }
+		renamed.push({
+			from: removed.name,
+			to: addAtSamePos.col.name,
+			expression: removed.expression,
+		});
+		renamedFromKeys.add(removed.name);
+		renamedToKeys.add(addAtSamePos.col.name);
+	}
+
 	const removed = tentativelyRemoved
 		.filter(r => !renamedFromKeys.has(r.name))
 		.map(r => r.name);
-	const added = tentativelyAdded.filter(a => !renamedToKeys.has(a.name));
+	const added = tentativelyAdded
+		.filter(a => !renamedToKeys.has(a.col.name))
+		.map(a => a.col);
 
 	return { unchanged, typeChanged, renamed, expressionChanged, removed, added };
 }
@@ -450,6 +510,15 @@ function normalizeExpression(expr: string): string {
 		.trim()
 		.replace(/\s+/g, ' ')
 		.replace(/\s*([^\w\s])\s*/g, '$1');
+}
+
+/**
+ * The DML renderer emits `NULL AS "X"` for columns with no transform.
+ * A clean round-trip of a blank-transform column parses back as `NULL`,
+ * which we want to treat as equivalent to an empty existing transform.
+ */
+function isNullPlaceholder(expr: string): boolean {
+	return normalizeExpression(expr).toUpperCase() === 'NULL';
 }
 
 function bucketByExpression(
@@ -618,6 +687,17 @@ export function applyColumnDiff(
 		}
 
 		out.push(updated);
+	}
+
+	// The Coalesce REST PUT schema requires `description` on every entry
+	// in `metadata.columns[]`. Existing cloud columns usually carry it,
+	// but not always (older nodes, columns added through paths that
+	// skipped it). Backfill an empty string so the spread-from-existing
+	// branches above don't propagate a missing field that the API then
+	// rejects with `must have required property 'description'`.
+	for (const col of out) {
+		if (!isPlainObject(col)) { continue; }
+		if (typeof col.description !== 'string') { col.description = ""; }
 	}
 
 	return out;
