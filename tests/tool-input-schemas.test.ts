@@ -356,6 +356,13 @@ describe("Required-string validation across MCP tools", () => {
       { tool: "serialize_workspace_node_to_disk_yaml", input: { workspaceID: "ws-1", nodeID: "" } },
       { tool: "apply_sql_to_workspace_node", input: { workspaceID: "", nodeID: "n-1", sql: "select 1" } },
       { tool: "apply_sql_to_workspace_node", input: { workspaceID: "ws-1", nodeID: "", sql: "select 1" } },
+      // parse_disk_node_to_workspace_body: optional fields must reject empty
+      // values when provided. An empty `yaml: ""` previously slipped past the
+      // `.refine()` (since `data.yaml !== undefined`) and produced a confusing
+      // "Provide either yaml or diskNode" error from the handler. An empty
+      // `diskNode: {}` previously fed an empty object into diskNodeToCloud.
+      { tool: "parse_disk_node_to_workspace_body", input: { yaml: "" } },
+      { tool: "parse_disk_node_to_workspace_body", input: { diskNode: {} } },
     ];
 
     for (const { tool, input } of cases) {
