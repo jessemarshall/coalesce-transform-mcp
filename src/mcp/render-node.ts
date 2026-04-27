@@ -149,9 +149,16 @@ function defineSerializeWorkspaceNodeToDiskYaml(client: CoalesceClient): ToolDef
 
 const ParseInputSchema = z
   .object({
-    yaml: z.string().optional().describe("Raw disk-shape YAML string from a `nodes/*.yml` file."),
+    yaml: z
+      .string()
+      .min(1, "yaml must not be empty when provided")
+      .optional()
+      .describe("Raw disk-shape YAML string from a `nodes/*.yml` file."),
     diskNode: z
       .record(z.unknown())
+      .refine((d) => Object.keys(d).length > 0, {
+        message: "diskNode must not be an empty object when provided",
+      })
       .optional()
       .describe("Parsed disk-shape node object. Provide instead of `yaml` if already parsed."),
   })
