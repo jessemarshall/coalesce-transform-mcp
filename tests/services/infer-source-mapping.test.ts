@@ -312,4 +312,57 @@ describe("inferColumnFromAddedItem", () => {
 			{ columnReferences: [], transform: "SOME_FN()" },
 		]);
 	});
+
+	it("emits a columnID UUID — the Coalesce REST PUT requires it on every column", () => {
+		// Without this, the apply path's added columns hit an
+		// `request/body/metadata/columns/N must have required property
+		// 'columnID'` validation error from set_workspace_node.
+		const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+		const resolved = inferColumnFromAddedItem(
+			{
+				name: "TOTAL_ORDERS_JESSE",
+				dataType: "NUMBER",
+				transform: 'COUNT("STG_ORDERS_SF1000"."ORDER_KEY")',
+			},
+			{
+				smAliases: { STG_ORDERS_SF1000: "stg-id" },
+				predColLookup: { "stg-id": { ORDER_KEY: "ord-key-id" } },
+				defaultPredID: "stg-id",
+			},
+		);
+		expect(resolved.column.columnID).toMatch(uuidV4);
+
+		const bare = inferColumnFromAddedItem(
+			{ name: "WEIRD", dataType: "VARCHAR", transform: "SOME_FN()" },
+			{ smAliases: {}, predColLookup: {}, defaultPredID: null },
+		);
+		expect(bare.column.columnID).toMatch(uuidV4);
+		expect(bare.column.columnID).not.toBe(resolved.column.columnID);
+	});
+
+	it("emits an empty `description` on every column — the Coalesce REST PUT requires it", () => {
+		// Mirrors the columnID invariant above. Without this, an apply that
+		// adds a brand-new column lands a metadata.columns[] entry with no
+		// `description`, and the API rejects with `must have required
+		// property 'description'`.
+		const resolved = inferColumnFromAddedItem(
+			{
+				name: "TOTAL_ORDERS_JESSE",
+				dataType: "NUMBER",
+				transform: 'COUNT("STG_ORDERS_SF1000"."ORDER_KEY")',
+			},
+			{
+				smAliases: { STG_ORDERS_SF1000: "stg-id" },
+				predColLookup: { "stg-id": { ORDER_KEY: "ord-key-id" } },
+				defaultPredID: "stg-id",
+			},
+		);
+		expect(resolved.column.description).toBe("");
+
+		const bare = inferColumnFromAddedItem(
+			{ name: "WEIRD", dataType: "VARCHAR", transform: "SOME_FN()" },
+			{ smAliases: {}, predColLookup: {}, defaultPredID: null },
+		);
+		expect(bare.column.description).toBe("");
+	});
 });

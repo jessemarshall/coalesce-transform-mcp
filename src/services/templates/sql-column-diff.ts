@@ -22,7 +22,12 @@
  * (see {@link findMatchingBaseColumn} in column-helpers.ts).
  */
 
-import { stripIdentifierQuotes } from "../pipelines/sql-tokenizer.js";
+import {
+	stripIdentifierQuotes,
+	findClosingParen,
+	findLastTopLevelOpenParen,
+	findTopLevelKeywordIndex,
+} from "../pipelines/sql-tokenizer.js";
 import { parseSqlSelectItems } from "../pipelines/select-parsing.js";
 import { parseSqlSourceRefs } from "../pipelines/source-parsing.js";
 import { inferDatatype } from "../workspace/join-helpers.js";
@@ -52,10 +57,16 @@ export interface ColumnDiff {
 	/** Columns whose dataType was updated. */
 	typeChanged: Array<{ name: string; from: string; to: string }>;
 	/**
-	 * Columns whose output name changed but whose source mapping (transform
-	 * expression) is the same. Detected only for DML inputs — DDL inputs
-	 * carry no expressions, so renames there look like drop+add. The apply
-	 * path preserves the existing column id / lineage and just renames.
+	 * Columns whose output name changed but whose underlying lineage is
+	 * preserved. Detected via two strategies:
+	 *   - DML: matching transform expressions (`X.ORDERKEY` AS `OLD` →
+	 *     `X.ORDERKEY` AS `NEW`).
+	 *   - DDL: positional match at the same index when dataTypes agree
+	 *     (existing column at index i was dropped, parsed column at index i
+	 *     is new, types match).
+	 * Both strategies are conservative — ambiguous cases fall through to
+	 * drop+add for the user to disambiguate. The apply path preserves the
+	 * existing column id / lineage and just renames.
 	 */
 	renamed: Array<{ from: string; to: string; expression: string }>;
 	/**
@@ -127,18 +138,118 @@ export function parseCreateTableColumns(sql: string): ParsedSqlColumn[] | undefi
 }
 
 /**
- * Parse a DML-shaped SQL document (the output of `coa_dry_run_run` — typically
- * an INSERT INTO … SELECT …) and extract the SELECT-list as parsed columns.
+ * Strip leading whitespace and comments and return whether the SQL starts
+ * with `MERGE INTO`. Coalesce dimension / Type-2 SCD nodes always render as
+ * MERGE, so the apply path needs to recognize them as DML.
+ */
+export function isMergeShape(sql: string): boolean {
+	const stripped = sql.replace(/^(?:\s|--[^\n]*\n|\/\*[\s\S]*?\*\/)+/, "");
+	return /^merge\s+into\s+/i.test(stripped);
+}
+
+/**
+ * Strip leading whitespace and comments and return whether the SQL starts
+ * with `INSERT`. Coalesce fact / staging / work nodes typically render as
+ * `INSERT INTO target ( cols ) ( SELECT ... )`, where the SELECT is wrapped
+ * in parens — those need envelope peeling for the SELECT-list parser.
+ */
+export function isInsertShape(sql: string): boolean {
+	const stripped = sql.replace(/^(?:\s|--[^\n]*\n|\/\*[\s\S]*?\*\/)+/, "");
+	return /^insert\s+/i.test(stripped);
+}
+
+/**
+ * Peel a MERGE envelope down to its inner SELECT. Returns the inner SELECT
+ * as a standalone string, or undefined when the input isn't a MERGE or the
+ * envelope can't be parsed.
+ *
+ * Coalesce typically renders dim nodes as
+ *   MERGE INTO <target> "TGT" USING ( ( SELECT ... FROM ... ) ) "SRC" ON ...
+ * The SELECT can be wrapped in one or more layers of parens. We find the
+ * USING ( ... ), capture the balanced body, then peel any single-paren
+ * wrappers until we land on a string starting with SELECT or WITH.
+ *
+ * Everything outside the inner SELECT (the MERGE header, ON condition, WHEN
+ * MATCHED / WHEN NOT MATCHED clauses, target alias) is discarded — those are
+ * Coalesce-managed and not editable via the apply path.
+ */
+export function peelMergeEnvelope(sql: string): string | undefined {
+	if (!isMergeShape(sql)) { return undefined; }
+	const usingIdx = findTopLevelKeywordIndex(sql, "using");
+	if (usingIdx < 0) { return undefined; }
+	let i = usingIdx + "using".length;
+	while (i < sql.length && /\s/.test(sql[i]!)) { i++; }
+	if (sql[i] !== "(") { return undefined; }
+	const closeIdx = findClosingParen(sql, i + 1);
+	if (closeIdx < 0) { return undefined; }
+	let inner = sql.slice(i + 1, closeIdx).trim();
+	// Peel single-paren wrappers (only when the trailing `)` closes the
+	// leading `(` — guarded by re-running findClosingParen on the leading
+	// paren so `(a) OR (b)` doesn't get mis-peeled).
+	while (inner.startsWith("(")) {
+		const innerClose = findClosingParen(inner, 1);
+		if (innerClose !== inner.length - 1) { break; }
+		inner = inner.slice(1, -1).trim();
+	}
+	return inner;
+}
+
+/**
+ * Peel an INSERT envelope down to its inner SELECT. Returns the inner
+ * SELECT, or undefined when the input isn't an INSERT or the envelope
+ * doesn't wrap the SELECT in parens (i.e. plain `INSERT INTO target SELECT
+ * ...` — already top-level, no peel needed).
+ *
+ * Coalesce typically renders fact / staging / work nodes as
+ *   INSERT INTO <target> ( <cols> ) ( SELECT ... FROM ... GROUP BY ... )
+ * The SELECT is in the LAST top-level paren; the FIRST is the column list.
+ * If the SQL is INSERT but already has a top-level SELECT (no parens around
+ * it), we return undefined so callers fall through to using the raw SQL.
+ */
+export function peelInsertEnvelope(sql: string): string | undefined {
+	if (!isInsertShape(sql)) { return undefined; }
+	if (findTopLevelKeywordIndex(sql, "select") >= 0) { return undefined; }
+	const lastOpen = findLastTopLevelOpenParen(sql);
+	if (lastOpen < 0) { return undefined; }
+	const closeIdx = findClosingParen(sql, lastOpen + 1);
+	if (closeIdx < 0) { return undefined; }
+	let inner = sql.slice(lastOpen + 1, closeIdx).trim();
+	while (inner.startsWith("(")) {
+		const innerClose = findClosingParen(inner, 1);
+		if (innerClose !== inner.length - 1) { break; }
+		inner = inner.slice(1, -1).trim();
+	}
+	return inner;
+}
+
+/**
+ * Peel any DML envelope (MERGE or INSERT-with-paren-wrapped-SELECT) down to
+ * its inner SELECT. Returns undefined when no peel is needed (plain SELECT,
+ * `INSERT INTO target SELECT ...` without paren wrapping, etc.) — callers
+ * should fall back to the raw SQL in that case.
+ */
+export function peelDmlEnvelope(sql: string): string | undefined {
+	return peelMergeEnvelope(sql) ?? peelInsertEnvelope(sql);
+}
+
+/**
+ * Parse a DML-shaped SQL document (the output of `coa_dry_run_run` — an
+ * INSERT INTO … SELECT, a bare SELECT, or a MERGE INTO … USING ( SELECT … ))
+ * and extract the SELECT-list as parsed columns. Both MERGE and
+ * paren-wrapped INSERT envelopes are peeled to the inner SELECT before
+ * parsing, so the user's editable surface is the SELECT only.
+ *
  * Each column's `expression` is populated so the apply path can pass it to
  * source-mapping inference; `dataType` is best-effort via {@link inferDatatype}
  * and may be empty when no pattern matches (callers should fall back to the
  * existing column's dataType for those).
  *
- * Returns undefined when the input has no recognizable top-level SELECT.
+ * Returns undefined when the input has no recognizable SELECT-list.
  */
 export function parseSelectColumnsForApply(sql: string): ParsedSqlColumn[] | undefined {
-	const sourceParse = parseSqlSourceRefs(sql);
-	const { selectItems } = parseSqlSelectItems(sql, sourceParse.refs);
+	const target = peelDmlEnvelope(sql) ?? sql;
+	const sourceParse = parseSqlSourceRefs(target);
+	const { selectItems } = parseSqlSelectItems(target, sourceParse.refs);
 	if (selectItems.length === 0) { return undefined; }
 
 	const columns: ParsedSqlColumn[] = [];
@@ -188,8 +299,19 @@ export function diffColumns(
 	const unchanged: string[] = [];
 	const typeChanged: Array<{ name: string; from: string; to: string }> = [];
 	const expressionChanged: Array<{ name: string; from: string; to: string }> = [];
-	const tentativelyRemoved: Array<{ name: string; expression: string }> = [];
-	const tentativelyAdded: ParsedSqlColumn[] = [];
+	// Track each tentative remove/add's original index in `existing[]` / `parsed[]`
+	// so the positional rename pass below can pair `existing[i]` with `parsed[i]`
+	// when expression-based pairing isn't available (DDL inputs).
+	const tentativelyRemoved: Array<{ name: string; expression: string; index: number; dataType: string }> = [];
+	const tentativelyAdded: Array<{ col: ParsedSqlColumn; index: number }> = [];
+	const existingIndexByNorm = new Map<string, number>();
+	for (let i = 0; i < existing.length; i++) {
+		const col = existing[i];
+		if (!isPlainObject(col)) { continue; }
+		const name = typeof col.name === 'string' ? col.name : undefined;
+		if (!name) { continue; }
+		existingIndexByNorm.set(normalizeName(name), i);
+	}
 
 	// Pass 1 — name-keyed match. Columns matched here can move into
 	// unchanged / typeChanged / expressionChanged buckets.
@@ -200,6 +322,8 @@ export function diffColumns(
 			tentativelyRemoved.push({
 				name: displayName,
 				expression: extractExistingTransform(existingCol),
+				index: existingIndexByNorm.get(normName) ?? -1,
+				dataType: typeof existingCol.dataType === 'string' ? existingCol.dataType : '',
 			});
 			continue;
 		}
@@ -214,11 +338,18 @@ export function diffColumns(
 		// Expression comparison runs only when the parsed column carries
 		// an expression (DML path). DDL inputs leave it undefined so we
 		// silently skip — type-changes and renames-by-name still work.
+		//
+		// The renderer emits `NULL AS "X"` for columns with no transform,
+		// so a clean round-trip parses back as `NULL`. Treat that as
+		// equivalent to the empty existing transform — otherwise every
+		// blank-transform column would falsely flag as changed on every
+		// apply. A user who *adds* a real transform to a previously-blank
+		// column (e.g. `NULL` → `MIN(X)`) still flags correctly.
 		const existingTransform = extractExistingTransform(existingCol);
 		const exprWasChanged =
 			parsedCol.expression !== undefined
-			&& parsedCol.expression !== ""
-			&& existingTransform !== ""
+			&& !(existingTransform === ""
+				&& (parsedCol.expression === "" || isNullPlaceholder(parsedCol.expression)))
 			&& normalizeExpression(parsedCol.expression) !== normalizeExpression(existingTransform);
 
 		if (typeWasChanged) {
@@ -236,9 +367,11 @@ export function diffColumns(
 		}
 	}
 
-	for (const [normName, parsedCol] of parsedByName) {
-		if (!existingByName.has(normName)) {
-			tentativelyAdded.push(parsedCol);
+	for (let i = 0; i < parsed.length; i++) {
+		const parsedCol = parsed[i];
+		const norm = normalizeName(parsedCol.name);
+		if (!existingByName.has(norm)) {
+			tentativelyAdded.push({ col: parsedCol, index: i });
 		}
 	}
 
@@ -257,15 +390,16 @@ export function diffColumns(
 	// NOT paired — left as drop+add for the user to disambiguate.
 	//
 	// Skipped entirely when expressions are missing on either side (DDL
-	// inputs, or existing columns with no `sources[0].transform`).
+	// inputs, or existing columns with no `sources[0].transform`) — Pass 3
+	// below picks up that case via positional pairing.
 	const renamed: Array<{ from: string; to: string; expression: string }> = [];
 	const removedByExpr = bucketByExpression(tentativelyRemoved.map(r => ({
 		key: r.name,
 		expression: r.expression,
 	})));
 	const addedByExpr = bucketByExpression(tentativelyAdded
-		.filter(a => a.expression !== undefined && a.expression !== "")
-		.map(a => ({ key: a.name, expression: a.expression! })));
+		.filter(a => a.col.expression !== undefined && a.col.expression !== "")
+		.map(a => ({ key: a.col.name, expression: a.col.expression! })));
 
 	// Re-index existing + parsed by name so a paired rename can also pick up
 	// a simultaneous dataType change. Without this, a rename whose type is
@@ -305,10 +439,41 @@ export function diffColumns(
 		}
 	}
 
+	// Pass 3 — positional pairing for items Pass 2 couldn't handle. DDL inputs
+	// carry no expressions, so an interactive rename like `ADDRESS` →
+	// `STREET_ADDRESS` falls out as drop+add through Pass 2 and the apply path
+	// then sends a brand-new column with no `columnID` (rejected by the
+	// Coalesce REST API since v1's columnID-required validation). Pair them
+	// here when `existing[i]` and `parsed[i]` are both unmatched at the same
+	// index AND their dataTypes agree — the dataType match is the safety
+	// guard against silently treating a true drop+add at the same position as
+	// a rename. Renames that simultaneously change dataType still fall through
+	// to drop+add; users can do them in two edits or via the cloud UI.
+	for (const removed of tentativelyRemoved) {
+		if (renamedFromKeys.has(removed.name)) { continue; }
+		if (removed.index < 0) { continue; }
+		const addAtSamePos = tentativelyAdded.find(
+			a => a.index === removed.index && !renamedToKeys.has(a.col.name),
+		);
+		if (!addAtSamePos) { continue; }
+		const newType = addAtSamePos.col.dataType ?? '';
+		if (!newType) { continue; }
+		if (normalizeType(removed.dataType) !== normalizeType(newType)) { continue; }
+		renamed.push({
+			from: removed.name,
+			to: addAtSamePos.col.name,
+			expression: removed.expression,
+		});
+		renamedFromKeys.add(removed.name);
+		renamedToKeys.add(addAtSamePos.col.name);
+	}
+
 	const removed = tentativelyRemoved
 		.filter(r => !renamedFromKeys.has(r.name))
 		.map(r => r.name);
-	const added = tentativelyAdded.filter(a => !renamedToKeys.has(a.name));
+	const added = tentativelyAdded
+		.filter(a => !renamedToKeys.has(a.col.name))
+		.map(a => a.col);
 
 	return { unchanged, typeChanged, renamed, expressionChanged, removed, added };
 }
@@ -345,6 +510,15 @@ function normalizeExpression(expr: string): string {
 		.trim()
 		.replace(/\s+/g, ' ')
 		.replace(/\s*([^\w\s])\s*/g, '$1');
+}
+
+/**
+ * The DML renderer emits `NULL AS "X"` for columns with no transform.
+ * A clean round-trip of a blank-transform column parses back as `NULL`,
+ * which we want to treat as equivalent to an empty existing transform.
+ */
+function isNullPlaceholder(expr: string): boolean {
+	return normalizeExpression(expr).toUpperCase() === 'NULL';
 }
 
 function bucketByExpression(
@@ -513,6 +687,17 @@ export function applyColumnDiff(
 		}
 
 		out.push(updated);
+	}
+
+	// The Coalesce REST PUT schema requires `description` on every entry
+	// in `metadata.columns[]`. Existing cloud columns usually carry it,
+	// but not always (older nodes, columns added through paths that
+	// skipped it). Backfill an empty string so the spread-from-existing
+	// branches above don't propagate a missing field that the API then
+	// rejects with `must have required property 'description'`.
+	for (const col of out) {
+		if (!isPlainObject(col)) { continue; }
+		if (typeof col.description !== 'string') { col.description = ""; }
 	}
 
 	return out;

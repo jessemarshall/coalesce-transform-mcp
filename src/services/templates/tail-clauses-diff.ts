@@ -29,6 +29,7 @@ import {
 	findTopLevelKeywordIndex,
 	stripIdentifierQuotes,
 } from "../pipelines/sql-tokenizer.js";
+import { peelDmlEnvelope } from "./sql-column-diff.js";
 
 export interface OrderByItem {
 	sortColName: string;
@@ -84,20 +85,29 @@ export function extractOrderByClause(sql: string): string | undefined {
 }
 
 /** Shared `<keyword> BY ...` extractor. Confirms the keyword is followed
- *  by `\s+by\b` (so `GROUPING SETS` doesn't false-match) before slicing. */
+ *  by `\s+by\b` (so `GROUPING SETS` doesn't false-match) before slicing.
+ *
+ *  Envelope-aware: for DML wrapped in MERGE / INSERT-with-paren-SELECT
+ *  shapes, the GROUP BY / ORDER BY lives inside the inner SELECT's parens
+ *  and would be skipped by `findTopLevelKeywordIndex`. Peel the envelope
+ *  first so we operate on the inner SELECT body where the clauses are
+ *  actually at top level. Returning undefined for envelope-wrapped SQL
+ *  with a real GROUP BY would mis-trigger a `removed` diff and silently
+ *  flip the node's `groupByAll` flag off. */
 function extractByClause(
 	sql: string,
 	keyword: "group" | "order",
 	terminators: string[],
 ): string | undefined {
-	const start = findTopLevelKeywordIndex(sql, keyword);
+	const target = peelDmlEnvelope(sql) ?? sql;
+	const start = findTopLevelKeywordIndex(target, keyword);
 	if (start < 0) { return undefined; }
 	const after = start + keyword.length;
-	const byMatch = /^\s+by\b/i.exec(sql.slice(after));
+	const byMatch = /^\s+by\b/i.exec(target.slice(after));
 	if (!byMatch) { return undefined; }
 	const bodyStart = after + byMatch[0].length;
-	const endIdx = findTailTerminator(sql, bodyStart, terminators);
-	return sql.slice(bodyStart, endIdx).trim();
+	const endIdx = findTailTerminator(target, bodyStart, terminators);
+	return target.slice(bodyStart, endIdx).trim();
 }
 
 /**

@@ -27,13 +27,16 @@ describe("resolveCoaBinary (integration with bundled @coalescesoftware/coa)", ()
     expect(second).toBe(first);
   });
 
+  // Each cold resolve probes the bundled coa.js for its version, which can
+  // take ~2-3s; doing it twice in one test pushes past vitest's default 5s
+  // timeout under full-suite load. Bump the budget so this isn't flaky.
   it("resets via resetCoaBinaryCache", () => {
     const first = resolveCoaBinary();
     resetCoaBinaryCache();
     const second = resolveCoaBinary();
     expect(second).not.toBe(first);
     expect(second.binaryPath).toBe(first.binaryPath);
-  });
+  }, 15000);
 });
 
 describe("CoaNotFoundError", () => {

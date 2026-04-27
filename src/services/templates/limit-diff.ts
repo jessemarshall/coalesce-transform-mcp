@@ -27,6 +27,7 @@
  *     said identical) with its trailing LIMIT stripped, then append the
  *     user's LIMIT (or omit it for `removed`).
  */
+import { findLastTopLevelOpenParen } from "../pipelines/sql-tokenizer.js";
 
 /** Diff outcome for the LIMIT comparison. */
 export type LimitDiff =
@@ -271,46 +272,6 @@ function extractTrailingLimitInner(sql: string): number | null {
 	if (limitIdx < 0) { return null; }
 	return parseLimitClauseValue(sql.slice(limitIdx + "limit".length));
 }
-
-/** Find the LAST `(` outside strings/comments/inner parens. */
-function findLastTopLevelOpenParen(s: string): number {
-	let inSingleQuote = false;
-	let inDoubleQuote = false;
-	let inBacktick = false;
-	let inBracket = false;
-	let inLineComment = false;
-	let inBlockComment = false;
-	let parenDepth = 0;
-	let lastIdx = -1;
-	for (let i = 0; i < s.length; i++) {
-		const c = s[i]!;
-		const next = s[i + 1];
-		if (inLineComment) { if (c === "\n") { inLineComment = false; } continue; }
-		if (inBlockComment) { if (c === "*" && next === "/") { inBlockComment = false; i++; } continue; }
-		if (inSingleQuote) {
-			if (c === "'" && next === "'") { i++; }
-			else if (c === "'") { inSingleQuote = false; }
-			continue;
-		}
-		if (inDoubleQuote) { if (c === '"') { inDoubleQuote = false; } continue; }
-		if (inBacktick) { if (c === "`") { inBacktick = false; } continue; }
-		if (inBracket) { if (c === "]") { inBracket = false; } continue; }
-		if (c === "'") { inSingleQuote = true; continue; }
-		if (c === '"') { inDoubleQuote = true; continue; }
-		if (c === "`") { inBacktick = true; continue; }
-		if (c === "[") { inBracket = true; continue; }
-		if (c === "-" && next === "-") { inLineComment = true; i++; continue; }
-		if (c === "/" && next === "*") { inBlockComment = true; i++; continue; }
-		if (c === "(") {
-			if (parenDepth === 0) { lastIdx = i; }
-			parenDepth++;
-			continue;
-		}
-		if (c === ")") { if (parenDepth > 0) { parenDepth--; } continue; }
-	}
-	return lastIdx;
-}
-
 
 /**
  * Strip a trailing `LIMIT N` from a joinCondition (used when the user
