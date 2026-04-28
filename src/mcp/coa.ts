@@ -307,11 +307,13 @@ export async function coaDryRunRunHandler(
 const DescribeParams = z.object({
   topic: z
     .string()
+    .min(1, "topic must not be empty")
     .describe(
       `Describe topic. Well-known topics: ${COA_DESCRIBE_TOPICS.join(", ")}. You may also pass 'command' or 'schema' together with a subtopic.`
     ),
   subtopic: z
     .string()
+    .min(1, "subtopic must not be empty when provided")
     .optional()
     .describe(
       "Optional subtopic (command name for topic='command', schema type for topic='schema')."
