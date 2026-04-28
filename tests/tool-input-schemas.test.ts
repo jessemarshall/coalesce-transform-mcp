@@ -410,6 +410,98 @@ describe("Required-string validation across MCP tools", () => {
     expect(getToolParamsSchema(toolSpy, "get_environment").safeParse({ environmentID: "env-1" }).success).toBe(true);
     expect(getToolParamsSchema(toolSpy, "get_workspace").safeParse({ workspaceID: "ws-1" }).success).toBe(true);
   });
+
+  // Registration-level sweep — walks every registered tool's input shape and
+  // checks that any top-level required string field rejects "" at the schema
+  // layer. Catches the class of bug where a new tool ships with `foo:
+  // z.string()` instead of `z.string().min(1, "...")`. The parameterized
+  // cases above stay the source of truth for nested shapes (e.g.
+  // runDetails.environmentID inside start_run.runDetails); this sweep is the
+  // safety net for top-level fields and would have flagged the
+  // get_run_details.runID, get_environment_overview.environmentID, and
+  // coa_describe.topic gaps without anyone having to add explicit cases.
+  it("auto-detects: every top-level required string field on every registered tool rejects \"\"", () => {
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const toolSpy = vi.spyOn(server, "registerTool");
+
+    const client = createMockClient() as any;
+    defineEnvironmentTools(server, client).forEach(t => server.registerTool(...t));
+    defineWorkspaceTools(server, client).forEach(t => server.registerTool(...t));
+    defineProjectTools(server, client).forEach(t => server.registerTool(...t));
+    defineJobTools(server, client).forEach(t => server.registerTool(...t));
+    defineUserTools(server, client).forEach(t => server.registerTool(...t));
+    defineGitAccountTools(server, client).forEach(t => server.registerTool(...t));
+    defineSubgraphTools(server, client).forEach(t => server.registerTool(...t));
+    defineCacheTools(server, client).forEach(t => server.registerTool(...t));
+    defineNodeTools(server, client).forEach(t => server.registerTool(...t));
+    defineWorkshopTools(server, client).forEach(t => server.registerTool(...t));
+    definePipelineTools(server, client).forEach(t => server.registerTool(...t));
+    defineLineageTools(server, client).forEach(t => server.registerTool(...t));
+    defineRunTools(server, client).forEach(t => server.registerTool(...t));
+    defineRenderNodeTools(server, client).forEach(t => server.registerTool(...t));
+    defineGetEnvironmentOverview(server, client).forEach(t => server.registerTool(...t));
+    defineGetEnvironmentHealth(server, client).forEach(t => server.registerTool(...t));
+    defineGetRunDetails(server, client).forEach(t => server.registerTool(...t));
+    defineCoaTools(server).forEach(t => server.registerTool(...t));
+    registerRunAndWait(server, client);
+
+    // Unwrap ZodEffects (refine/transform) until we hit the underlying schema.
+    // A refined string is still a string for our purposes; runID-style schemas
+    // use .regex() which keeps the type ZodString without effects, but a
+    // future field might add a top-level .refine() and we want the sweep to
+    // see through that.
+    function unwrapEffects(schema: z.ZodTypeAny): z.ZodTypeAny {
+      let inner = schema;
+      while ((inner as { _def?: { typeName?: string } })._def?.typeName === "ZodEffects") {
+        inner = (inner as unknown as { _def: { schema: z.ZodTypeAny } })._def.schema;
+      }
+      return inner;
+    }
+
+    // Required strings only — z.string().optional() / .nullable() / .default()
+    // opt out. Detect via _def.typeName so the check doesn't depend on
+    // instanceof walking through compiled Zod's class hierarchy.
+    function isRequiredZodString(schema: z.ZodTypeAny): boolean {
+      const inner = unwrapEffects(schema);
+      const def = (inner as { _def?: { typeName?: string } })._def;
+      return def?.typeName === "ZodString";
+    }
+
+    // Fields that intentionally accept "" — documented contracts where empty
+    // string is a meaningful value (e.g. job selectors where "" means "match
+    // nothing"). New entries here require an explicit code-level reason; the
+    // sweep treats anything not on this list as a gap.
+    const intentionalEmptyAccepted = new Set<string>([
+      // create_workspace_job / update_workspace_job: per the tool descriptions
+      // ("Use empty string to include nothing" / "exclude nothing"), "" is a
+      // documented selector value, not an oversight.
+      "create_workspace_job.includeSelector",
+      "create_workspace_job.excludeSelector",
+      "update_workspace_job.includeSelector",
+      "update_workspace_job.excludeSelector",
+    ]);
+
+    const offenders: string[] = [];
+    for (const call of toolSpy.mock.calls) {
+      const toolName = call[0] as string;
+      const schema = call[1]?.inputSchema as z.ZodObject<z.ZodRawShape> | undefined;
+      if (!schema || !("shape" in schema)) continue;
+      for (const [fieldName, fieldSchema] of Object.entries(schema.shape)) {
+        const field = fieldSchema as z.ZodTypeAny;
+        if (!isRequiredZodString(field)) continue;
+        const result = field.safeParse("");
+        if (!result.success) continue;
+        const id = `${toolName}.${fieldName}`;
+        if (intentionalEmptyAccepted.has(id)) continue;
+        offenders.push(id);
+      }
+    }
+
+    expect(
+      offenders,
+      `Top-level required string fields must reject "" via .min(1, "..."). Offenders:\n  - ${offenders.join("\n  - ")}`
+    ).toEqual([]);
+  });
 });
 
 describe("Pipeline Tool Input Schemas", () => {
