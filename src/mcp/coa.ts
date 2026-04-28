@@ -126,6 +126,7 @@ function buildPreflightErrorResult(args: string[], err: unknown): CoaToolResult 
 const ProjectPathParam = z.object({
   projectPath: z
     .string()
+    .min(1, "projectPath must not be empty")
     .describe(
       "Absolute or relative path to the COA project root (the directory containing data.yml)."
     ),
@@ -517,6 +518,7 @@ const DeployParams = CloudAuthParams.extend({
   environmentID: z.string().min(1, "environmentID must not be empty").describe("Target environment ID to deploy into."),
   plan: z
     .string()
+    .min(1, "plan path must not be empty")
     .describe("Path to the coa-plan.json produced by coa_plan. Must exist before calling."),
   confirmed: z
     .boolean()
