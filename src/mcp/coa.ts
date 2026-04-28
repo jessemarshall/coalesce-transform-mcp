@@ -236,16 +236,17 @@ export async function coaValidateHandler(
   params: z.infer<typeof SelectorParams>,
   runCoaFn: RunCoaFn = runCoa
 ): Promise<CoaToolResult> {
-  const args = ["--json", "validate", "--dir", params.projectPath];
-  pushIf(args, "--workspace", params.workspace);
-  pushIf(args, "--include", params.include);
-  pushIf(args, "--exclude", params.exclude);
   let cwd: string;
   try {
     cwd = validateProjectPath(params.projectPath);
   } catch (err) {
-    return buildPreflightErrorResult(args, err);
+    const fallbackArgs = ["--json", "validate", "--dir", params.projectPath];
+    return buildPreflightErrorResult(fallbackArgs, err);
   }
+  const args = ["--json", "validate", "--dir", cwd];
+  pushIf(args, "--workspace", params.workspace);
+  pushIf(args, "--include", params.include);
+  pushIf(args, "--exclude", params.exclude);
   const result = await runCoaFn(args, { cwd, parseJson: true });
   return buildResult(args, result);
 }
@@ -254,14 +255,15 @@ export async function coaListProjectNodesHandler(
   params: z.infer<typeof ProjectPathParam>,
   runCoaFn: RunCoaFn = runCoa
 ): Promise<CoaToolResult> {
-  const args = ["--json", "create", "--dir", params.projectPath, "--list-nodes"];
-  pushIf(args, "--workspace", params.workspace);
   let cwd: string;
   try {
     cwd = validateProjectPath(params.projectPath);
   } catch (err) {
-    return buildPreflightErrorResult(args, err);
+    const fallbackArgs = ["--json", "create", "--dir", params.projectPath, "--list-nodes"];
+    return buildPreflightErrorResult(fallbackArgs, err);
   }
+  const args = ["--json", "create", "--dir", cwd, "--list-nodes"];
+  pushIf(args, "--workspace", params.workspace);
   const result = await runCoaFn(args, { cwd, parseJson: true });
   return buildResult(args, result);
 }
@@ -272,16 +274,17 @@ export async function coaDryRunCreateHandler(
   params: z.infer<typeof DryRunParams>,
   runCoaFn: RunCoaFn = runCoa
 ): Promise<CoaToolResult> {
-  const args = ["--verbose", "create", "--dir", params.projectPath, "--dry-run"];
-  pushIf(args, "--workspace", params.workspace);
-  pushIf(args, "--include", params.include);
-  pushIf(args, "--exclude", params.exclude);
   let cwd: string;
   try {
     cwd = validateProjectPath(params.projectPath);
   } catch (err) {
-    return buildPreflightErrorResult(args, err);
+    const fallbackArgs = ["--verbose", "create", "--dir", params.projectPath, "--dry-run"];
+    return buildPreflightErrorResult(fallbackArgs, err);
   }
+  const args = ["--verbose", "create", "--dir", cwd, "--dry-run"];
+  pushIf(args, "--workspace", params.workspace);
+  pushIf(args, "--include", params.include);
+  pushIf(args, "--exclude", params.exclude);
   const result = await runCoaFn(args, { cwd });
   return buildResult(args, result);
 }
@@ -290,16 +293,17 @@ export async function coaDryRunRunHandler(
   params: z.infer<typeof DryRunParams>,
   runCoaFn: RunCoaFn = runCoa
 ): Promise<CoaToolResult> {
-  const args = ["--verbose", "run", "--dir", params.projectPath, "--dry-run"];
-  pushIf(args, "--workspace", params.workspace);
-  pushIf(args, "--include", params.include);
-  pushIf(args, "--exclude", params.exclude);
   let cwd: string;
   try {
     cwd = validateProjectPath(params.projectPath);
   } catch (err) {
-    return buildPreflightErrorResult(args, err);
+    const fallbackArgs = ["--verbose", "run", "--dir", params.projectPath, "--dry-run"];
+    return buildPreflightErrorResult(fallbackArgs, err);
   }
+  const args = ["--verbose", "run", "--dir", cwd, "--dry-run"];
+  pushIf(args, "--workspace", params.workspace);
+  pushIf(args, "--include", params.include);
+  pushIf(args, "--exclude", params.exclude);
   const result = await runCoaFn(args, { cwd });
   return buildResult(args, result);
 }
