@@ -128,6 +128,7 @@ export function defineRunTools(
       runID: RunIDSchema.describe("The numeric run ID (integer) of the run to cancel"),
       orgID: z
         .string()
+        .min(1, "orgID must not be empty when provided")
         .optional()
         .describe("The organization ID. Optional if COALESCE_ORG_ID is set, or if `orgID` is present in the active ~/.coa/config profile."),
       environmentID: z.string().min(1, "environmentID must not be empty").describe("The environment ID the run belongs to"),
