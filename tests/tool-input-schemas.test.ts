@@ -17,6 +17,9 @@ import { defineLineageTools } from "../src/mcp/lineage.js";
 import { defineRunTools } from "../src/mcp/runs.js";
 import { defineRenderNodeTools } from "../src/mcp/render-node.js";
 import { registerRunAndWait } from "../src/workflows/run-and-wait.js";
+import { defineGetEnvironmentOverview } from "../src/workflows/get-environment-overview.js";
+import { defineGetEnvironmentHealth } from "../src/workflows/get-environment-health.js";
+import { defineGetRunDetails } from "../src/workflows/get-run-details.js";
 
 const VALID_PIPELINE_PLAN = {
   version: 1,
@@ -265,6 +268,10 @@ describe("Required-string validation across MCP tools", () => {
     defineLineageTools(server, client).forEach(t => server.registerTool(...t));
     defineRunTools(server, client).forEach(t => server.registerTool(...t));
     defineRenderNodeTools(server, client).forEach(t => server.registerTool(...t));
+    defineGetEnvironmentOverview(server, client).forEach(t => server.registerTool(...t));
+    defineGetEnvironmentHealth(server, client).forEach(t => server.registerTool(...t));
+    defineGetRunDetails(server, client).forEach(t => server.registerTool(...t));
+    defineCoaTools(server).forEach(t => server.registerTool(...t));
     registerRunAndWait(server, client);
 
     const cases: Array<{ tool: string; input: Record<string, unknown> }> = [
@@ -363,6 +370,18 @@ describe("Required-string validation across MCP tools", () => {
       // `diskNode: {}` previously fed an empty object into diskNodeToCloud.
       { tool: "parse_disk_node_to_workspace_body", input: { yaml: "" } },
       { tool: "parse_disk_node_to_workspace_body", input: { diskNode: {} } },
+      // Workflow tools — get_environment_overview / get_environment_health /
+      // get_run_details. Their handlers call validatePathSegment, which throws
+      // at runtime, but the schema-layer rejection is what makes the empty-
+      // string contract consistent across every tool family.
+      { tool: "get_environment_overview", input: { environmentID: "" } },
+      { tool: "get_environment_health", input: { environmentID: "" } },
+      { tool: "get_run_details", input: { runID: "" } },
+      // coa_describe topic must not be empty — `coa describe ""` would shell
+      // out with no topic and surface a confusing CLI error instead of a clear
+      // tool-side validation message.
+      { tool: "coa_describe", input: { topic: "" } },
+      { tool: "coa_describe", input: { topic: "selectors", subtopic: "" } },
     ];
 
     for (const { tool, input } of cases) {

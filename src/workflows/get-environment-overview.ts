@@ -31,7 +31,10 @@ export function defineGetEnvironmentOverview(_server: McpServer, client: Coalesc
       description:
         "Get environment details and all its deployed nodes in a single call.\n\nArgs:\n  - environmentID (string, required): The environment ID\n\nReturns:\n  { environment: EnvironmentObject, nodes: NodeObject[] }",
       inputSchema: z.object({
-        environmentID: z.string().describe("The environment ID"),
+        environmentID: z
+          .string()
+          .min(1, "environmentID must not be empty")
+          .describe("The environment ID"),
       }),
       annotations: READ_ONLY_ANNOTATIONS,
     }, getEnvironmentOverview),

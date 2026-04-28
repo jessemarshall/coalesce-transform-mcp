@@ -464,6 +464,7 @@ export function defineGetEnvironmentHealth(
       inputSchema: z.object({
         environmentID: z
           .string()
+          .min(1, "environmentID must not be empty")
           .describe("The environment ID to assess health for"),
       }),
       annotations: READ_ONLY_ANNOTATIONS,
