@@ -351,6 +351,13 @@ describe("Required-string validation across MCP tools", () => {
       { tool: "start_run", input: { runDetails: { environmentID: "env-1", jobID: "" }, confirmRunAllNodes: true } },
       { tool: "run_and_wait", input: { runDetails: { environmentID: "", workspaceID: "ws-1" }, confirmRunAllNodes: true } },
       { tool: "run_and_wait", input: { runDetails: { environmentID: "env-1", jobID: "" }, confirmRunAllNodes: true } },
+      // cancel_run.orgID is optional but must reject "" when explicitly
+      // provided — handler falls back to env/profile when orgID is absent,
+      // and we don't want "" to bypass that fallback by sending a blank
+      // string to the scheduler.
+      { tool: "cancel_run", input: { runID: "401", environmentID: "env-1", orgID: "", confirmed: true } },
+      { tool: "cancel_run", input: { runID: "", environmentID: "env-1", confirmed: true } },
+      { tool: "cancel_run", input: { runID: "401", environmentID: "", confirmed: true } },
       { tool: "get_upstream_nodes", input: { workspaceID: "", nodeID: "n-1" } },
       { tool: "get_upstream_nodes", input: { workspaceID: "ws-1", nodeID: "" } },
       { tool: "get_downstream_nodes", input: { workspaceID: "", nodeID: "n-1" } },
