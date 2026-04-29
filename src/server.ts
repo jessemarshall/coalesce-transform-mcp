@@ -145,7 +145,14 @@ Customization:
 Setup (local coa CLI):
   diagnose_setup — probe which setup pieces are configured (token, snowflake creds, repo path, coa doctor)
   coa_doctor — full coa doctor check against a local project
-  coa_bootstrap_workspaces — write a starter workspaces.yml when one is missing (destructive, requires confirmation; produces placeholder values the user must edit)
+  coa_describe — fetch coa's self-describing documentation by topic
+Local coa workflows (read-only):
+  coa_validate — validate a coa project (parses with --json)
+  coa_list_project_nodes — list every node coa sees in a project
+  coa_dry_run_create, coa_dry_run_run — render DDL/DML SQL without warehouse execution
+Local coa execution (destructive — require confirmation):
+  coa_bootstrap_workspaces — write a starter workspaces.yml from locations.yml (placeholder values; user must edit before running warehouse ops)
+  coa_create, coa_run, coa_plan, coa_deploy, coa_refresh — execute coa against the configured warehouse
 
 TYPICAL WORKFLOWS:
 
