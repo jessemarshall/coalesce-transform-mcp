@@ -92,6 +92,7 @@ Discovery (start here for any task):
   get_workspace_node, get_environment_node — full node detail by ID
   analyze_workspace_patterns — compact workspace profile for large workspaces
   list_environment_jobs — resolve job IDs for runs
+  list_job_nodes — resolve a job's include/exclude selectors into concrete workspace nodes, grouped by subgraph
 
 Pipeline building (always plan first):
   plan_pipeline → create_pipeline_from_plan or create_pipeline_from_sql
@@ -105,6 +106,8 @@ Node editing:
   replace_workspace_node_columns — replace full column set
   convert_join_to_aggregation, apply_join_condition — join operations
   complete_node_configuration — auto-fill config from repo node type definition
+  serialize_workspace_node_to_disk_yaml, parse_disk_node_to_workspace_body — convert between cloud and disk YAML shapes for round-trip workflows
+  apply_sql_to_workspace_node — round-trip edits on rendered DDL/DML SQL (coa_dry_run_create / coa_dry_run_run output) back into a cloud node
 
 Execution:
   run_and_wait, retry_and_wait — preferred: end-to-end run outcome in one call
@@ -138,6 +141,18 @@ Users and admin:
 
 Customization:
   personalize_skills — export bundled skill files to a local directory for customization
+
+Setup (local coa CLI):
+  diagnose_setup — probe which setup pieces are configured (token, snowflake creds, repo path, coa doctor)
+  coa_doctor — full coa doctor check against a local project
+  coa_describe — fetch coa's self-describing documentation by topic
+Local coa workflows (read-only):
+  coa_validate — validate a coa project (parses with --json)
+  coa_list_project_nodes — list every node coa sees in a project
+  coa_dry_run_create, coa_dry_run_run — render DDL/DML SQL without warehouse execution
+Local coa execution (destructive — require confirmation):
+  coa_bootstrap_workspaces — write a starter workspaces.yml from locations.yml (placeholder values; user must edit before running warehouse ops)
+  coa_create, coa_run, coa_plan, coa_deploy, coa_refresh — execute coa against the configured warehouse
 
 TYPICAL WORKFLOWS:
 
