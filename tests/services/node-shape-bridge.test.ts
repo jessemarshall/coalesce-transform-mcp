@@ -408,16 +408,19 @@ describe("field-mapping tables (sanity checks)", () => {
     expect(cols?.elementMap).toBe(COLUMN_FIELD_MAP);
   });
 
-  // Locks in current walker behavior. Disk-only fields configured with `diskDefault`
-  // (and no `cloud` path) are SILENTLY SKIPPED — the walker only fires defaults
-  // when both `sourcePath` and `targetPath` resolve. NODE_FIELD_MAP / COLUMN_FIELD_MAP
-  // each declare such rules (`deployEnabled`, `appliedColumnTests`) that document
-  // intent but never materialize. If a future change makes disk-only diskDefault
-  // actually fire, this test will fail and force a deliberate update.
-  it("disk-only diskDefault rules do not emit (current walker behavior)", () => {
+  // BUG GUARD. Disk-only fields configured with `diskDefault` (and no `cloud`
+  // path) are SILENTLY SKIPPED — the walker at node-shape-bridge.ts:236 only
+  // fires defaults when both `sourcePath` and `targetPath` resolve. NODE_FIELD_MAP
+  // / COLUMN_FIELD_MAP each declare such rules (`deployEnabled`,
+  // `appliedColumnTests`) whose intent never materializes. The fix is either to
+  // drop the `sourcePath` requirement when `diskDefault`/`cloudDefault` is set
+  // and the target side is present, or to delete the dead rules. When the
+  // walker is fixed, this test should fail and be deleted.
+  it("disk-only diskDefault rules silently skip (BUG — see node-shape-bridge.ts diskDefault guard)", () => {
     const table: FieldMapping[] = [
       { disk: ["onlyDisk"], diskDefault: "would-be-default" },
     ];
+    // TODO: when the walker is fixed, this test should fail and be deleted.
     const out = transform({}, table, "cloudToDisk");
     expect(out).toEqual({});
   });
