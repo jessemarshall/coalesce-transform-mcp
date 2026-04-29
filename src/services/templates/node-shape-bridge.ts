@@ -232,9 +232,13 @@ function transform(
       continue;
     }
 
-    // Standard field-to-field copy.
-    if (sourcePath && targetPath) {
-      const value = getAt(input, sourcePath);
+    // Standard field-to-field copy (or default fill when the source side
+    // has no path or no value). A rule that declares only one side with a
+    // direction-appropriate default still emits the default — e.g.
+    // `{ disk: ["operation", "deployEnabled"], diskDefault: true }` writes
+    // `deployEnabled: true` on cloud → disk even though there's no cloud field.
+    if (targetPath) {
+      const value = sourcePath ? getAt(input, sourcePath) : undefined;
       if (value !== undefined) {
         if (mapping.elementMap && Array.isArray(value)) {
           // Recurse into each array element with the nested mapping.
@@ -254,7 +258,7 @@ function transform(
         continue;
       }
 
-      // Source side has no value — fall back to direction-appropriate default.
+      // Source side has no value (or no source path) — fall back to direction-appropriate default.
       const fallback = direction === "cloudToDisk" ? mapping.diskDefault : mapping.cloudDefault;
       if (fallback !== undefined) {
         setAt(out, targetPath, fallback);

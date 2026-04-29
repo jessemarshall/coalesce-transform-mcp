@@ -79,11 +79,10 @@ describe("cloudNodeToDisk", () => {
     expect(operation.materializationType).toBe("table");
     expect(operation.isMultisource).toBe(false);
     expect(operation.config).toEqual({ testsEnabled: true });
-    // Note: the field map defines `deployEnabled` with `diskDefault: true` but no
-    // cloud path, so the walker's `sourcePath && targetPath` guard skips it. The
-    // current bridge does not emit deployEnabled — see the "field-mapping tables"
-    // suite below for a sanity check that documents this.
-    expect(operation.deployEnabled).toBeUndefined();
+    // `deployEnabled` is disk-only with `diskDefault: true`. The cloud body
+    // never carries it; the walker fills it in on the way down so coa accepts
+    // the YAML without complaint.
+    expect(operation.deployEnabled).toBe(true);
   });
 
   it("drops cloud-only bookkeeping fields (createdAt, updatedAt, …)", () => {
@@ -156,10 +155,10 @@ describe("cloudNodeToDisk", () => {
 
     expect(second.description).toBe(""); // diskDefault for description
     expect(second.nullable).toBe(true); // diskDefault for nullable
-    // Note: appliedColumnTests has a `diskDefault: {}` rule but no `cloud` path,
-    // so the walker's `sourcePath && targetPath` guard skips it. The default
-    // never fires — see the "field-mapping tables" suite below.
-    expect(second.appliedColumnTests).toBeUndefined();
+    // appliedColumnTests is disk-only with `diskDefault: {}`. Cloud has no
+    // equivalent; the walker fills the empty default so coa-emitted YAML
+    // carries the expected key.
+    expect(second.appliedColumnTests).toEqual({});
   });
 
   it("works when the cloud node has no metadata block", () => {
@@ -408,20 +407,38 @@ describe("field-mapping tables (sanity checks)", () => {
     expect(cols?.elementMap).toBe(COLUMN_FIELD_MAP);
   });
 
-  // BUG GUARD. Disk-only fields configured with `diskDefault` (and no `cloud`
-  // path) are SILENTLY SKIPPED — the walker at node-shape-bridge.ts:236 only
-  // fires defaults when both `sourcePath` and `targetPath` resolve. NODE_FIELD_MAP
-  // / COLUMN_FIELD_MAP each declare such rules (`deployEnabled`,
-  // `appliedColumnTests`) whose intent never materializes. The fix is either to
-  // drop the `sourcePath` requirement when `diskDefault`/`cloudDefault` is set
-  // and the target side is present, or to delete the dead rules. When the
-  // walker is fixed, this test should fail and be deleted.
-  it("disk-only diskDefault rules silently skip (BUG — see node-shape-bridge.ts diskDefault guard)", () => {
+  // Disk-only rules with `diskDefault` fire on cloud → disk even when there's
+  // no `cloud` path; cloud-only rules with `cloudDefault` fire on disk → cloud
+  // symmetrically. Without this, defaults declared in NODE_FIELD_MAP /
+  // COLUMN_FIELD_MAP (`deployEnabled`, `appliedColumnTests`) would be dead
+  // declarations rather than actual emit-on-conversion behavior.
+  it("disk-only diskDefault rules emit on cloud → disk", () => {
     const table: FieldMapping[] = [
-      { disk: ["onlyDisk"], diskDefault: "would-be-default" },
+      { disk: ["onlyDisk"], diskDefault: "default-value" },
     ];
-    // TODO: when the walker is fixed, this test should fail and be deleted.
     const out = transform({}, table, "cloudToDisk");
+    expect(out).toEqual({ onlyDisk: "default-value" });
+  });
+
+  it("cloud-only cloudDefault rules emit on disk → cloud", () => {
+    const table: FieldMapping[] = [
+      { cloud: ["onlyCloud"], cloudDefault: "default-value" },
+    ];
+    const out = transform({}, table, "diskToCloud");
+    expect(out).toEqual({ onlyCloud: "default-value" });
+  });
+
+  it("disk-only rules without a default still emit nothing", () => {
+    const table: FieldMapping[] = [{ disk: ["onlyDisk"] }];
+    const out = transform({}, table, "cloudToDisk");
+    expect(out).toEqual({});
+  });
+
+  it("disk-only diskDefault rules drop on disk → cloud (no cloud target path)", () => {
+    const table: FieldMapping[] = [
+      { disk: ["onlyDisk"], diskDefault: "default-value" },
+    ];
+    const out = transform({ onlyDisk: "x" }, table, "diskToCloud");
     expect(out).toEqual({});
   });
 });
