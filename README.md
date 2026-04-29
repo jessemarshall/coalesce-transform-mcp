@@ -371,6 +371,7 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 
 - **`list_environment_jobs`** - List all jobs for an environment
 - **`get_environment_job`** - Get details of a specific job
+- **`list_job_nodes`** - Resolve a workspace job's selectors into concrete nodes, grouped by subgraph
 - **`get_workspace_subgraph`** - Get details of a specific subgraph by UUID (the public API has no subgraph list endpoint — look up UUIDs via the repo's `subgraphs/` folder or the local cache populated on create)
 - **`list_runs`** - List runs with optional filters
 - **`get_run`** - Get details of a specific run
@@ -438,6 +439,12 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 - **`complete_node_configuration`** - Intelligently complete a node's configuration by analyzing context
 - **`apply_join_condition`** - Auto-generate and write a FROM/JOIN/ON clause for a multi-predecessor node
 - **`convert_join_to_aggregation`** - Convert a join-style node into an aggregated fact-style node
+
+**Disk ↔ cloud round-trip**
+
+- **`serialize_workspace_node_to_disk_yaml`** - Convert a cloud workspace node to the on-disk `nodes/*.yml` shape coa reads (drop into a coa project for dry-run rendering)
+- **`parse_disk_node_to_workspace_body`** - Convert an on-disk coa node YAML back into a cloud workspace-node body for `set_workspace_node` / `update_workspace_node`
+- **`apply_sql_to_workspace_node`** - Round-trip user edits on rendered DDL/DML SQL (`coa_dry_run_create` / `coa_dry_run_run` output) back into a cloud node — column diff, source-mapping inference, GROUP BY / ORDER BY / LIMIT, INSERT-target rename
 
 **Subgraphs & jobs**
 
@@ -550,6 +557,7 @@ Set `COALESCE_MCP_SKILLS_DIR` to make skills editable on disk. Each skill resolv
 - **`personalize_skills`** - Export bundled skill files to a local directory for customization
 - **`diagnose_setup`** - Stateless probe reporting configured setup pieces; pairs with the `/coalesce-setup` MCP prompt
 - 🧰 **`coa_doctor`** - Check config, credentials, and warehouse connectivity end-to-end for a local project
+- 🧰 **`coa_bootstrap_workspaces`** ⚠️ - Run `coa doctor --fix` to write a starter `workspaces.yml` from `locations.yml` (placeholder values — user must edit before running warehouse operations)
 - 🧰 **`coa_describe`** - Fetch a section of COA's self-describing documentation by topic + optional subtopic (also available as `coalesce://coa/describe/*` resources)
 
 </details>
