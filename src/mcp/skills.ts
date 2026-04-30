@@ -22,7 +22,7 @@ const LOCAL_WRITE_ANNOTATIONS = {
   openWorldHint: false,
 } as const;
 
-export interface PersonalizeSkillsResult {
+interface PersonalizeSkillsResult {
   directory: string;
   created: string[];
   alreadyExisted: string[];
