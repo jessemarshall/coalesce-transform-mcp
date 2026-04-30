@@ -50,14 +50,6 @@ import {
 } from "../services/templates/insert-header-diff.js";
 import { isPlainObject } from "../utils.js";
 
-// Mark unused to satisfy `noUnusedParameters`; the SDK helper signatures take a
-// server instance so other tools can register callbacks. These two converters
-// are pure enough that we don't need it, but we keep the parameter for
-// signature symmetry with `defineCoaTools(server)`.
-function _unused(server: McpServer): void {
-  void server;
-}
-
 /**
  * Tools that bridge the two Coalesce workspace-node serializations:
  *
@@ -66,18 +58,14 @@ function _unused(server: McpServer): void {
  *   - **Disk YAML shape**: read from `nodes/*.yml` by coa. Wraps under `operation:`,
  *     uses `columnReference.{columnCounter,stepCounter}` and `sourceColumnReferences[]`.
  *
- * These two tools expose the bidirectional converter (see
- * services/templates/node-shape-bridge.ts) so callers can:
- *   - Pull a cloud node and write it into a local coa project for dry-run rendering
- *     ({@link defineSerializeWorkspaceNodeToDiskYaml}).
- *   - Read a node from disk and push it back to the cloud workspace
- *     ({@link defineParseDiskNodeToWorkspaceBody}).
+ * These tools are pure converters / writers and don't need `server` for
+ * elicitation, but the registration call site passes it for signature
+ * symmetry with the rest of the `define*Tools` family.
  */
 export function defineRenderNodeTools(
-  server: McpServer,
+  _server: McpServer,
   client: CoalesceClient,
 ): ToolDefinition[] {
-  _unused(server);
   return [
     defineSerializeWorkspaceNodeToDiskYaml(client),
     defineParseDiskNodeToWorkspaceBody(client),
@@ -167,11 +155,10 @@ const ParseInputSchema = z
     message: "Provide either `yaml` or `diskNode`.",
   });
 
-function defineParseDiskNodeToWorkspaceBody(client: CoalesceClient): ToolDefinition {
-  // The client is unused (this tool is a pure converter), but keeping the
+function defineParseDiskNodeToWorkspaceBody(_client: CoalesceClient): ToolDefinition {
+  // The client is unused (this tool is a pure converter); keeping the
   // signature uniform with the rest of the file makes the registration
   // boilerplate in defineRenderNodeTools symmetric.
-  void client;
   const name = "parse_disk_node_to_workspace_body";
   return [
     name,
