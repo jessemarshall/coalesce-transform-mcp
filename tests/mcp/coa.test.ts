@@ -80,11 +80,21 @@ describe("coa_doctor handler", () => {
     expect(spy.calls[0].args).toContain("prod");
   });
 
-  it("throws before spawning when projectPath is invalid", async () => {
+  it("returns an actionable preflight error result (not a throw) when projectPath is invalid", async () => {
+    // Throwing produces the cryptic "Structured content does not match the
+    // tool's output schema" error from the SDK because the error response
+    // doesn't satisfy the declared CoaToolResult outputSchema. Returning a
+    // preflight-error CoaToolResult keeps the response well-formed.
     const { spy, run } = fakeRunCoa();
-    await expect(
-      coaDoctorHandler({ projectPath: "/does/not/exist-12345" }, run)
-    ).rejects.toThrow(/does not exist/);
+    const result = await coaDoctorHandler(
+      { projectPath: "/does/not/exist-12345" },
+      run
+    );
+    expect(result.exitCode).toBe(-1);
+    expect(result.timedOut).toBe(false);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toMatch(/does not exist/);
+    expect(result.command).toContain("/does/not/exist-12345");
     expect(spy.calls).toHaveLength(0);
   });
 
@@ -111,6 +121,63 @@ describe("coa_doctor handler", () => {
     const result = await coaDoctorHandler({ projectPath: tmpProject }, run);
     expect(result.preflightWarnings).toBeUndefined();
   });
+});
+
+describe("invalid projectPath — uniform preflight-error result across all coa_* handlers", () => {
+  // Every coa_* handler that takes projectPath must surface validateProjectPath
+  // failures as a CoaToolResult-shaped preflight-error response (exitCode -1,
+  // actionable stderr) rather than throwing. Throwing produces the cryptic
+  // "Structured content does not match the tool's output schema" error from
+  // the MCP SDK because the response then doesn't satisfy the declared output
+  // schema. This guard keeps that contract uniform across the family — adding
+  // a new coa_* handler that bypasses withProjectPath will fail this test.
+  const cases: Array<{
+    name: string;
+    handler: (params: any, run: any) => Promise<any>;
+    extraParams?: Record<string, unknown>;
+  }> = [
+    { name: "coa_doctor", handler: coaDoctorHandler },
+    {
+      name: "coa_bootstrap_workspaces",
+      handler: coaBootstrapWorkspacesHandler,
+      extraParams: { confirmed: true },
+    },
+    { name: "coa_validate", handler: coaValidateHandler },
+    { name: "coa_list_project_nodes", handler: coaListProjectNodesHandler },
+    { name: "coa_dry_run_create", handler: coaDryRunCreateHandler },
+    { name: "coa_dry_run_run", handler: coaDryRunRunHandler },
+    {
+      name: "coa_create",
+      handler: coaCreateHandler,
+      extraParams: { confirmed: true },
+    },
+    {
+      name: "coa_run",
+      handler: coaRunHandler,
+      extraParams: { confirmed: true },
+    },
+    {
+      name: "coa_plan",
+      handler: coaPlanHandler,
+      extraParams: { environmentID: "env-1" },
+    },
+  ];
+
+  for (const { name, handler, extraParams } of cases) {
+    it(`${name} returns preflight-error result for nonexistent projectPath`, async () => {
+      const { spy, run } = fakeRunCoa();
+      const result = await handler(
+        { projectPath: "/does/not/exist-12345", ...extraParams },
+        run
+      );
+      expect(result.exitCode).toBe(-1);
+      expect(result.timedOut).toBe(false);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toMatch(/does not exist/);
+      expect(result.command).toContain("/does/not/exist-12345");
+      expect(spy.calls).toHaveLength(0);
+    });
+  }
 });
 
 describe("coa_bootstrap_workspaces handler", () => {
