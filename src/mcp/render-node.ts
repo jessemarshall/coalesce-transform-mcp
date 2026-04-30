@@ -58,11 +58,19 @@ import { isPlainObject } from "../utils.js";
  *   - **Disk YAML shape**: read from `nodes/*.yml` by coa. Wraps under `operation:`,
  *     uses `columnReference.{columnCounter,stepCounter}` and `sourceColumnReferences[]`.
  *
- * These tools are pure converters / writers and don't need `server` for
- * elicitation, but the registration call site passes it for signature
- * symmetry with the rest of the `define*Tools` family.
+ * These tools expose the bidirectional converter (see
+ * services/templates/node-shape-bridge.ts) so callers can:
+ *   - Pull a cloud node and write it into a local coa project for dry-run rendering
+ *     ({@link defineSerializeWorkspaceNodeToDiskYaml}).
+ *   - Read a node from disk and push it back to the cloud workspace
+ *     ({@link defineParseDiskNodeToWorkspaceBody}).
+ *
+ * `defineApplySqlToWorkspaceNode` is also registered here — it composes the
+ * converter with structural-diff helpers to round-trip an edited SQL block
+ * back into the cloud workspace body.
  */
 export function defineRenderNodeTools(
+  // _server kept for signature symmetry with the rest of the `define*Tools` family.
   _server: McpServer,
   client: CoalesceClient,
 ): ToolDefinition[] {
