@@ -69,3 +69,11 @@ export function sanitizeForFilename(value: string): string {
 export function safeErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
+
+/**
+ * Returns `value` when it is a string, otherwise `null`. Convenience for
+ * narrowing `unknown` fields off API responses or parsed YAML/JSON.
+ */
+export function asString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
