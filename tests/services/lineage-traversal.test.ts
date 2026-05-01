@@ -191,6 +191,20 @@ describe("walkDownstream", () => {
     expect(result.map((n) => n.nodeID).sort()).toEqual(["B", "C", "D"]);
     expect(result.every((n) => n.depth === 1)).toBe(true);
   });
+
+  it("survives a cycle without infinite-looping", () => {
+    // A → B → A (mirror of the upstream cycle test — defensive parity so a
+    // future regression on one walker side doesn't go undetected)
+    const cache = buildCache({
+      nodes: {
+        A: { name: "A", nodeType: "src" },
+        B: { name: "B", nodeType: "stg" },
+      },
+      edges: { A: ["B"], B: ["A"] },
+    });
+    const result = walkDownstream(cache, "A");
+    expect(result.map((n) => n.nodeID)).toEqual(["B"]);
+  });
 });
 
 describe("walkColumnLineage", () => {
@@ -249,6 +263,31 @@ describe("walkColumnLineage", () => {
     });
     const result = walkColumnLineage(cache, "a", "c1");
     expect(result).toEqual([]);
+  });
+
+  it("emits a converged downstream column once when two upstream paths reach it", () => {
+    // src.x → stgA.x → fact.merged
+    // src.x → stgB.x → fact.merged   (same target)
+    // The visited-key set must dedupe on `fact:merged` so the entry appears once.
+    const cache = buildCache({
+      nodes: {
+        src: { name: "src", nodeType: "src", columns: [{ id: "x", name: "x" }] },
+        stgA: { name: "stgA", nodeType: "stg", columns: [{ id: "x", name: "x" }] },
+        stgB: { name: "stgB", nodeType: "stg", columns: [{ id: "x", name: "x" }] },
+        fact: { name: "fact", nodeType: "fact", columns: [{ id: "merged", name: "merged" }] },
+      },
+      edges: { src: ["stgA", "stgB"], stgA: ["fact"], stgB: ["fact"] },
+      columnEdges: {
+        [columnKey("src", "x")]: [columnKey("stgA", "x"), columnKey("stgB", "x")],
+        [columnKey("stgA", "x")]: [columnKey("fact", "merged")],
+        [columnKey("stgB", "x")]: [columnKey("fact", "merged")],
+      },
+    });
+    const result = walkColumnLineage(cache, "src", "x");
+    const factMerged = result.filter(
+      (e) => e.direction === "downstream" && e.nodeID === "fact" && e.columnID === "merged"
+    );
+    expect(factMerged).toHaveLength(1);
   });
 });
 
