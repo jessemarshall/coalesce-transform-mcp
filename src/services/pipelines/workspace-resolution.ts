@@ -1,6 +1,6 @@
 import { type CoalesceClient } from "../../client.js";
 import { listWorkspaceNodeTypes } from "../workspace/mutations.js";
-import { isPlainObject, rethrowNonRecoverableOrServerError } from "../../utils.js";
+import { isPlainObject, rethrowNonRecoverableOrServerError, safeErrorMessage } from "../../utils.js";
 import { type WorkspaceNodeIndexEntry } from "../shared/node-helpers.js";
 import { getWorkspaceNodeIndex } from "../cache/workspace-node-index.js";
 import { getCachedOrFetchWorkspaceNodeDetail } from "../cache/workspace-node-detail-index.js";
@@ -123,7 +123,7 @@ export async function resolveSqlRefsToWorkspaceNodes(
         );
       } catch (error) {
         rethrowNonRecoverableOrServerError(error);
-        const reason = error instanceof Error ? error.message : String(error);
+        const reason = safeErrorMessage(error);
         warnings.push(`Could not fetch details for candidates of "${ref.nodeName}" (${reason}).`);
         openQuestions.push(
           `Multiple workspace nodes named "${ref.nodeName}" were found but could not be fully inspected. Provide sourceNodeIDs before creation.`
@@ -182,7 +182,7 @@ export async function resolveSqlRefsToWorkspaceNodes(
       );
     } catch (error) {
       rethrowNonRecoverableOrServerError(error);
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = safeErrorMessage(error);
       warnings.push(`Could not fetch predecessor node "${ref.nodeName}" (${ref.nodeID}): ${reason}. Column passthrough will not be available.`);
       continue;
     }
@@ -299,7 +299,7 @@ export async function getWorkspaceNodeTypeInventory(
   } catch (error) {
     // Auth and network errors indicate a broken session — let them propagate
     rethrowNonRecoverableOrServerError(error);
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = safeErrorMessage(error);
     return {
       nodeTypes: [],
       counts: {},

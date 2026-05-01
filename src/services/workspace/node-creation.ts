@@ -4,7 +4,7 @@ import {
   createWorkspaceNode,
 } from "../../coalesce/api/nodes.js";
 import { assertNoSqlOverridePayload } from "../policies/sql-override.js";
-import { isPlainObject, uniqueInOrder, rethrowNonRecoverableApiError } from "../../utils.js";
+import { isPlainObject, uniqueInOrder, rethrowNonRecoverableApiError, safeErrorMessage } from "../../utils.js";
 import { inferFamily } from "../pipelines/node-type-selection.js";
 import {
   getNodeColumnCount,
@@ -788,7 +788,7 @@ async function createWorkspaceNodeFromPredecessorInner(
         resultNode = await getWorkspaceNode(client, { workspaceID: params.workspaceID, nodeID: created.id });
       } catch (error) {
         rethrowNonRecoverableApiError(error);
-        const reason = error instanceof Error ? error.message : String(error);
+        const reason = safeErrorMessage(error);
         process.stderr.write(`[createWorkspaceNodeFromPredecessor] Re-fetch after config completion skip failed: ${reason}\n`);
         resultNode = createdNode;
         nodeDataStale = true;

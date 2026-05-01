@@ -33,7 +33,7 @@ import {
   validatePathSegment,
   type ToolDefinition,
 } from "../coalesce/types.js";
-import { isPlainObject, sanitizeForFilename } from "../utils.js";
+import { isPlainObject, sanitizeForFilename, safeErrorMessage } from "../utils.js";
 import {
   buildPipelinePlanFromIntent,
 } from "../services/pipelines/intent.js";
@@ -248,7 +248,7 @@ function cleanupOldPlanFiles(dir: string, workspaceID: string, maxToKeep: number
     }
   } catch (error) {
     // Best-effort cleanup — don't fail the write, but log for traceability
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = safeErrorMessage(error);
     process.stderr.write(`[coalesce-transform-mcp] plan file cleanup failed: ${reason}\n`);
   }
 }

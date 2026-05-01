@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSy
 import { join } from "node:path";
 import { z } from "zod";
 import type { CoalesceClient } from "../../client.js";
-import { isPlainObject, rethrowNonRecoverableApiError } from "../../utils.js";
+import { isPlainObject, rethrowNonRecoverableApiError, safeErrorMessage } from "../../utils.js";
 import { getCacheDir } from "../../cache-dir.js";
 import { listWorkspaceNodes } from "../../coalesce/api/nodes.js";
 import { extractNodeArray } from "../shared/node-helpers.js";
@@ -106,7 +106,7 @@ export function loadSession(sessionID: string): WorkshopSession | null {
   try {
     content = readFileSync(path, "utf8");
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = safeErrorMessage(error);
     throw new Error(`Workshop session file exists but could not be read: ${reason}`);
   }
   let parsed: unknown;
@@ -136,7 +136,7 @@ function saveSession(session: WorkshopSession): void {
     session.updatedAt = new Date().toISOString();
     writeFileSync(getSessionPath(session.sessionID), JSON.stringify(session, null, 2), "utf8");
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = safeErrorMessage(error);
     throw new Error(
       `Failed to save workshop session ${session.sessionID}: ${reason}. ` +
         `Check disk space and file permissions at ${dir}.`
@@ -151,7 +151,7 @@ export function deleteSession(sessionID: string): boolean {
     unlinkSync(path);
     return true;
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = safeErrorMessage(error);
     throw new Error(
       `Could not delete workshop session file: ${reason}. You may need to delete it manually at ${path}.`
     );
@@ -221,7 +221,7 @@ export async function openWorkshop(
     }
   } catch (error) {
     rethrowNonRecoverableApiError(error);
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = safeErrorMessage(error);
     sessionWarnings.push(
       `Could not pre-load workspace nodes (${reason}). Entity resolution will require API calls per instruction.`
     );
@@ -466,7 +466,7 @@ async function processInstruction(
       }
     } catch (error) {
       rethrowNonRecoverableApiError(error);
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = safeErrorMessage(error);
       warnings.push(
         `Entity resolution API call failed (${reason}). Names could not be verified against the workspace.`
       );

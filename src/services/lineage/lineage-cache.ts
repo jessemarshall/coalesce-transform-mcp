@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { CoalesceClient, QueryParams } from "../../client.js";
 import { listWorkspaceNodes } from "../../coalesce/api/nodes.js";
 import { validatePathSegment } from "../../coalesce/types.js";
-import { isPlainObject } from "../../utils.js";
+import { isPlainObject, safeErrorMessage } from "../../utils.js";
 import { CACHE_DIR_NAME, getCacheBaseDir } from "../../cache-dir.js";
 import type { WorkflowProgressReporter } from "../../workflows/progress.js";
 import { DEFAULT_PAGE_SIZE, getDetailFetchTimeoutMs } from "../../constants.js";
@@ -247,7 +247,7 @@ function tryLoadFromSnapshot(workspaceID: string, baseDir: string): Record<strin
 
     return items;
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = safeErrorMessage(error);
     process.stderr.write(`[tryLoadFromSnapshot] Failed to load snapshot for workspace ${workspaceID}: ${reason}\n`);
     return null;
   }

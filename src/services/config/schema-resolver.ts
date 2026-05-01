@@ -2,7 +2,7 @@ import { getRepoNodeTypeDefinition } from "../repo/operations.js";
 import { loadNodeTypeCorpusSnapshot } from "../corpus/loader.js";
 import { searchNodeTypeCorpusVariants } from "../corpus/search.js";
 import { resolveOptionalRepoPathInput } from "../repo/path.js";
-import { isPlainObject, rethrowNonRecoverableApiError } from "../../utils.js";
+import { isPlainObject, rethrowNonRecoverableApiError, safeErrorMessage } from "../../utils.js";
 
 export interface NodeTypeSchema {
   config: Array<{
@@ -87,7 +87,7 @@ export async function resolveNodeTypeSchema(
     } catch (error) {
       // Auth and network errors indicate a broken session — let them propagate
       rethrowNonRecoverableApiError(error);
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = safeErrorMessage(error);
       process.stderr.write(
         `[schema-resolver] Repo resolution failed for "${nodeType}": ${reason}. Falling back to corpus.\n`
       );
@@ -128,7 +128,7 @@ export async function resolveNodeTypeSchema(
   } catch (error) {
     throw new Error(
       `Cannot resolve node type schema for '${nodeType}'. ` +
-      `Repo resolution failed${resolvedRepoPath ? "" : " (no repoPath provided, COALESCE_REPO_PATH not set)"} and corpus lookup failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Repo resolution failed${resolvedRepoPath ? "" : " (no repoPath provided, COALESCE_REPO_PATH not set)"} and corpus lookup failed: ${safeErrorMessage(error)}`,
       { cause: error }
     );
   }

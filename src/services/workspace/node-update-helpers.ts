@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { type CoalesceClient } from "../../client.js";
 import { completeNodeConfiguration, type ConfigCompletionResult } from "../config/intelligent.js";
-import { isPlainObject, rethrowNonRecoverableApiError } from "../../utils.js";
+import { isPlainObject, rethrowNonRecoverableApiError, safeErrorMessage } from "../../utils.js";
 import { selectPipelineNodeType } from "../pipelines/node-type-selection.js";
 import { detectSpecializedPatternPenalty } from "../pipelines/node-type-intent.js";
 import {
@@ -22,7 +22,7 @@ export async function tryCompleteNodeConfiguration(
     return { configCompletion };
   } catch (error) {
     rethrowNonRecoverableApiError(error);
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = safeErrorMessage(error);
     return { configCompletionSkipped: `Config completion failed (${reason}) — ${CONFIG_COMPLETION_SKIP_MSG}` };
   }
 }
@@ -142,7 +142,7 @@ export async function validateNodeTypeChoice(
       throw error;
     }
     // Log unexpected errors so they are not completely invisible
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = safeErrorMessage(error);
     process.stderr.write(
       `[validateNodeTypeChoice] Unexpected error for nodeType "${params.nodeType}": ${reason}. Validation skipped.\n`
     );

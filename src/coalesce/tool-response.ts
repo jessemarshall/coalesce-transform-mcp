@@ -8,7 +8,7 @@ import {
   type CacheResourceLink,
 } from "../cache-dir.js";
 import { z } from "zod";
-import { isPlainObject } from "../utils.js";
+import { isPlainObject, safeErrorMessage } from "../utils.js";
 import { CoalesceApiError } from "../client.js";
 import { JsonToolErrorSchema } from "./tool-schemas.js";
 
@@ -119,7 +119,7 @@ function cleanupStaleAutoCacheFilesInBucket(autoCacheDir: string): void {
         try {
           unlinkSync(join(autoCacheDir, file));
         } catch (error) {
-          const reason = error instanceof Error ? error.message : String(error);
+          const reason = safeErrorMessage(error);
           process.stderr.write(`[auto-cache] Failed to delete stale file ${file}: ${reason}\n`);
         }
       }
@@ -147,7 +147,7 @@ function cleanupStaleAutoCacheFilesInBucket(autoCacheDir: string): void {
       }
     }
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = safeErrorMessage(error);
     process.stderr.write(`[auto-cache] Stale file cleanup failed for ${autoCacheDir}: ${reason}\n`);
   }
 }
@@ -165,7 +165,7 @@ function cleanupStaleAutoCacheFiles(writtenBucketDir: string, baseDir: string): 
   } catch (error) {
     // Cache root may not exist yet — clean the bucket we just wrote to and stop.
     cleanupStaleAutoCacheFilesInBucket(writtenBucketDir);
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = safeErrorMessage(error);
     process.stderr.write(`[auto-cache] Unable to enumerate cache root ${cacheRoot}: ${reason}\n`);
     return;
   }
@@ -331,7 +331,7 @@ export function buildJsonToolResponse(
     writeFileSync(filePath, `${text}\n`, "utf8");
     cleanupStaleAutoCacheFiles(dirname(filePath), baseDir);
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = safeErrorMessage(error);
     process.stderr.write(`[coalesce-transform-mcp] auto-cache write failed for ${toolName}: ${reason}\n`);
     return buildInlineJsonResponse(
       externalizedResult,

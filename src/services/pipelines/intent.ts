@@ -1,6 +1,6 @@
 import { type CoalesceClient } from "../../client.js";
 import { getCachedOrFetchWorkspaceNodeDetail } from "../cache/workspace-node-detail-index.js";
-import { isPlainObject, uniqueInOrder, rethrowNonRecoverableApiError } from "../../utils.js";
+import { isPlainObject, uniqueInOrder, rethrowNonRecoverableApiError, safeErrorMessage } from "../../utils.js";
 import {
   normalizeSqlIdentifier,
   getColumnNamesFromNode,
@@ -259,7 +259,7 @@ export async function buildPipelinePlanFromIntent(
             }
           } catch (error) {
             rethrowNonRecoverableApiError(error);
-            const reason = error instanceof Error ? error.message : String(error);
+            const reason = safeErrorMessage(error);
             warnings.push(
               `Could not fetch predecessor node "${entity.resolvedNodeName}" (${entity.resolvedNodeID}) — ${reason}. ` +
               `Column passthrough will not be available for this source.`
