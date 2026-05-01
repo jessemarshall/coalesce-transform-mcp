@@ -1,5 +1,5 @@
 import { sanitizeNodeDefinitionSqlOverridePolicy } from "../policies/sql-override.js";
-import { isPlainObject } from "../../utils.js";
+import { isPlainObject, asString } from "../../utils.js";
 import { deepClone } from "../shared/node-helpers.js";
 
 export type NodeDefinitionTemplateOptions = {
@@ -58,10 +58,6 @@ export type TemplateComparisonResult = {
   }>;
 };
 
-function getString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
 function getFirstOptionValue(value: unknown): unknown {
   if (!Array.isArray(value) || value.length === 0) {
     return undefined;
@@ -82,7 +78,7 @@ function inferDefaultValue(item: Record<string, unknown>): unknown {
     return deepClone(item.default);
   }
 
-  const type = getString(item.type);
+  const type = asString(item.type);
   switch (type) {
     case "materializationSelector":
       return getFirstOptionValue(item.options) ?? "table";
@@ -104,8 +100,8 @@ function inferDefaultValue(item: Record<string, unknown>): unknown {
 function inferTargetMappings(
   item: Record<string, unknown>
 ): InferredTargetMapping[] {
-  const type = getString(item.type);
-  const attributeName = getString(item.attributeName);
+  const type = asString(item.type);
+  const attributeName = asString(item.attributeName);
 
   switch (type) {
     case "materializationSelector": {
@@ -283,7 +279,7 @@ export function buildSetWorkspaceNodeTemplateFromDefinition(
   const warnings: string[] = [...sanitizedDefinition.warnings];
 
   configGroups.forEach((group, groupIndex) => {
-    const groupName = getString(group.groupName);
+    const groupName = asString(group.groupName);
     const items = Array.isArray(group.items) ? group.items.filter(isPlainObject) : [];
 
     items.forEach((item, itemIndex) => {
@@ -295,19 +291,19 @@ export function buildSetWorkspaceNodeTemplateFromDefinition(
           groupIndex,
           itemIndex,
           groupName,
-          itemType: getString(item.type),
-          displayName: getString(item.displayName),
-          attributeName: getString(item.attributeName),
+          itemType: asString(item.type),
+          displayName: asString(item.displayName),
+          attributeName: asString(item.attributeName),
           targetPath,
           defaultValue,
-          enableIf: getString(item.enableIf),
+          enableIf: asString(item.enableIf),
           note,
         };
         fieldMappings.push(mapping);
 
         if (!targetPath) {
           warnings.push(
-            `Config item ${groupIndex}.${itemIndex} (${getString(item.type) ?? "unknown"}) does not map cleanly to set_workspace_node body fields.`
+            `Config item ${groupIndex}.${itemIndex} (${asString(item.type) ?? "unknown"}) does not map cleanly to set_workspace_node body fields.`
           );
           return;
         }
@@ -337,10 +333,10 @@ export function buildSetWorkspaceNodeTemplateFromDefinition(
     });
   });
 
-  const capitalized = getString(sanitizedDefinition.nodeDefinition.capitalized);
-  const short = getString(sanitizedDefinition.nodeDefinition.short);
-  const plural = getString(sanitizedDefinition.nodeDefinition.plural);
-  const tagColor = getString(sanitizedDefinition.nodeDefinition.tagColor);
+  const capitalized = asString(sanitizedDefinition.nodeDefinition.capitalized);
+  const short = asString(sanitizedDefinition.nodeDefinition.short);
+  const plural = asString(sanitizedDefinition.nodeDefinition.plural);
+  const tagColor = asString(sanitizedDefinition.nodeDefinition.tagColor);
   const defaultNodeName =
     options.nodeName ??
     (short ? `${short}_NODE` : capitalized ? `${capitalized.toUpperCase()}_NODE` : "NEW_NODE");

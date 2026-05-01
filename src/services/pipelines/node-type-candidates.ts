@@ -4,7 +4,7 @@ import {
   type RepoNodeTypeResolution,
 } from "../repo/parser.js";
 import { buildSetWorkspaceNodeTemplateFromDefinition } from "../templates/nodes.js";
-import { isPlainObject } from "../../utils.js";
+import { isPlainObject, asString } from "../../utils.js";
 import {
   inferFamily,
   isAutoExecutableFamily,
@@ -16,10 +16,6 @@ import {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function getString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
 
 function compareStrings(left: string, right: string): number {
   return left.localeCompare(right, undefined, {
@@ -53,12 +49,12 @@ function analyzeDefinition(nodeDefinition: Record<string, unknown> | null): {
 
   for (const item of getDefinitionConfigItems(nodeDefinition)) {
     const label =
-      getString(item.attributeName) ??
-      getString(item.displayName) ??
-      getString(item.type) ??
+      asString(item.attributeName) ??
+      asString(item.displayName) ??
+      asString(item.type) ??
       "unknown";
     const normalizedLabel = label.toLowerCase();
-    const itemType = getString(item.type) ?? "";
+    const itemType = asString(item.type) ?? "";
     const hasDefault = Object.prototype.hasOwnProperty.call(item, "default");
 
     if (
@@ -132,7 +128,7 @@ export function buildRepoCandidate(
       )
     : undefined;
   const displayName =
-    getString(resolution.nodeTypeRecord.outerDefinition.name) ??
+    asString(resolution.nodeTypeRecord.outerDefinition.name) ??
     generated?.definitionSummary.capitalized ??
     null;
   const shortName = generated?.definitionSummary.short ?? null;
