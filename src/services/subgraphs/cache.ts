@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { getCacheDir } from "../../cache-dir.js";
+import { safeErrorMessage } from "../../utils.js";
 
 const SUBGRAPH_CACHE_FILE = "subgraphs.json";
 
@@ -42,7 +43,7 @@ function readCacheFile(baseDir?: string): CacheFile {
       `[subgraph-cache] Ignoring cache at ${path}: unexpected shape — treating as empty\n`
     );
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
+    const reason = safeErrorMessage(err);
     process.stderr.write(
       `[subgraph-cache] Corrupt cache at ${path}: ${reason} — treating as empty\n`
     );
@@ -76,7 +77,7 @@ export function saveSubgraphToCache(
     writeCacheFile({ version: 1, entries: filtered }, baseDir);
   } catch (err) {
     process.stderr.write(
-      `[subgraph-cache] Failed to save ${entry.workspaceID}:${entry.name} — ${err instanceof Error ? err.message : String(err)}\n`
+      `[subgraph-cache] Failed to save ${entry.workspaceID}:${entry.name} — ${safeErrorMessage(err)}\n`
     );
   }
 }
@@ -106,7 +107,7 @@ export function removeSubgraphFromCache(
     }
   } catch (err) {
     process.stderr.write(
-      `[subgraph-cache] Failed to remove ${params.workspaceID}:${params.id} — ${err instanceof Error ? err.message : String(err)}\n`
+      `[subgraph-cache] Failed to remove ${params.workspaceID}:${params.id} — ${safeErrorMessage(err)}\n`
     );
   }
 }

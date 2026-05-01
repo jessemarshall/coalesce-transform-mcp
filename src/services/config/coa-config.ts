@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { safeErrorMessage } from "../../utils.js";
 
 export interface CoaProfile {
   profileName: string;
@@ -96,7 +97,7 @@ function loadParsed(): ParsedConfig {
       sections,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = safeErrorMessage(err);
     cached = {
       status: { kind: "parse-error", path, message },
       sections: new Map(),

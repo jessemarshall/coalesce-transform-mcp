@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import YAML from "yaml";
-import { isPlainObject } from "../../utils.js";
+import { isPlainObject, safeErrorMessage } from "../../utils.js";
 
 export type RepoSubgraph = {
   id: string;
@@ -17,7 +17,7 @@ function listYamlFiles(dir: string): string[] {
   try {
     entries = readdirSync(dir, { withFileTypes: true });
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
+    const reason = safeErrorMessage(err);
     process.stderr.write(`[subgraphs] Failed to list ${dir}: ${reason}\n`);
     return out;
   }
@@ -37,7 +37,7 @@ function parseSubgraphFile(filePath: string): RepoSubgraph | null {
   try {
     raw = readFileSync(filePath, "utf8");
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
+    const reason = safeErrorMessage(err);
     process.stderr.write(`[subgraphs] Failed to read ${filePath}: ${reason}\n`);
     return null;
   }
@@ -48,7 +48,7 @@ function parseSubgraphFile(filePath: string): RepoSubgraph | null {
     // Surface YAML parse failures so users can see why a file was skipped —
     // previously these were dropped silently and the missing subgraph was
     // indistinguishable from a file that never existed.
-    const reason = err instanceof Error ? err.message : String(err);
+    const reason = safeErrorMessage(err);
     process.stderr.write(
       `[subgraphs] Skipping ${filePath}: YAML parse error — ${reason}\n`
     );

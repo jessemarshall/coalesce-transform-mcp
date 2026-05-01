@@ -25,6 +25,7 @@ import {
   type PreflightReport,
 } from "../services/coa/preflight.js";
 import { redactSensitive } from "../services/coa/redact.js";
+import { safeErrorMessage } from "../utils.js";
 
 /**
  * Injected dependency for tests — lets us exercise handlers without spawning the CLI.
@@ -104,7 +105,7 @@ function buildResult(args: string[], runResult: RunCoaResult): CoaToolResult {
  * not match the tool's output schema" error instead of the actual problem.
  */
 function buildPreflightErrorResult(args: string[], err: unknown): CoaToolResult {
-  const message = err instanceof Error ? err.message : String(err);
+  const message = safeErrorMessage(err);
   return {
     command: formatCommand(args),
     exitCode: -1,

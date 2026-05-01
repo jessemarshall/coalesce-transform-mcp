@@ -242,7 +242,7 @@ function cleanupOldPlanFiles(dir: string, workspaceID: string, maxToKeep: number
         // Ignore ENOENT — another process may have already deleted this file.
         // Log anything else so permission/disk errors don't go unnoticed.
         if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") continue;
-        const reason = err instanceof Error ? err.message : String(err);
+        const reason = safeErrorMessage(err);
         process.stderr.write(`[coalesce-transform-mcp] plan file delete failed for ${file}: ${reason}\n`);
       }
     }

@@ -38,6 +38,7 @@ import {
   diffTailClauses,
   type TailClausesDiff,
 } from "../services/templates/tail-clauses-diff.js";
+import { safeErrorMessage } from "../utils.js";
 import {
   appendLimitToJoinCondition,
   diffLimit,
@@ -443,7 +444,7 @@ function defineApplySqlToWorkspaceNode(client: CoalesceClient): ToolDefinition {
                 const reason = result.reason;
                 inferenceWarnings.push(
                   `Could not fetch predecessor node ${predID}: `
-                  + `${reason instanceof Error ? reason.message : String(reason)}`,
+                  + safeErrorMessage(reason),
                 );
               }
             }

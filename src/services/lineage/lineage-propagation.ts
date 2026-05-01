@@ -296,7 +296,7 @@ export async function propagateColumnChange(
     writeFileSync(snapshotPath, JSON.stringify(diskSnapshot, null, 2));
   } catch (err) {
     // Snapshot write failure should not block propagation
-    const reason = err instanceof Error ? err.message : String(err);
+    const reason = safeErrorMessage(err);
     process.stderr.write(`Warning: failed to write pre-mutation snapshot to disk: ${reason}\n`);
     snapshotPath = undefined;
   }
