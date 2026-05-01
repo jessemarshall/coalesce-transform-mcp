@@ -375,6 +375,27 @@ describe("runPreflight - selector validation", () => {
     });
     expect(report.errors).toEqual([]);
   });
+
+  it("flags the `{ A || B }` footgun when it appears inside a compound selector", () => {
+    const report = runPreflight(projectDir, {
+      selectors: ["{ STG_A || STG_B } OR { location: SRC name: FOO }"],
+    });
+    expect(report.errors.map((e) => e.code)).toContain("SELECTOR_COMBINED_OR");
+  });
+
+  it("flags `{ A || B }` even when it is the second brace pair", () => {
+    const report = runPreflight(projectDir, {
+      selectors: ["{ location: SRC name: FOO } OR { STG_A || STG_B }"],
+    });
+    expect(report.errors.map((e) => e.code)).toContain("SELECTOR_COMBINED_OR");
+  });
+
+  it("does not false-positive when `||` is inside a quoted name", () => {
+    const report = runPreflight(projectDir, {
+      selectors: ['{ subgraph: "A||B" }'],
+    });
+    expect(report.errors.map((e) => e.code)).not.toContain("SELECTOR_COMBINED_OR");
+  });
 });
 
 describe("runPreflight - scan truncation", () => {
