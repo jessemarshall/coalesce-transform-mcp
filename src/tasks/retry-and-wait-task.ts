@@ -9,6 +9,7 @@ import {
   getToolOutputSchema,
 } from "../coalesce/types.js";
 import { retryAndWait, extractResultScope } from "../workflows/retry-and-wait.js";
+import { safeErrorMessage } from "../utils.js";
 
 const RetryAndWaitTaskInput = RerunParams.extend({
   pollInterval: z
@@ -59,8 +60,7 @@ export function registerRetryAndWaitTask(
               response
             );
           } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
+            const message = safeErrorMessage(error);
             await extra.taskStore.storeTaskResult(task.taskId, "failed", {
               content: [{ type: "text", text: `retry_and_wait failed: ${message}` }],
               isError: true,

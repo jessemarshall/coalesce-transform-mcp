@@ -9,6 +9,7 @@ import {
   resolveCacheResourceUri,
 } from "../cache-dir.js";
 import { registerCoaDescribeResources } from "./coa-describe.js";
+import { safeErrorMessage } from "../utils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -292,7 +293,7 @@ export function initializeSkillsDir(skillsDir: string): void {
     }
   } catch (error) {
     process.stderr.write(
-      `Warning: Failed to initialize skills directory at ${skillsDir}: ${error instanceof Error ? error.message : String(error)}\n`
+      `Warning: Failed to initialize skills directory at ${skillsDir}: ${safeErrorMessage(error)}\n`
     );
   }
 }
@@ -455,7 +456,7 @@ export function registerResources(server: McpServer): void {
           };
         } catch (error) {
           throw new Error(
-            `Failed to read resource ${uri}: ${error instanceof Error ? error.message : String(error)}`
+            `Failed to read resource ${uri}: ${safeErrorMessage(error)}`
           );
         }
       }
@@ -500,7 +501,7 @@ export function registerResources(server: McpServer): void {
         };
       } catch (error) {
         throw new Error(
-          `Failed to read cache resource ${resourceUri.toString()}: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to read cache resource ${resourceUri.toString()}: ${safeErrorMessage(error)}`
         );
       }
     }

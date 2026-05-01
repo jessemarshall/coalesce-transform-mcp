@@ -1,4 +1,5 @@
 import { CoalesceApiError } from "../client.js";
+import { safeErrorMessage } from "../utils.js";
 
 export function remainingTimeMs(startedAt: number, totalTimeoutMs: number): number {
   return Math.max(0, totalTimeoutMs - (Date.now() - startedAt));
@@ -113,7 +114,7 @@ export function createWorkflowProgressReporter(
       });
     } catch (error) {
       // Progress is best-effort and should not fail the workflow.
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = safeErrorMessage(error);
       process.stderr.write(`[progress] Notification failed (token=${progressToken}): ${reason}\n`);
     }
   };

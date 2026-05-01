@@ -9,6 +9,7 @@ import {
   getToolOutputSchema,
 } from "../coalesce/types.js";
 import { startRun } from "../coalesce/api/runs.js";
+import { safeErrorMessage } from "../utils.js";
 
 export function registerStartRunTask(
   server: McpServer,
@@ -46,8 +47,7 @@ export function registerStartRunTask(
               response
             );
           } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
+            const message = safeErrorMessage(error);
             await extra.taskStore.storeTaskResult(task.taskId, "failed", {
               content: [{ type: "text", text: `start_run failed: ${message}` }],
               isError: true,

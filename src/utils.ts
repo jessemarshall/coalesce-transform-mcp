@@ -60,3 +60,12 @@ export function uniqueInOrder<T>(values: T[]): T[] {
 export function sanitizeForFilename(value: string): string {
   return value.replace(/[^a-zA-Z0-9_\-]/g, "_");
 }
+
+/**
+ * Extracts a human-readable message from a caught `unknown` error. Returns
+ * `error.message` for `Error` instances and `String(error)` otherwise. Use
+ * everywhere we catch errors so the fallback string is consistent.
+ */
+export function safeErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

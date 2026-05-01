@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import YAML from "yaml";
-import { isPlainObject } from "../../utils.js";
+import { isPlainObject, safeErrorMessage } from "../../utils.js";
 
 export type RepoOuterDefinition = {
   fileVersion: unknown;
@@ -214,7 +214,7 @@ function loadRepoNodeTypes(
             }
             nodeDefinition = parsedNodeDefinition;
           } catch (error) {
-            parseError = error instanceof Error ? error.message : String(error);
+            parseError = safeErrorMessage(error);
             recordWarnings.push(
               `Unable to parse metadata.nodeMetadataSpec in ${definitionPath}: ${parseError}`
             );
@@ -244,7 +244,7 @@ function loadRepoNodeTypes(
         ];
       } catch (error) {
         warnings.push(
-          `Skipping unreadable node type definition ${definitionPath}: ${error instanceof Error ? error.message : String(error)}`
+          `Skipping unreadable node type definition ${definitionPath}: ${safeErrorMessage(error)}`
         );
         return [];
       }
@@ -302,7 +302,7 @@ function loadUsageCounts(
       usageCounts[sqlType] = (usageCounts[sqlType] ?? 0) + 1;
     } catch (error) {
       warnings.push(
-        `Skipping unreadable node file ${filePath}: ${error instanceof Error ? error.message : String(error)}`
+        `Skipping unreadable node file ${filePath}: ${safeErrorMessage(error)}`
       );
     }
   }
@@ -402,7 +402,7 @@ function loadPackages(
       ];
     } catch (error) {
       warnings.push(
-        `Skipping unreadable package file ${packageFilePath}: ${error instanceof Error ? error.message : String(error)}`
+        `Skipping unreadable package file ${packageFilePath}: ${safeErrorMessage(error)}`
       );
       return [];
     }

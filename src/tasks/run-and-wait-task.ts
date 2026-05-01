@@ -9,6 +9,7 @@ import {
   getToolOutputSchema,
 } from "../coalesce/types.js";
 import { runAndWait } from "../workflows/run-and-wait.js";
+import { safeErrorMessage } from "../utils.js";
 
 const RunAndWaitTaskInput = StartRunParams.extend({
   pollInterval: z
@@ -62,8 +63,7 @@ export function registerRunAndWaitTask(
               response
             );
           } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
+            const message = safeErrorMessage(error);
             await extra.taskStore.storeTaskResult(task.taskId, "failed", {
               content: [{ type: "text", text: `run_and_wait failed: ${message}` }],
               isError: true,

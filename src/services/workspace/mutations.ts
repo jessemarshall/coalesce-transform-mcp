@@ -13,7 +13,7 @@ import {
 import { invalidateWorkspaceNodeIndex } from "../cache/workspace-node-index.js";
 import { invalidateWorkspaceNodeDetailIndex } from "../cache/workspace-node-detail-index.js";
 import { assertNoSqlOverridePayload } from "../policies/sql-override.js";
-import { isPlainObject } from "../../utils.js";
+import { isPlainObject, safeErrorMessage } from "../../utils.js";
 import {
   getNodeColumnCount,
   getNodeDependencyNames,
@@ -394,7 +394,7 @@ export async function createNodeFromExternalSchema(
       columns: reconciledColumns,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = safeErrorMessage(error);
     throw new Error(
       `Column reconciliation failed after node was created (nodeID: ${nodeID}). ` +
       `The node exists in the workspace with un-reconciled columns. ` +

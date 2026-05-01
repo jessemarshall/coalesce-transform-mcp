@@ -8,7 +8,7 @@ import { walkColumnLineage } from "./lineage-traversal.js";
 import { setWorkspaceNodeAndInvalidate } from "../workspace/mutations.js";
 import { buildUpdatedWorkspaceNodeBody } from "../workspace/node-update-helpers.js";
 import { validatePathSegment } from "../../coalesce/types.js";
-import { isPlainObject } from "../../utils.js";
+import { isPlainObject, safeErrorMessage } from "../../utils.js";
 import type { WorkflowProgressReporter } from "../../workflows/progress.js";
 
 export type PropagationChange = {
@@ -90,7 +90,7 @@ async function rollbackPreparedNodeUpdates(
         body: update.originalBody,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = safeErrorMessage(error);
       rollbackErrors.push(...expandNodeError(
         update,
         `Rollback failed after propagation error: ${message}`
@@ -239,7 +239,7 @@ export async function propagateColumnChange(
         affectedColumns,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = safeErrorMessage(error);
       for (const entry of nodeEntries) {
         prepareErrors.push({ nodeID: entry.nodeID, columnID: entry.columnID, message });
       }
@@ -318,7 +318,7 @@ export async function propagateColumnChange(
 
       appliedUpdates.push(update);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = safeErrorMessage(error);
       writeErrors.push(...expandNodeError(update, message));
       const rollbackErrors = await rollbackPreparedNodeUpdates(client, safeWorkspaceID, appliedUpdates);
       const rollbackFailedNodeIDs = new Set(rollbackErrors.map((entry) => entry.nodeID));
