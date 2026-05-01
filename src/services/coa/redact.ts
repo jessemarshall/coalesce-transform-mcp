@@ -22,23 +22,14 @@ function normalizeKey(key: string): string {
   return key.toLowerCase().replace(/[_-]/g, "");
 }
 
-/** Full key matches — exact tokens agents should never see. */
-const SENSITIVE_KEY_EXACT = new Set([
-  "token",
-  "accesstoken",
-  "refreshtoken",
-  "password",
-  "passphrase",
-  "secret",
-  "apikey",
-  "pat",
-]);
-
 /**
- * Sibling `name` values that mark this object's `detail` as sensitive.
- * Matches the shape of `coa doctor --json` cloud checks.
+ * Token-ish identifiers, normalized via {@link normalizeKey}. Used for both
+ * (a) full key-name matches (any value at this key gets redacted) and (b)
+ * sibling `name` values that mark a peer `detail` field as sensitive (matches
+ * the shape of `coa doctor --json` cloud checks). The two checks share one
+ * vocabulary so a new token type only has to be added once.
  */
-const SENSITIVE_SIBLING_NAMES = new Set([
+const SENSITIVE_KEYS = new Set([
   "token",
   "accesstoken",
   "refreshtoken",
@@ -65,11 +56,11 @@ export function redactSensitive<T>(input: T): RedactResult<T> {
       const siblingName =
         typeof obj.name === "string" ? normalizeKey(obj.name) : null;
       const hasSensitiveSibling =
-        siblingName !== null && SENSITIVE_SIBLING_NAMES.has(siblingName);
+        siblingName !== null && SENSITIVE_KEYS.has(siblingName);
       const out: Record<string, unknown> = {};
       for (const [key, v] of Object.entries(obj)) {
         if (
-          SENSITIVE_KEY_EXACT.has(normalizeKey(key)) &&
+          SENSITIVE_KEYS.has(normalizeKey(key)) &&
           typeof v === "string" &&
           v.length > 0
         ) {
