@@ -18,6 +18,7 @@ import {
   type CoaProfile,
   type FieldSource,
 } from "../config/coa-config.js";
+import { safeErrorMessage } from "../../utils.js";
 
 export type { FieldSource };
 
@@ -123,7 +124,7 @@ export async function diagnoseAccessToken(
     }
     return {
       status: "error",
-      message: err instanceof Error ? err.message : String(err),
+      message: safeErrorMessage(err),
       source,
     };
   }
@@ -322,7 +323,7 @@ export async function diagnoseCoaDoctor(
   } catch (err) {
     return {
       status: "error",
-      message: err instanceof Error ? err.message : String(err),
+      message: safeErrorMessage(err),
     };
   }
 }

@@ -9,6 +9,7 @@ import {
   type ToolDefinition,
 } from "../coalesce/types.js";
 import { requireDestructiveConfirmation } from "../services/shared/elicitation.js";
+import { safeErrorMessage } from "../utils.js";
 
 type ToolAnnotations = {
   readOnlyHint?: boolean;
@@ -252,7 +253,7 @@ export function defineDestructiveTool<S extends z.ZodType>(
           try {
             preview = await def.resolve(client, params);
           } catch (err) {
-            const reason = err instanceof Error ? err.message : String(err);
+            const reason = safeErrorMessage(err);
             throw new Error(
               `Refusing to run ${name}: could not resolve target before mutation — ${reason}`
             );

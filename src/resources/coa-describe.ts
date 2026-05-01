@@ -4,6 +4,7 @@ import {
   fetchDescribeTopic,
   type CoaDescribeTopic,
 } from "../services/coa/describe.js";
+import { safeErrorMessage } from "../utils.js";
 
 type TopicMetadata = {
   name: string;
@@ -113,7 +114,7 @@ async function readCoaDescribeContent(topic: CoaDescribeTopic): Promise<string> 
     const result = await fetchDescribeTopic(topic);
     return result.content;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = safeErrorMessage(err);
     return buildUnavailablePlaceholder(topic, message);
   }
 }

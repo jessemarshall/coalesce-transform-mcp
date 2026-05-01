@@ -28,6 +28,7 @@
  *     user's LIMIT (or omit it for `removed`).
  */
 import { findLastTopLevelOpenParen } from "../pipelines/sql-tokenizer.js";
+import { safeErrorMessage } from "../../utils.js";
 
 /** Diff outcome for the LIMIT comparison. */
 export type LimitDiff =
@@ -322,7 +323,7 @@ export function diffLimit(
 		// without crashing.
 		return {
 			kind: "unsupported",
-			reason: err instanceof Error ? err.message : String(err),
+			reason: safeErrorMessage(err),
 		};
 	}
 	// Existing joinCondition is internal data; if it has an OFFSET tail

@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
+import { safeErrorMessage } from "../../utils.js";
 import { SETUP_HINT } from "../setup/hint.js";
 
 export type PreflightIssue = {
@@ -125,7 +126,7 @@ function countV2NodeTypes(projectPath: string): CountResult {
     return {
       count: 0,
       errors: [
-        `nodeTypes/ readdir failed: ${err instanceof Error ? err.message : String(err)}`,
+        `nodeTypes/ readdir failed: ${safeErrorMessage(err)}`,
       ],
     };
   }
@@ -139,7 +140,7 @@ function countV2NodeTypes(projectPath: string): CountResult {
       raw = readFileSync(definitionPath, "utf8");
     } catch (err) {
       errors.push(
-        `nodeTypes/${entry}/definition.yml read failed: ${err instanceof Error ? err.message : String(err)}`
+        `nodeTypes/${entry}/definition.yml read failed: ${safeErrorMessage(err)}`
       );
       continue;
     }
@@ -176,7 +177,7 @@ function collectSqlFilesWithErrors(
     names = readdirSync(directory);
   } catch (err) {
     errors.push(
-      `${directory} readdir failed: ${err instanceof Error ? err.message : String(err)}`
+      `${directory} readdir failed: ${safeErrorMessage(err)}`
     );
     return false;
   }
@@ -188,7 +189,7 @@ function collectSqlFilesWithErrors(
       stat = statSync(entryPath);
     } catch (err) {
       errors.push(
-        `${entryPath} stat failed: ${err instanceof Error ? err.message : String(err)}`
+        `${entryPath} stat failed: ${safeErrorMessage(err)}`
       );
       continue;
     }
@@ -230,7 +231,7 @@ function checkDataYml(
     errors.push({
       level: "error",
       code: "DATA_YML_READ_FAILED",
-      message: `Could not read data.yml: ${err instanceof Error ? err.message : String(err)}`,
+      message: `Could not read data.yml: ${safeErrorMessage(err)}`,
       path,
     });
     return;
@@ -277,7 +278,7 @@ function checkLocationsYml(
     warnings.push({
       level: "warning",
       code: "LOCATIONS_YML_READ_FAILED",
-      message: `locations.yml exists but could not be read: ${err instanceof Error ? err.message : String(err)}. Check file permissions.`,
+      message: `locations.yml exists but could not be read: ${safeErrorMessage(err)}. Check file permissions.`,
       path,
     });
     return;
@@ -289,7 +290,7 @@ function checkLocationsYml(
     warnings.push({
       level: "warning",
       code: "LOCATIONS_YML_PARSE_FAILED",
-      message: `Could not parse locations.yml: ${err instanceof Error ? err.message : String(err)}`,
+      message: `Could not parse locations.yml: ${safeErrorMessage(err)}`,
       path,
     });
     return;
@@ -349,7 +350,7 @@ function checkWorkspacesYmlShape(
     warnings.push({
       level: "warning",
       code: "WORKSPACES_YML_READ_FAILED",
-      message: `workspaces.yml exists but could not be read: ${err instanceof Error ? err.message : String(err)}. Check file permissions.`,
+      message: `workspaces.yml exists but could not be read: ${safeErrorMessage(err)}. Check file permissions.`,
       path,
     });
     return;
@@ -361,7 +362,7 @@ function checkWorkspacesYmlShape(
     warnings.push({
       level: "warning",
       code: "WORKSPACES_YML_PARSE_FAILED",
-      message: `Could not parse workspaces.yml: ${err instanceof Error ? err.message : String(err)}`,
+      message: `Could not parse workspaces.yml: ${safeErrorMessage(err)}`,
       path,
     });
     return;
@@ -466,7 +467,7 @@ function checkWorkspacesYmlGitignore(
       warnings.push({
         level: "warning",
         code: "GITIGNORE_READ_FAILED",
-        message: `.gitignore exists but could not be read: ${err instanceof Error ? err.message : String(err)}. Cannot confirm whether workspaces.yml is ignored — check file permissions.`,
+        message: `.gitignore exists but could not be read: ${safeErrorMessage(err)}. Cannot confirm whether workspaces.yml is ignored — check file permissions.`,
         path: gitignorePath,
       });
       return;

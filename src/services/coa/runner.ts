@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { resolveCoaBinary, type ResolvedCoaBinary } from "./resolver.js";
+import { safeErrorMessage } from "../../utils.js";
 
 export type RunCoaOptions = {
   /** Working directory — typically the COA project root. */
@@ -152,6 +153,6 @@ function attachJson(result: RunCoaResult, stdout: string): void {
   try {
     result.json = JSON.parse(trimmed);
   } catch (err) {
-    result.jsonParseError = err instanceof Error ? err.message : String(err);
+    result.jsonParseError = safeErrorMessage(err);
   }
 }

@@ -140,7 +140,7 @@ function cleanupStaleAutoCacheFilesInBucket(autoCacheDir: string): void {
           try {
             unlinkSync(join(autoCacheDir, file));
           } catch (err) {
-            const reason = err instanceof Error ? err.message : String(err);
+            const reason = safeErrorMessage(err);
             process.stderr.write(`[auto-cache] Phase 2 eviction failed for ${file}: ${reason}\n`);
           }
         }

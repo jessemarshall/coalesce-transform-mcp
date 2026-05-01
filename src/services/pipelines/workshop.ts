@@ -168,7 +168,7 @@ function cleanupStaleSessions(): void {
   try {
     files = readdirSync(dir);
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
+    const reason = safeErrorMessage(err);
     process.stderr.write(`[workshop] Could not read sessions directory: ${reason}\n`);
     return;
   }
@@ -181,7 +181,7 @@ function cleanupStaleSessions(): void {
         unlinkSync(filePath);
       }
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
+      const reason = safeErrorMessage(err);
       process.stderr.write(`[workshop] Stale session cleanup skipped ${file}: ${reason}\n`);
     }
   }

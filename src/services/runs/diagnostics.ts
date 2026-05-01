@@ -1,5 +1,5 @@
 import { type CoalesceClient } from "../../client.js";
-import { isPlainObject, rethrowNonRecoverableApiError } from "../../utils.js";
+import { isPlainObject, rethrowNonRecoverableApiError, safeErrorMessage } from "../../utils.js";
 import { validatePathSegment } from "../../coalesce/types.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -212,7 +212,7 @@ export async function diagnoseRunFailure(
   if (runResult.status === "rejected") {
     rethrowNonRecoverableApiError(runResult.reason);
     throw new Error(
-      `Failed to fetch run ${safeRunID}: ${runResult.reason instanceof Error ? runResult.reason.message : String(runResult.reason)}`
+      `Failed to fetch run ${safeRunID}: ${safeErrorMessage(runResult.reason)}`
     );
   }
   run = runResult.value;
@@ -223,7 +223,7 @@ export async function diagnoseRunFailure(
   } else {
     rethrowNonRecoverableApiError(resultsResult.reason);
     warnings.push(
-      `Could not fetch run results: ${resultsResult.reason instanceof Error ? resultsResult.reason.message : String(resultsResult.reason)}. ` +
+      `Could not fetch run results: ${safeErrorMessage(resultsResult.reason)}. ` +
         `Diagnosis is based on run metadata only.`
     );
   }
