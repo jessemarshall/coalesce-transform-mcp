@@ -654,6 +654,10 @@ function inspectSqlFile(
  * separate braces around each OR operand joined by the `OR` keyword:
  * `{ A } OR { B }`. The combined form silently matches zero nodes with no
  * error. (See `parseJobSelector` grammar in src/services/jobs/selector-parser.ts.)
+ *
+ * Catches the footgun in any brace pair, not just when it is the whole
+ * selector — `{ A } OR { B || C }` and `{ X || Y } OR { location: SRC name: Z }`
+ * would otherwise pass preflight while silently dropping the bad term.
  */
 function checkSelector(
   selector: string | undefined,
@@ -662,14 +666,17 @@ function checkSelector(
   if (!selector) return;
   const trimmed = selector.trim();
   if (!trimmed) return;
-  // A single brace pair containing `||` is always wrong.
-  const singlePairWithOr = /^{[^{}]*\|\|[^{}]*}$/;
-  if (singlePairWithOr.test(trimmed)) {
+  // Strip quoted strings so legitimate quoted names like
+  // `{ subgraph: "A||B" }` don't false-positive.
+  const withoutQuotes = trimmed.replace(/"[^"]*"|'[^']*'/g, "");
+  // Any brace pair (top-level or one of several) that contains `||` is wrong.
+  const bracePairWithOr = /\{[^{}]*\|\|[^{}]*\}/;
+  if (bracePairWithOr.test(withoutQuotes)) {
     errors.push({
       level: "error",
       code: "SELECTOR_COMBINED_OR",
       message:
-        `Selector "${trimmed}" uses \`{ A || B }\` form which silently matches zero nodes. Use \`{ A } OR { B }\` (separate braces around each OR operand).`,
+        `Selector "${trimmed}" uses \`{ A || B }\` form inside at least one brace pair, which silently matches zero nodes. Use \`{ A } OR { B }\` (separate braces around each OR operand).`,
     });
   }
 }
