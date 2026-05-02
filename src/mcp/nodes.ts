@@ -318,6 +318,7 @@ export function defineNodeTools(
         .optional()
         .describe("Optional partial fields to apply after successful auto-population validation, such as name, description, config, metadata, database, schema, or locationName."),
       columns: z.array(WorkspaceNodeColumnInputSchema)
+        .min(1, "columns must include at least one column when provided")
         .optional()
         .describe("Replace auto-populated columns with these specific columns and transforms. Mutually exclusive with groupByColumns/aggregates."),
       whereCondition: z
@@ -326,6 +327,7 @@ export function defineNodeTools(
         .describe("WHERE filter to append to the joinCondition (without the WHERE keyword). Only valid with columns, not with groupByColumns/aggregates."),
       groupByColumns: z
         .array(z.string().min(1, "groupBy column must not be empty"))
+        .min(1, "groupByColumns must include at least one column when provided")
         .optional()
         .describe("GROUP BY columns for aggregation. Must be provided with aggregates. Mutually exclusive with columns."),
       aggregates: z
@@ -337,6 +339,7 @@ export function defineNodeTools(
             description: z.string().optional().describe("Column description"),
           })
         )
+        .min(1, "aggregates must include at least one aggregate when provided")
         .optional()
         .describe("Aggregate columns. Must be provided with groupByColumns. Mutually exclusive with columns."),
       joinType: z

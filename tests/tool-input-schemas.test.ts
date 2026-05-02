@@ -321,6 +321,14 @@ describe("Required-string validation across MCP tools", () => {
       { tool: "create_workspace_node_from_scratch", input: { workspaceID: "", nodeType: "base-nodes:::Stage" } },
       { tool: "create_workspace_node_from_scratch", input: { workspaceID: "ws", nodeType: "" } },
       { tool: "create_workspace_node_from_predecessor", input: { workspaceID: "", nodeType: "base-nodes:::Stage", predecessorNodeIDs: ["n-1"] } },
+      // Empty inline columns / groupByColumns / aggregates would otherwise pass schema
+      // validation and silently strip auto-populated columns or fall through to
+      // convertJoinToAggregation with empty inputs. Lock in the .min(1) guard at the
+      // schema layer so the failure mode is a clear validation error, matching the
+      // standalone replace_workspace_node_columns / convert_join_to_aggregation tools.
+      { tool: "create_workspace_node_from_predecessor", input: { workspaceID: "ws", nodeType: "base-nodes:::Stage", predecessorNodeIDs: ["n-1"], columns: [] } },
+      { tool: "create_workspace_node_from_predecessor", input: { workspaceID: "ws", nodeType: "base-nodes:::Stage", predecessorNodeIDs: ["n-1"], groupByColumns: [], aggregates: [{ name: "X", function: "COUNT", expression: "*" }] } },
+      { tool: "create_workspace_node_from_predecessor", input: { workspaceID: "ws", nodeType: "base-nodes:::Stage", predecessorNodeIDs: ["n-1"], groupByColumns: ["A"], aggregates: [] } },
       { tool: "set_workspace_node", input: { workspaceID: "", nodeID: "n", body: {} } },
       { tool: "set_workspace_node", input: { workspaceID: "ws", nodeID: "", body: {} } },
       { tool: "update_workspace_node", input: { workspaceID: "", nodeID: "n", changes: {} } },
