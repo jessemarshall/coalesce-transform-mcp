@@ -657,6 +657,11 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       coaBootstrapWorkspacesHandler
     ),
 
+    // MARGINAL (CLI-mirror sufferance under hunting-ground 2 — output parsing
+    // the CLI does badly): single `coa validate` call. Adds forced --json,
+    // JSON parse, project-path validation, version reporting. Re-evaluate
+    // and consider thinning or removing once `coa validate --json` ships
+    // a stable, documented schema. See targets/transform.md for the rule.
     defineLocalTool(
       "coa_validate",
       {
@@ -669,6 +674,10 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       coaValidateHandler
     ),
 
+    // MARGINAL (CLI-mirror sufferance under hunting-ground 2): single
+    // `coa create --list-nodes` call. Re-evaluate once `coa create
+    // --list-nodes --json` (or the equivalent) ships reliable structured
+    // output. See targets/transform.md for the rule.
     defineLocalTool(
       "coa_list_project_nodes",
       {
@@ -681,6 +690,11 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       coaListProjectNodesHandler
     ),
 
+    // MARGINAL (CLI-mirror sufferance under hunting-ground 2): single
+    // `coa create --dry-run --verbose` call. Anchors the
+    // `apply_sql_to_workspace_node` round-trip workflow. Re-evaluate once
+    // `coa create --dry-run --json` ships reliable structured output.
+    // See targets/transform.md for the rule.
     defineLocalTool(
       "coa_dry_run_create",
       {
@@ -693,6 +707,10 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
       coaDryRunCreateHandler
     ),
 
+    // MARGINAL (CLI-mirror sufferance under hunting-ground 2): single
+    // `coa run --dry-run --verbose` call. Re-evaluate once `coa run
+    // --dry-run --json` ships reliable structured output. See
+    // targets/transform.md for the rule.
     defineLocalTool(
       "coa_dry_run_run",
       {
