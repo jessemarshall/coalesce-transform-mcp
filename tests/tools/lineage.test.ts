@@ -455,6 +455,156 @@ describe("Lineage Tool Handlers", () => {
       expect(data.totalUpdated).toBe(1);
     });
 
+    it("emits PARTIAL FAILURE message text when partialFailure flag is set", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const spy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+      defineLineageTools(server, client as never).forEach(t => server.registerTool(...t));
+
+      vi.mocked(buildLineageCache).mockResolvedValue(buildFakeCache({
+        "n1": { name: "SRC_RAW", nodeType: "Source", columns: [{ id: "c1", name: "order_id" }] },
+      }) as never);
+      vi.mocked(walkColumnLineage).mockReturnValue([
+        { nodeID: "n2", nodeName: "STG_ORDERS", nodeType: "Stage", columnID: "c2", columnName: "order_id", direction: "downstream" as const, depth: 1 },
+      ]);
+      vi.mocked(propagateColumnChange).mockResolvedValue({
+        sourceNodeID: "n1",
+        sourceColumnID: "c1",
+        changes: { columnName: "renamed_order_id" },
+        preMutationSnapshot: [
+          { nodeID: "n2", nodeName: "STG_ORDERS", columnID: "c2", previousColumnName: "order_id", previousDataType: "VARCHAR", capturedAt: "2026-04-06T00:00:00.000Z", nodeBody: { id: "n2", name: "STG_ORDERS" } },
+        ],
+        snapshotPath: "/tmp/test-snapshot.json",
+        updatedNodes: [{ nodeID: "n2", nodeName: "STG_ORDERS", columnID: "c2", columnName: "renamed_order_id" }],
+        skippedNodes: [{ nodeID: "n4", columnID: "c4", reason: "Skipped after upstream write failure" }],
+        totalUpdated: 1,
+        partialFailure: true,
+        errors: [{ nodeID: "n3", columnID: "c3", message: "PUT failed" }],
+      } as never);
+
+      const handler = extractHandler<{
+        workspaceID: string;
+        nodeID: string;
+        columnID: string;
+        changes: { columnName?: string; dataType?: string };
+        confirmed?: boolean;
+      }>(spy, "propagate_column_change");
+      const result = await handler({
+        workspaceID: "ws-1",
+        nodeID: "n1",
+        columnID: "c1",
+        changes: { columnName: "renamed_order_id" },
+        confirmed: true,
+      });
+
+      expect(result.isError).toBe(true);
+      // First content block carries the partial-failure user message; the JSON payload is appended after.
+      expect(result.content[0]!.text).toContain("⚠️ PARTIAL FAILURE");
+      expect(result.content[0]!.text).toContain("1 node(s) were updated before a write failed");
+      expect(result.content[0]!.text).toContain("1 node(s) were skipped");
+      expect(result.content[0]!.text).toContain("1 total error(s)");
+      expect(result.content[0]!.text).toContain("inconsistent state");
+      expect(result.content[0]!.text).toContain("/tmp/test-snapshot.json");
+      expect(result.content[0]!.text).toContain("set_workspace_node");
+      const data = JSON.parse(result.content[result.content.length - 1]!.text);
+      expect(data.partialFailure).toBe(true);
+      expect(data.totalUpdated).toBe(1);
+      expect(data.skippedNodes).toHaveLength(1);
+    });
+
+    it("omits snapshot guidance from PARTIAL FAILURE message when snapshotPath is missing", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const spy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+      defineLineageTools(server, client as never).forEach(t => server.registerTool(...t));
+
+      vi.mocked(buildLineageCache).mockResolvedValue(buildFakeCache({
+        "n1": { name: "SRC_RAW", nodeType: "Source", columns: [{ id: "c1", name: "order_id" }] },
+      }) as never);
+      vi.mocked(walkColumnLineage).mockReturnValue([
+        { nodeID: "n2", nodeName: "STG_ORDERS", nodeType: "Stage", columnID: "c2", columnName: "order_id", direction: "downstream" as const, depth: 1 },
+      ]);
+      vi.mocked(propagateColumnChange).mockResolvedValue({
+        sourceNodeID: "n1",
+        sourceColumnID: "c1",
+        changes: { columnName: "renamed_order_id" },
+        preMutationSnapshot: [],
+        updatedNodes: [{ nodeID: "n2", nodeName: "STG_ORDERS", columnID: "c2", columnName: "renamed_order_id" }],
+        totalUpdated: 1,
+        partialFailure: true,
+        errors: [{ nodeID: "n3", columnID: "c3", message: "PUT failed" }],
+      } as never);
+
+      const handler = extractHandler<{
+        workspaceID: string;
+        nodeID: string;
+        columnID: string;
+        changes: { columnName?: string; dataType?: string };
+        confirmed?: boolean;
+      }>(spy, "propagate_column_change");
+      const result = await handler({
+        workspaceID: "ws-1",
+        nodeID: "n1",
+        columnID: "c1",
+        changes: { columnName: "renamed_order_id" },
+        confirmed: true,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0]!.text).toContain("⚠️ PARTIAL FAILURE");
+      expect(result.content[0]!.text).toContain("0 node(s) were skipped");
+      expect(result.content[0]!.text).not.toContain("set_workspace_node");
+      expect(result.content[0]!.text).not.toContain("Full pre-mutation node bodies are saved");
+    });
+
+    it("emits rolledBack message text when rolledBack flag is set", async () => {
+      const server = new McpServer({ name: "test", version: "0.0.1" });
+      const spy = vi.spyOn(server, "registerTool");
+      const client = createMockClient();
+      defineLineageTools(server, client as never).forEach(t => server.registerTool(...t));
+
+      vi.mocked(buildLineageCache).mockResolvedValue(buildFakeCache({
+        "n1": { name: "SRC_RAW", nodeType: "Source", columns: [{ id: "c1", name: "order_id" }] },
+      }) as never);
+      vi.mocked(walkColumnLineage).mockReturnValue([
+        { nodeID: "n2", nodeName: "STG_ORDERS", nodeType: "Stage", columnID: "c2", columnName: "order_id", direction: "downstream" as const, depth: 1 },
+      ]);
+      vi.mocked(propagateColumnChange).mockResolvedValue({
+        sourceNodeID: "n1",
+        sourceColumnID: "c1",
+        changes: { columnName: "renamed_order_id" },
+        preMutationSnapshot: [],
+        updatedNodes: [],
+        totalUpdated: 0,
+        rolledBack: true,
+        errors: [{ nodeID: "n3", columnID: "c3", message: "PUT failed mid-batch" }],
+      } as never);
+
+      const handler = extractHandler<{
+        workspaceID: string;
+        nodeID: string;
+        columnID: string;
+        changes: { columnName?: string; dataType?: string };
+        confirmed?: boolean;
+      }>(spy, "propagate_column_change");
+      const result = await handler({
+        workspaceID: "ws-1",
+        nodeID: "n1",
+        columnID: "c1",
+        changes: { columnName: "renamed_order_id" },
+        confirmed: true,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0]!.text).toContain(
+        "Propagation failed after a write error, and any earlier successful writes were rolled back",
+      );
+      expect(result.content[0]!.text).toContain("No downstream updates remain applied");
+      const data = JSON.parse(result.content[result.content.length - 1]!.text);
+      expect(data.rolledBack).toBe(true);
+      expect(data.errors).toHaveLength(1);
+    });
+
     it("returns isError when workspaceID contains path-traversal characters", async () => {
       const server = new McpServer({ name: "test", version: "0.0.1" });
       const spy = vi.spyOn(server, "registerTool");
