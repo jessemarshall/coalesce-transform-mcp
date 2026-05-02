@@ -1,6 +1,7 @@
 import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { loadCoaProfile } from "./services/config/coa-config.js";
+import { safeErrorMessage } from "./utils.js";
 
 /**
  * Root directory name for all MCP cache data.
@@ -78,7 +79,7 @@ export function resolveCacheResourceUri(
   try {
     parsedUri = new URL(uri);
   } catch (err) {
-    process.stderr.write(`[cache-dir] Failed to parse URI "${uri}": ${err instanceof Error ? err.message : err}\n`);
+    process.stderr.write(`[cache-dir] Failed to parse URI "${uri}": ${safeErrorMessage(err)}\n`);
     return null;
   }
 
@@ -95,7 +96,7 @@ export function resolveCacheResourceUri(
   try {
     relativePath = Buffer.from(cacheKey, "base64url").toString("utf8");
   } catch (err) {
-    process.stderr.write(`[cache-dir] Failed to decode base64url cache key "${cacheKey}": ${err instanceof Error ? err.message : err}\n`);
+    process.stderr.write(`[cache-dir] Failed to decode base64url cache key "${cacheKey}": ${safeErrorMessage(err)}\n`);
     return null;
   }
 
