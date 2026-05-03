@@ -36,6 +36,15 @@ type CacheWriteOptions = {
   baseDir?: string;
 };
 
+/**
+ * Defense-in-depth cap on pagination loops. The seen-cursors check catches
+ * perfect cycles, but an API returning unique cursors indefinitely (bug or
+ * misbehavior) would otherwise exhaust memory or fill the disk before any
+ * error trips. Mirrors the protection in `services/lineage/lineage-cache.ts`
+ * and `services/cache/workspace-node-index.ts`.
+ */
+const MAX_PAGES = 500;
+
 function parseCollectionPage(response: unknown): CollectionPage {
   if (!isPlainObject(response)) {
     throw new Error("Paginated collection response was not an object");
@@ -68,6 +77,12 @@ async function fetchAllPaginatedToMemory(
   let pageCount = 0;
 
   while (isFirstPage || next) {
+    if (pageCount >= MAX_PAGES) {
+      throw new Error(
+        `Pagination exceeded ${MAX_PAGES} pages (${items.length} items collected). ` +
+          `This likely indicates an API bug returning unique cursors indefinitely.`
+      );
+    }
     const response = await fetchPage({
       ...baseParams,
       limit: pageSize,
@@ -208,6 +223,12 @@ export async function streamAllPaginatedToDisk(
     let pageCount = 0;
 
     while (isFirstPage || next) {
+      if (pageCount >= MAX_PAGES) {
+        throw new Error(
+          `Pagination exceeded ${MAX_PAGES} pages (${totalItems} items streamed). ` +
+            `This likely indicates an API bug returning unique cursors indefinitely.`
+        );
+      }
       const response = await fetchPage({
         ...baseParams,
         limit: pageSize,
