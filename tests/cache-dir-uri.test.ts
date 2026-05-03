@@ -1,0 +1,238 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, sep } from "node:path";
+
+import {
+  CACHE_DIR_NAME,
+  CACHE_RESOURCE_URI_PREFIX,
+  buildCacheResourceLink,
+  buildCacheResourceUri,
+  getCacheDir,
+  getCacheRelativePath,
+  getCacheResourceMimeType,
+  resolveCacheResourceUri,
+} from "../src/cache-dir.js";
+
+// All security-critical helpers below resolve filesystem paths against the
+// cache root. Each test threads `tempBase` explicitly through `baseDir` so the
+// tests cannot leak into the user's real cache directory. The
+// `getCacheBaseDir` precedence chain (baseDir > COALESCE_CACHE_DIR env >
+// loadCoaProfile().cacheDir > process.cwd()) is covered separately in
+// `tests/cache-dir.test.ts`.
+
+describe("cache-dir URI helpers", () => {
+  let tempBase: string;
+
+  beforeEach(() => {
+    tempBase = mkdtempSync(join(tmpdir(), "coalesce-cache-dir-test-"));
+    vi.stubEnv("COALESCE_CACHE_DIR", "");
+  });
+
+  afterEach(() => {
+    rmSync(tempBase, { recursive: true, force: true });
+    vi.unstubAllEnvs();
+  });
+
+  describe("getCacheDir", () => {
+    it("appends the cache dir name to the resolved base", () => {
+      expect(getCacheDir(tempBase)).toBe(join(tempBase, CACHE_DIR_NAME));
+    });
+  });
+
+  describe("getCacheResourceMimeType", () => {
+    it.each([
+      ["foo.json", "application/json"],
+      ["foo.JSON", "application/json"],
+      ["foo.ndjson", "application/x-ndjson"],
+      ["foo.NDJSON", "application/x-ndjson"],
+      ["foo.md", "text/markdown"],
+      ["foo.txt", "text/plain"],
+      ["foo.bin", "text/plain"],
+      ["foo", "text/plain"],
+      ["a/b/foo.json", "application/json"],
+      ["a/b/foo.unknown", "text/plain"],
+    ])("maps %s to %s", (filePath, expected) => {
+      expect(getCacheResourceMimeType(filePath)).toBe(expected);
+    });
+  });
+
+  describe("getCacheRelativePath", () => {
+    it("returns the relative path for a file inside the cache dir", () => {
+      const filePath = join(tempBase, CACHE_DIR_NAME, "workspace-1", "nodes.ndjson");
+      const result = getCacheRelativePath(filePath, tempBase);
+      expect(result).toBe("workspace-1/nodes.ndjson");
+    });
+
+    it("normalizes nested subdirectories with forward slashes", () => {
+      const filePath = join(tempBase, CACHE_DIR_NAME, "a", "b", "c.json");
+      expect(getCacheRelativePath(filePath, tempBase)).toBe("a/b/c.json");
+    });
+
+    it("returns null when the path equals the cache dir itself", () => {
+      expect(getCacheRelativePath(join(tempBase, CACHE_DIR_NAME), tempBase)).toBeNull();
+    });
+
+    it("returns null for paths outside the cache dir (escape attempt via parent)", () => {
+      const filePath = join(tempBase, "outside.txt");
+      expect(getCacheRelativePath(filePath, tempBase)).toBeNull();
+    });
+
+    it("returns null when the relative path starts with `..`", () => {
+      const filePath = join(tempBase, CACHE_DIR_NAME, "..", "outside.txt");
+      expect(getCacheRelativePath(filePath, tempBase)).toBeNull();
+    });
+
+    it("returns null for an absolute path that is not inside the cache dir", () => {
+      // /etc is outside any reasonable test cache root
+      expect(getCacheRelativePath("/etc/hosts", tempBase)).toBeNull();
+    });
+  });
+
+  describe("buildCacheResourceUri", () => {
+    it("returns a coalesce://cache/<base64url> URI for a path inside the cache", () => {
+      const filePath = join(tempBase, CACHE_DIR_NAME, "workspace-1", "nodes.ndjson");
+      const uri = buildCacheResourceUri(filePath, tempBase);
+      expect(uri).not.toBeNull();
+      expect(uri!).toMatch(new RegExp(`^${CACHE_RESOURCE_URI_PREFIX}[A-Za-z0-9_-]+$`));
+    });
+
+    it("uses base64url (no padding, no '+' or '/') for cache keys", () => {
+      // Filenames containing many slashes encode to a key that would have
+      // padding in plain base64; base64url drops the '=' so URLs stay clean.
+      const filePath = join(tempBase, CACHE_DIR_NAME, "a", "b", "c", "d", "deep.json");
+      const uri = buildCacheResourceUri(filePath, tempBase)!;
+      const cacheKey = uri.slice(CACHE_RESOURCE_URI_PREFIX.length);
+      expect(cacheKey).not.toContain("=");
+      expect(cacheKey).not.toContain("+");
+      expect(cacheKey).not.toContain("/");
+    });
+
+    it("returns null for files outside the cache dir", () => {
+      const filePath = join(tempBase, "outside.txt");
+      expect(buildCacheResourceUri(filePath, tempBase)).toBeNull();
+    });
+
+    it("round-trips with resolveCacheResourceUri", () => {
+      const filePath = join(tempBase, CACHE_DIR_NAME, "runs", "deploy.ndjson");
+      const uri = buildCacheResourceUri(filePath, tempBase)!;
+      const resolved = resolveCacheResourceUri(uri, tempBase);
+      expect(resolved).not.toBeNull();
+      expect(resolved!.relativePath).toBe("runs/deploy.ndjson");
+      // Compare the resolved canonical path so platform-specific separators
+      // don't cause spurious failures.
+      const expectedFile = join(tempBase, CACHE_DIR_NAME, "runs", "deploy.ndjson");
+      expect(resolved!.filePath).toBe(expectedFile);
+    });
+  });
+
+  describe("resolveCacheResourceUri", () => {
+    function buildKey(relative: string): string {
+      return Buffer.from(relative, "utf8").toString("base64url");
+    }
+
+    it("returns null for a malformed URI string", () => {
+      expect(resolveCacheResourceUri("not a uri at all", tempBase)).toBeNull();
+    });
+
+    it("returns null when the protocol is wrong", () => {
+      const key = buildKey("workspace-1/nodes.ndjson");
+      expect(resolveCacheResourceUri(`https://cache/${key}`, tempBase)).toBeNull();
+    });
+
+    it("returns null when the host is wrong", () => {
+      const key = buildKey("workspace-1/nodes.ndjson");
+      expect(resolveCacheResourceUri(`coalesce://other/${key}`, tempBase)).toBeNull();
+    });
+
+    it("returns null when the cache key is empty", () => {
+      expect(resolveCacheResourceUri("coalesce://cache/", tempBase)).toBeNull();
+      expect(resolveCacheResourceUri("coalesce://cache//", tempBase)).toBeNull();
+    });
+
+    it("returns null when the decoded relative path contains `..`", () => {
+      const key = buildKey("../escape.txt");
+      expect(resolveCacheResourceUri(`coalesce://cache/${key}`, tempBase)).toBeNull();
+    });
+
+    it("returns null when the decoded relative path contains a `.` segment", () => {
+      const key = buildKey("././pwn.txt");
+      expect(resolveCacheResourceUri(`coalesce://cache/${key}`, tempBase)).toBeNull();
+    });
+
+    it("returns null when the decoded relative path starts with /", () => {
+      const key = buildKey("/etc/hosts");
+      expect(resolveCacheResourceUri(`coalesce://cache/${key}`, tempBase)).toBeNull();
+    });
+
+    it("returns null when the decoded relative path contains a NUL byte", () => {
+      const key = buildKey("ok\u0000bad.txt");
+      expect(resolveCacheResourceUri(`coalesce://cache/${key}`, tempBase)).toBeNull();
+    });
+
+    it("returns null when the decoded relative path has empty segments (//)", () => {
+      const key = buildKey("a//b.txt");
+      expect(resolveCacheResourceUri(`coalesce://cache/${key}`, tempBase)).toBeNull();
+    });
+
+    it("normalizes backslash-separated segments to forward slashes", () => {
+      // Some clients may construct keys on Windows. The normalizer rewrites
+      // \\ to / before validation so the key still resolves correctly.
+      const key = buildKey("a\\b\\c.json");
+      const resolved = resolveCacheResourceUri(`coalesce://cache/${key}`, tempBase);
+      expect(resolved).not.toBeNull();
+      expect(resolved!.relativePath).toBe("a/b/c.json");
+    });
+
+    it("resolves a valid key to an absolute path under the cache dir", () => {
+      const key = buildKey("workspace-1/nodes.ndjson");
+      const resolved = resolveCacheResourceUri(`coalesce://cache/${key}`, tempBase);
+      expect(resolved).not.toBeNull();
+      expect(isAbsolute(resolved!.filePath)).toBe(true);
+      // filePath must live under the cache dir on disk.
+      const cacheRoot = join(tempBase, CACHE_DIR_NAME);
+      expect(resolved!.filePath.startsWith(cacheRoot + sep)).toBe(true);
+    });
+
+    it("rejects an invalid base64url cache key (returns null without throwing)", () => {
+      // `!!!` is not valid base64url.
+      expect(resolveCacheResourceUri("coalesce://cache/!!!", tempBase)).toBeNull();
+    });
+  });
+
+  describe("buildCacheResourceLink", () => {
+    it("returns null when the file is outside the cache dir", () => {
+      expect(buildCacheResourceLink(join(tempBase, "outside.txt"), { baseDir: tempBase })).toBeNull();
+    });
+
+    it("defaults the link name to the basename when not provided", () => {
+      const filePath = join(tempBase, CACHE_DIR_NAME, "runs", "summary.json");
+      const link = buildCacheResourceLink(filePath, { baseDir: tempBase });
+      expect(link).not.toBeNull();
+      expect(link!.type).toBe("resource_link");
+      expect(link!.name).toBe("summary.json");
+      expect(link!.mimeType).toBe("application/json");
+      expect(link!.uri.startsWith(CACHE_RESOURCE_URI_PREFIX)).toBe(true);
+    });
+
+    it("uses the provided name and description", () => {
+      const filePath = join(tempBase, CACHE_DIR_NAME, "x.ndjson");
+      const link = buildCacheResourceLink(filePath, {
+        baseDir: tempBase,
+        name: "Custom",
+        description: "desc",
+      });
+      expect(link).not.toBeNull();
+      expect(link!.name).toBe("Custom");
+      expect(link!.description).toBe("desc");
+      expect(link!.mimeType).toBe("application/x-ndjson");
+    });
+
+    it("omits description when not provided", () => {
+      const filePath = join(tempBase, CACHE_DIR_NAME, "x.json");
+      const link = buildCacheResourceLink(filePath, { baseDir: tempBase });
+      expect(link).not.toBeNull();
+      expect(link).not.toHaveProperty("description");
+    });
+  });
+});

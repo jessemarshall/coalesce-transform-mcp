@@ -1,0 +1,10 @@
+# Force text diff for source/test files. Without this, a NUL byte sneaking
+# into a TS source (e.g., a path-traversal test using a literal NUL) makes git
+# auto-detect the file as binary and silently render the entire patch
+# unreviewable in `gh pr diff` and PR web UIs.
+*.ts text diff
+*.js text diff
+*.tsx text diff
+*.jsx text diff
+*.json text diff
+*.md text diff
