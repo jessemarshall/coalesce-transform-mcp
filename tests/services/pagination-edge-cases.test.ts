@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -191,6 +191,25 @@ describe("pagination edge cases — fetchAllPaginatedToMemory", () => {
     ).rejects.toThrow("Pagination repeated cursor cursor-A");
   });
 
+  it("throws when pagination exceeds MAX_PAGES (runaway loop guard)", async () => {
+    // Defense-in-depth: an API that returns unique cursors indefinitely would
+    // otherwise blow memory before any other check trips.
+    const client = createMockClient();
+    let callNum = 0;
+    client.get.mockImplementation(() => {
+      callNum++;
+      // Always return a fresh unique cursor — the seen-cursors set never trips.
+      return Promise.resolve({
+        data: [{ id: `node-${callNum}` }],
+        next: `cursor-${callNum}`,
+      });
+    });
+
+    await expect(
+      fetchAllEnvironmentNodes(client as any, { environmentID: "env-1" })
+    ).rejects.toThrow(/Pagination exceeded 500 pages/);
+  });
+
   it("handles response with missing data field (defaults to empty array)", async () => {
     const client = createMockClient();
     // Page 1 has no data field but has a next cursor; page 2 has neither — terminates pagination
@@ -261,6 +280,31 @@ describe("pagination edge cases — streamAllPaginatedToDisk", () => {
     expect(fetchPage).toHaveBeenCalledWith(
       expect.objectContaining({ startingFrom: "99" })
     );
+  });
+
+  it("throws and cleans up temp files when streaming exceeds MAX_PAGES", async () => {
+    const baseDir = createTempDir();
+    const dataDir = join(baseDir, "data");
+    const ndjsonPath = join(dataDir, "test.ndjson");
+    const metaPath = join(dataDir, "test.meta.json");
+
+    let callNum = 0;
+    const fetchPage = vi.fn().mockImplementation(() => {
+      callNum++;
+      return Promise.resolve({
+        data: [{ id: `n-${callNum}` }],
+        next: `cursor-${callNum}`,
+      });
+    });
+
+    await expect(
+      streamAllPaginatedToDisk(fetchPage, {}, {}, { ndjsonPath, metaPath })
+    ).rejects.toThrow(/Pagination exceeded 500 pages/);
+
+    // No temp files should remain after cleanup. streamAllPaginatedToDisk
+    // mkdir's the parent before the loop, so dataDir always exists here.
+    const tempFiles = readdirSync(dataDir).filter((f) => f.includes(".tmp-"));
+    expect(tempFiles).toHaveLength(0);
   });
 
   it("cleans up temp files when repeated cursor is detected", async () => {

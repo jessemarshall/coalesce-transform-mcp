@@ -16,9 +16,9 @@ import { listWorkspaceNodes, getWorkspaceNode } from "../../coalesce/api/nodes.j
 import { isPlainObject } from "../../utils.js";
 import { WORKSPACE_NODE_PAGE_LIMIT } from "../pipelines/planning-types.js";
 import { createTtlCache, parseTtlMs } from "./ttl-cache.js";
+import { MAX_PAGES } from "../../constants.js";
 
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
-const MAX_PAGES = 500;
 
 type DetailMap = Map<string, Record<string, unknown>>;
 

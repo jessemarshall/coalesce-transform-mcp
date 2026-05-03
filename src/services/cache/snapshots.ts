@@ -9,7 +9,7 @@ import { sanitizeResponse, validatePathSegment } from "../../coalesce/types.js";
 import type { NodeSummary } from "../workspace/analysis.js";
 import { isPlainObject } from "../../utils.js";
 import { CACHE_DIR_NAME, getCacheBaseDir } from "../../cache-dir.js";
-import { DEFAULT_PAGE_SIZE, getDetailFetchTimeoutMs, type RunStatus } from "../../constants.js";
+import { DEFAULT_PAGE_SIZE, getDetailFetchTimeoutMs, MAX_PAGES, type RunStatus } from "../../constants.js";
 
 type PaginatedParams = {
   pageSize?: number;
@@ -68,6 +68,12 @@ async function fetchAllPaginatedToMemory(
   let pageCount = 0;
 
   while (isFirstPage || next) {
+    if (pageCount >= MAX_PAGES) {
+      throw new Error(
+        `Pagination exceeded ${MAX_PAGES} pages (${items.length} items collected). ` +
+          `This likely indicates an API bug returning unique cursors indefinitely.`
+      );
+    }
     const response = await fetchPage({
       ...baseParams,
       limit: pageSize,
@@ -208,6 +214,12 @@ export async function streamAllPaginatedToDisk(
     let pageCount = 0;
 
     while (isFirstPage || next) {
+      if (pageCount >= MAX_PAGES) {
+        throw new Error(
+          `Pagination exceeded ${MAX_PAGES} pages (${totalItems} items streamed). ` +
+            `This likely indicates an API bug returning unique cursors indefinitely.`
+        );
+      }
       const response = await fetchPage({
         ...baseParams,
         limit: pageSize,
