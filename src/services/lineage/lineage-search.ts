@@ -14,6 +14,12 @@ export type WorkspaceSearchParams = {
   limit?: number;
 };
 
+/** Per-node cap on the `matches` array. A single wide node (e.g., a 500-column
+ *  staging table where the query matches a common prefix) would otherwise
+ *  produce a 500-entry `matches` array on a single result and silently bloat
+ *  the response. The outer `limit` only slices node count, not match count. */
+const MAX_MATCHES_PER_NODE = 50;
+
 export type SearchMatch = {
   nodeID: string;
   nodeName: string;
@@ -26,6 +32,8 @@ export type SearchMatch = {
     /** Snippet of the matched content (truncated for large values) */
     snippet: string;
   }>;
+  /** True when the per-node match list was capped at MAX_MATCHES_PER_NODE. */
+  truncatedMatches?: boolean;
 };
 
 export type WorkspaceSearchResult = {
@@ -137,9 +145,15 @@ export function searchWorkspaceContent(
       }
     }
 
+    let truncatedMatches = false;
+
     if (fields.includes("columnName")) {
       for (const col of node.columns) {
         if (col.name.toLowerCase().includes(lowerQuery)) {
+          if (matches.length >= MAX_MATCHES_PER_NODE) {
+            truncatedMatches = true;
+            break;
+          }
           if (!matchedFields.includes("columnName")) matchedFields.push("columnName");
           matches.push({ field: "columnName", columnName: col.name, snippet: col.name });
         }
@@ -149,6 +163,10 @@ export function searchWorkspaceContent(
     if (fields.includes("columnDataType")) {
       for (const col of node.columns) {
         if (col.dataType && col.dataType.toLowerCase().includes(lowerQuery)) {
+          if (matches.length >= MAX_MATCHES_PER_NODE) {
+            truncatedMatches = true;
+            break;
+          }
           if (!matchedFields.includes("columnDataType")) matchedFields.push("columnDataType");
           matches.push({ field: "columnDataType", columnName: col.name, snippet: col.dataType });
         }
@@ -162,6 +180,7 @@ export function searchWorkspaceContent(
         nodeType: node.nodeType,
         matchedFields,
         matches,
+        ...(truncatedMatches ? { truncatedMatches: true } : {}),
       });
     }
   }
