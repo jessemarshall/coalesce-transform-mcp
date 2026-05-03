@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   resolveCoaBinary,
   resetCoaBinaryCache,
   CoaNotFoundError,
+  isExecutableFile,
 } from "../../../src/services/coa/resolver.js";
 
 describe("resolveCoaBinary (integration with bundled @coalescesoftware/coa)", () => {
@@ -46,4 +50,48 @@ describe("CoaNotFoundError", () => {
     expect(err.message).toBe("missing");
     expect(err).toBeInstanceOf(Error);
   });
+});
+
+describe("isExecutableFile", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "coalesce-resolver-test-"));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("returns false for a path that does not exist", () => {
+    expect(isExecutableFile(join(tempDir, "nonexistent"))).toBe(false);
+  });
+
+  it("returns false for a directory even when one named `coa` shadows PATH", () => {
+    const dirCandidate = join(tempDir, "coa");
+    mkdirSync(dirCandidate);
+    expect(isExecutableFile(dirCandidate)).toBe(false);
+  });
+
+  // chmod is meaningful on POSIX only; Windows treats files as executable
+  // based on PATHEXT, which the helper short-circuits past.
+  it.skipIf(process.platform === "win32")(
+    "returns false for a regular file without the executable bit",
+    () => {
+      const fileCandidate = join(tempDir, "coa");
+      writeFileSync(fileCandidate, "#!/bin/sh\necho hello\n", "utf8");
+      chmodSync(fileCandidate, 0o644);
+      expect(isExecutableFile(fileCandidate)).toBe(false);
+    }
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "returns true for a regular file with the executable bit set",
+    () => {
+      const fileCandidate = join(tempDir, "coa");
+      writeFileSync(fileCandidate, "#!/bin/sh\necho hello\n", "utf8");
+      chmodSync(fileCandidate, 0o755);
+      expect(isExecutableFile(fileCandidate)).toBe(true);
+    }
+  );
 });

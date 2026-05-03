@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { existsSync } from "node:fs";
+import { accessSync, constants as fsConstants, existsSync, statSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
 export type CoaBinarySource = "bundled" | "path";
@@ -85,13 +85,40 @@ function tryPath(): ResolvedCoaBinary | null {
   for (const dir of pathEnv.split(delimiter).filter(Boolean)) {
     for (const ext of extensions) {
       const candidate = join(dir, `coa${ext}`);
-      if (existsSync(candidate)) {
+      if (isExecutableFile(candidate)) {
         const version = probeVersion(candidate, []);
         return { binaryPath: candidate, source: "path", version };
       }
     }
   }
   return null;
+}
+
+/**
+ * Reject directories and non-executable files when scanning PATH. existsSync
+ * alone returns true for both — a `coa` directory or a non-executable `coa`
+ * file earlier in PATH would otherwise shadow a real binary later. On
+ * Windows, PATHEXT extensions handle the executability question; only the
+ * directory check applies.
+ *
+ * Exported so the test suite can assert the behavior directly without
+ * needing the bundled resolver to fail first.
+ */
+export function isExecutableFile(candidate: string): boolean {
+  let stats;
+  try {
+    stats = statSync(candidate);
+  } catch {
+    return false;
+  }
+  if (!stats.isFile()) return false;
+  if (process.platform === "win32") return true;
+  try {
+    accessSync(candidate, fsConstants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function probeVersion(command: string, prefixArgs: string[]): string | null {
