@@ -4,6 +4,7 @@ import type { CoalesceClient } from "../client.js";
 import {
   READ_ONLY_ANNOTATIONS,
   WRITE_ANNOTATIONS,
+  IDEMPOTENT_WRITE_ANNOTATIONS,
   validatePathSegment,
   type ToolDefinition,
 } from "../coalesce/types.js";
@@ -94,7 +95,10 @@ export function defineWorkshopTools(
     inputSchema: z.object({
       sessionID: z.string().min(1, "sessionID must not be empty").describe("The workshop session ID to close"),
     }),
-    annotations: WRITE_ANNOTATIONS,
+    // Idempotent: a second call on an already-closed session returns
+    // { closed: false, message: "... not found." } rather than erroring or
+    // mutating state.
+    annotations: IDEMPOTENT_WRITE_ANNOTATIONS,
   }, (params) => workshopClose(params.sessionID)),
   ];
 }
