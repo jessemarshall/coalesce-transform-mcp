@@ -212,32 +212,48 @@ describe("searchWorkspaceContent", () => {
     expect(result.totalMatches).toBe(1);
   });
 
-  it("caps the per-node match list and flags truncatedMatches", () => {
-    // A single wide node with 200 columns sharing a common prefix would
-    // otherwise return a 200-entry matches array, silently bloating the
-    // response. The outer `limit` only slices node count, not match count.
-    const wideColumns = Array.from({ length: 200 }, (_, i) => ({
-      id: `col-${i}`,
-      name: `CUSTOMER_FIELD_${i}`,
-      dataType: "VARCHAR",
-      sourceColumnRefs: [] as string[],
-    }));
+  // The columnName and columnDataType loops in lineage-search.ts share
+  // the same MAX_MATCHES_PER_NODE break logic. Cover both with one it.each so
+  // a regression in either branch is caught — outer `limit` slices node count,
+  // not match count, so a single wide node would otherwise bloat the response.
+  it.each([
+    {
+      field: "columnName" as const,
+      query: "CUSTOMER",
+      makeColumns: (n: number) =>
+        Array.from({ length: n }, (_, i) => ({
+          id: `col-${i}`,
+          name: `CUSTOMER_FIELD_${i}`,
+          dataType: "VARCHAR",
+          sourceColumnRefs: [] as string[],
+        })),
+    },
+    {
+      field: "columnDataType" as const,
+      query: "VARCHAR",
+      makeColumns: (n: number) =>
+        Array.from({ length: n }, (_, i) => ({
+          id: `col-${i}`,
+          name: `FIELD_${i}`,
+          dataType: "VARCHAR(255)",
+          sourceColumnRefs: [] as string[],
+        })),
+    },
+  ])("caps the per-node match list and flags truncatedMatches ($field)", ({ field, query, makeColumns }) => {
     const wideNode: LineageNode = {
       id: "wide",
       name: "WIDE_TABLE",
       nodeType: "Stage",
-      columns: wideColumns,
+      columns: makeColumns(200),
       raw: { id: "wide", name: "WIDE_TABLE", nodeType: "Stage", metadata: {}, config: {} },
     };
     const testCache = buildCache([wideNode]);
-    const result = searchWorkspaceContent(testCache, {
-      query: "CUSTOMER",
-      fields: ["columnName"],
-    });
+    const result = searchWorkspaceContent(testCache, { query, fields: [field] });
     expect(result.totalMatches).toBe(1);
     const wide = result.results[0];
     expect(wide.matches.length).toBeLessThanOrEqual(50);
     expect(wide.truncatedMatches).toBe(true);
+    expect(wide.matches.every((m) => m.field === field)).toBe(true);
   });
 
   it("does not flag truncatedMatches when matches fit under the cap", () => {
