@@ -211,4 +211,39 @@ describe("searchWorkspaceContent", () => {
     const result = searchWorkspaceContent(testCache, { query: "fallback_table", fields: ["sql"] });
     expect(result.totalMatches).toBe(1);
   });
+
+  it("caps the per-node match list and flags truncatedMatches", () => {
+    // A single wide node with 200 columns sharing a common prefix would
+    // otherwise return a 200-entry matches array, silently bloating the
+    // response. The outer `limit` only slices node count, not match count.
+    const wideColumns = Array.from({ length: 200 }, (_, i) => ({
+      id: `col-${i}`,
+      name: `CUSTOMER_FIELD_${i}`,
+      dataType: "VARCHAR",
+      sourceColumnRefs: [] as string[],
+    }));
+    const wideNode: LineageNode = {
+      id: "wide",
+      name: "WIDE_TABLE",
+      nodeType: "Stage",
+      columns: wideColumns,
+      raw: { id: "wide", name: "WIDE_TABLE", nodeType: "Stage", metadata: {}, config: {} },
+    };
+    const testCache = buildCache([wideNode]);
+    const result = searchWorkspaceContent(testCache, {
+      query: "CUSTOMER",
+      fields: ["columnName"],
+    });
+    expect(result.totalMatches).toBe(1);
+    const wide = result.results[0];
+    expect(wide.matches.length).toBeLessThanOrEqual(50);
+    expect(wide.truncatedMatches).toBe(true);
+  });
+
+  it("does not flag truncatedMatches when matches fit under the cap", () => {
+    const result = searchWorkspaceContent(cache, { query: "CUSTOMER", fields: ["columnName"] });
+    for (const r of result.results) {
+      expect(r.truncatedMatches).toBeUndefined();
+    }
+  });
 });
