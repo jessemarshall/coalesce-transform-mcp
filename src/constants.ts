@@ -7,6 +7,12 @@
 
 export const DEFAULT_PAGE_SIZE = 250;
 
+/** Defense-in-depth cap on pagination loops. The seen-cursors check catches
+ *  perfect cycles, but an API returning unique cursors indefinitely (bug or
+ *  misbehavior) would otherwise exhaust memory or fill the disk before any
+ *  error trips. Applied uniformly to every pagination call site. */
+export const MAX_PAGES = 500;
+
 // ── Timeouts ──────────────────────────────────────────────────────────────────
 
 const DEFAULT_DETAIL_FETCH_TIMEOUT_MS = 180_000;

@@ -13,9 +13,9 @@ import { isPlainObject } from "../../utils.js";
 import { type WorkspaceNodeIndexEntry } from "../shared/node-helpers.js";
 import { WORKSPACE_NODE_PAGE_LIMIT } from "../pipelines/planning-types.js";
 import { createTtlCache, parseTtlMs } from "./ttl-cache.js";
+import { MAX_PAGES } from "../../constants.js";
 
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
-const MAX_PAGES = 500;
 
 const ttlCache = createTtlCache<string, WorkspaceNodeIndexEntry[]>(() =>
   parseTtlMs(process.env.COALESCE_MCP_NODE_INDEX_CACHE_TTL_MS, DEFAULT_TTL_MS)

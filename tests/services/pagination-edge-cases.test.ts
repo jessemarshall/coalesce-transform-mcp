@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -301,11 +301,10 @@ describe("pagination edge cases — streamAllPaginatedToDisk", () => {
       streamAllPaginatedToDisk(fetchPage, {}, {}, { ndjsonPath, metaPath })
     ).rejects.toThrow(/Pagination exceeded 500 pages/);
 
-    // No temp files should remain after cleanup
-    if (existsSync(dataDir)) {
-      const tempFiles = readdirSync(dataDir).filter((f) => f.includes(".tmp-"));
-      expect(tempFiles).toHaveLength(0);
-    }
+    // No temp files should remain after cleanup. streamAllPaginatedToDisk
+    // mkdir's the parent before the loop, so dataDir always exists here.
+    const tempFiles = readdirSync(dataDir).filter((f) => f.includes(".tmp-"));
+    expect(tempFiles).toHaveLength(0);
   });
 
   it("cleans up temp files when repeated cursor is detected", async () => {

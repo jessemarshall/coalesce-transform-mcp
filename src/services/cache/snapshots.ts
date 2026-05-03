@@ -9,7 +9,7 @@ import { sanitizeResponse, validatePathSegment } from "../../coalesce/types.js";
 import type { NodeSummary } from "../workspace/analysis.js";
 import { isPlainObject } from "../../utils.js";
 import { CACHE_DIR_NAME, getCacheBaseDir } from "../../cache-dir.js";
-import { DEFAULT_PAGE_SIZE, getDetailFetchTimeoutMs, type RunStatus } from "../../constants.js";
+import { DEFAULT_PAGE_SIZE, getDetailFetchTimeoutMs, MAX_PAGES, type RunStatus } from "../../constants.js";
 
 type PaginatedParams = {
   pageSize?: number;
@@ -35,15 +35,6 @@ type PaginatedCollectionResult = {
 type CacheWriteOptions = {
   baseDir?: string;
 };
-
-/**
- * Defense-in-depth cap on pagination loops. The seen-cursors check catches
- * perfect cycles, but an API returning unique cursors indefinitely (bug or
- * misbehavior) would otherwise exhaust memory or fill the disk before any
- * error trips. Mirrors the protection in `services/lineage/lineage-cache.ts`
- * and `services/cache/workspace-node-index.ts`.
- */
-const MAX_PAGES = 500;
 
 function parseCollectionPage(response: unknown): CollectionPage {
   if (!isPlainObject(response)) {
