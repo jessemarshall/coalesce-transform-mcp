@@ -97,6 +97,10 @@ describe("escapeRegExp", () => {
       "\\.\\*\\+\\?\\^\\$\\{\\}\\(\\)\\|\\[\\]\\\\"
     );
   });
+
+  it("returns an empty string for an empty input", () => {
+    expect(escapeRegExp("")).toBe("");
+  });
 });
 
 describe("isSimpleColumnRef", () => {
@@ -165,6 +169,16 @@ describe("extractBareColumnName", () => {
 
   it("trims surrounding whitespace before extracting", () => {
     expect(extractBareColumnName("  col  ")).toBe("col");
+  });
+
+  it("documents the trailing-identifier behavior on hyphenated tokens", () => {
+    // The regex is end-anchored without a leading boundary, so an input like
+    // "a-b" matches the trailing identifier `b` rather than rejecting the
+    // whole token. Callers downstream (ref() emission, SQL rewrites) only
+    // pass results through isSimpleColumnRef first, so this surprising path
+    // is unreachable in production — but locking the behavior here keeps a
+    // future caller from quietly relying on a different return.
+    expect(extractBareColumnName("a-b")).toBe("b");
   });
 });
 
