@@ -165,11 +165,21 @@ export function promoteSnapshotArtifacts(
       rmSync(metaBackupPath, { force: true });
     }
   } catch (error) {
-    // Remove any partially promoted new files before restoring the previous pair.
-    if (existsSync(ndjsonPath) && existsSync(ndjsonBackupPath)) {
+    // Remove any partially promoted new file before restoring the previous pair.
+    // Two cases for a present file at the final path during rollback:
+    //   1. hadX === true: original was renamed to backup, then the new file was
+    //      renamed into place. Delete the new file iff the backup exists, so we
+    //      can restore. Without a backup we can't tell new from original — leave
+    //      the file alone rather than risk deleting the original.
+    //   2. hadX === false: no original existed when we started, so any file at
+    //      the final path is by definition the partially promoted new file.
+    //      Delete it unconditionally — otherwise a meta rename failure on a
+    //      first-time write leaves an orphan ndjson that future readers treat
+    //      as a corrupt cache (no matching meta).
+    if (existsSync(ndjsonPath) && (existsSync(ndjsonBackupPath) || !hadNdjson)) {
       rmSync(ndjsonPath, { force: true });
     }
-    if (existsSync(metaPath) && existsSync(metaBackupPath)) {
+    if (existsSync(metaPath) && (existsSync(metaBackupPath) || !hadMeta)) {
       rmSync(metaPath, { force: true });
     }
 

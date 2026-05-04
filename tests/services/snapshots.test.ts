@@ -203,6 +203,70 @@ describe("streamAllPaginatedToDisk", () => {
     expect(readFileSync(metaPath, "utf8")).toBe('{"totalItems":1}\n');
   });
 
+  it("removes the partially promoted ndjson on first-time-write meta rename failure", () => {
+    // No prior ndjson/meta pair existed. The ndjson rename succeeds but the
+    // meta rename fails. Without rollback, the new ndjson stays at its final
+    // path and future readers see an orphaned ndjson with no matching meta —
+    // a corrupt cache. Confirm the rollback deletes it.
+    const baseDir = createTempDir();
+    const ndjsonPath = join(baseDir, "data", "test.ndjson");
+    const metaPath = join(baseDir, "data", "test.meta.json");
+    const tempNdjsonPath = join(baseDir, "data", "test.ndjson.tmp");
+    const tempMetaPath = join(baseDir, "data", "test.meta.json.tmp");
+
+    mkdirSync(join(baseDir, "data"), { recursive: true });
+    writeFileSync(tempNdjsonPath, '{"id":"fresh"}\n', "utf8");
+    writeFileSync(tempMetaPath, '{"totalItems":1}\n', "utf8");
+
+    const fsOps = {
+      existsSync,
+      renameSync: (from: string, to: string) => {
+        if (from === tempMetaPath && to === metaPath) {
+          throw new Error("meta promote failed");
+        }
+        return renameSync(from, to);
+      },
+      rmSync: (path: string, options?: { force?: boolean }) => rmSync(path, options),
+    };
+
+    expect(() =>
+      promoteSnapshotArtifacts(tempNdjsonPath, ndjsonPath, tempMetaPath, metaPath, fsOps)
+    ).toThrow("meta promote failed");
+
+    expect(existsSync(ndjsonPath)).toBe(false);
+    expect(existsSync(metaPath)).toBe(false);
+  });
+
+  it("leaves the cache empty when the first-time NDJSON rename fails", () => {
+    const baseDir = createTempDir();
+    const ndjsonPath = join(baseDir, "data", "test.ndjson");
+    const metaPath = join(baseDir, "data", "test.meta.json");
+    const tempNdjsonPath = join(baseDir, "data", "test.ndjson.tmp");
+    const tempMetaPath = join(baseDir, "data", "test.meta.json.tmp");
+
+    mkdirSync(join(baseDir, "data"), { recursive: true });
+    writeFileSync(tempNdjsonPath, '{"id":"fresh"}\n', "utf8");
+    writeFileSync(tempMetaPath, '{"totalItems":1}\n', "utf8");
+
+    const fsOps = {
+      existsSync,
+      renameSync: (from: string, to: string) => {
+        if (from === tempNdjsonPath && to === ndjsonPath) {
+          throw new Error("ndjson promote failed");
+        }
+        return renameSync(from, to);
+      },
+      rmSync: (path: string, options?: { force?: boolean }) => rmSync(path, options),
+    };
+
+    expect(() =>
+      promoteSnapshotArtifacts(tempNdjsonPath, ndjsonPath, tempMetaPath, metaPath, fsOps)
+    ).toThrow("ndjson promote failed");
+
+    expect(existsSync(ndjsonPath)).toBe(false);
+    expect(existsSync(metaPath)).toBe(false);
+  });
+
   it("applies itemTransform to each item before writing", async () => {
     const baseDir = createTempDir();
     const ndjsonPath = join(baseDir, "data", "test.ndjson");
