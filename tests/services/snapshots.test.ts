@@ -267,6 +267,84 @@ describe("streamAllPaginatedToDisk", () => {
     expect(existsSync(metaPath)).toBe(false);
   });
 
+  it("recovers from an orphan ndjson starting state when meta rename fails", () => {
+    // Asymmetric corrupt-cache lock: a previous run left an orphan ndjson on
+    // disk with no matching meta (the bug this PR fixes). On the next call,
+    // hadNdjson=true / hadMeta=false. The new ndjson rename succeeds; the new
+    // meta rename fails. The rollback must:
+    //   1. delete the partially promoted new ndjson (backup exists, so the
+    //      `existsSync(backup) || !hadX` branch picks the first half),
+    //   2. restore the orphan ndjson from backup,
+    //   3. leave metaPath absent (we can't manufacture a meta that wasn't there).
+    // The post-state matches the orphan starting state — not made worse.
+    const baseDir = createTempDir();
+    const ndjsonPath = join(baseDir, "data", "test.ndjson");
+    const metaPath = join(baseDir, "data", "test.meta.json");
+    const tempNdjsonPath = join(baseDir, "data", "test.ndjson.tmp");
+    const tempMetaPath = join(baseDir, "data", "test.meta.json.tmp");
+
+    mkdirSync(join(baseDir, "data"), { recursive: true });
+    writeFileSync(ndjsonPath, '{"id":"orphan"}\n', "utf8");
+    writeFileSync(tempNdjsonPath, '{"id":"fresh"}\n', "utf8");
+    writeFileSync(tempMetaPath, '{"totalItems":1}\n', "utf8");
+
+    const fsOps = {
+      existsSync,
+      renameSync: (from: string, to: string) => {
+        if (from === tempMetaPath && to === metaPath) {
+          throw new Error("meta promote failed");
+        }
+        return renameSync(from, to);
+      },
+      rmSync: (path: string, options?: { force?: boolean }) => rmSync(path, options),
+    };
+
+    expect(() =>
+      promoteSnapshotArtifacts(tempNdjsonPath, ndjsonPath, tempMetaPath, metaPath, fsOps)
+    ).toThrow("meta promote failed");
+
+    // Orphan ndjson restored from backup, meta still absent.
+    expect(readFileSync(ndjsonPath, "utf8")).toBe('{"id":"orphan"}\n');
+    expect(existsSync(metaPath)).toBe(false);
+  });
+
+  it("recovers from an orphan meta starting state when meta rename fails", () => {
+    // Mirror of the orphan-ndjson case: a previous run left an orphan meta on
+    // disk with no matching ndjson. hadNdjson=false / hadMeta=true. The new
+    // ndjson rename succeeds, then the new meta rename fails. The rollback
+    // must delete the partially promoted new ndjson (no backup but
+    // !hadNdjson=true gates it) and restore the orphan meta from backup.
+    const baseDir = createTempDir();
+    const ndjsonPath = join(baseDir, "data", "test.ndjson");
+    const metaPath = join(baseDir, "data", "test.meta.json");
+    const tempNdjsonPath = join(baseDir, "data", "test.ndjson.tmp");
+    const tempMetaPath = join(baseDir, "data", "test.meta.json.tmp");
+
+    mkdirSync(join(baseDir, "data"), { recursive: true });
+    writeFileSync(metaPath, '{"totalItems":99}\n', "utf8");
+    writeFileSync(tempNdjsonPath, '{"id":"fresh"}\n', "utf8");
+    writeFileSync(tempMetaPath, '{"totalItems":1}\n', "utf8");
+
+    const fsOps = {
+      existsSync,
+      renameSync: (from: string, to: string) => {
+        if (from === tempMetaPath && to === metaPath) {
+          throw new Error("meta promote failed");
+        }
+        return renameSync(from, to);
+      },
+      rmSync: (path: string, options?: { force?: boolean }) => rmSync(path, options),
+    };
+
+    expect(() =>
+      promoteSnapshotArtifacts(tempNdjsonPath, ndjsonPath, tempMetaPath, metaPath, fsOps)
+    ).toThrow("meta promote failed");
+
+    // No new ndjson on disk, original orphan meta restored.
+    expect(existsSync(ndjsonPath)).toBe(false);
+    expect(readFileSync(metaPath, "utf8")).toBe('{"totalItems":99}\n');
+  });
+
   it("applies itemTransform to each item before writing", async () => {
     const baseDir = createTempDir();
     const ndjsonPath = join(baseDir, "data", "test.ndjson");
