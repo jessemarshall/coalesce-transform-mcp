@@ -671,6 +671,47 @@ describe("coa_refresh handler (destructive)", () => {
   });
 });
 
+describe("coa_refresh confirmation message", () => {
+  // Without explicit echo of forceIgnoreEnvironmentStatus, the consent prompt
+  // hides scope escalation: a user approving "execute DML in environment X"
+  // would be unknowingly approving "execute DML AND skip the failed-deploy
+  // safety check." Lock the disclosure into the confirmation surface.
+  async function getStopAndConfirm(params: Record<string, unknown>) {
+    const { McpServer } = await import("@modelcontextprotocol/sdk/server/mcp.js");
+    const { defineCoaTools } = await import("../../src/mcp/coa.js");
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    const spy = vi.spyOn(server, "registerTool");
+    defineCoaTools(server).forEach(t => server.registerTool(...t));
+    const call = spy.mock.calls.find(c => c[0] === "coa_refresh");
+    if (!call) throw new Error("coa_refresh not registered");
+    const handler = call[2] as (p: unknown) => Promise<{ content: Array<{ text: string }> }>;
+    const result = await handler(params);
+    return JSON.parse(result.content[0]!.text).STOP_AND_CONFIRM as string;
+  }
+
+  it("warns about forceIgnoreEnvironmentStatus when the flag is set", async () => {
+    const stop = await getStopAndConfirm({
+      environmentID: "env-1",
+      forceIgnoreEnvironmentStatus: true,
+    });
+    expect(stop).toContain("forceIgnoreEnvironmentStatus");
+    expect(stop).toContain("safety check");
+  });
+
+  it("omits the warning when forceIgnoreEnvironmentStatus is not set", async () => {
+    const stop = await getStopAndConfirm({ environmentID: "env-1" });
+    expect(stop).not.toContain("forceIgnoreEnvironmentStatus");
+  });
+
+  it("omits the warning when forceIgnoreEnvironmentStatus is explicitly false", async () => {
+    const stop = await getStopAndConfirm({
+      environmentID: "env-1",
+      forceIgnoreEnvironmentStatus: false,
+    });
+    expect(stop).not.toContain("forceIgnoreEnvironmentStatus");
+  });
+});
+
 describe("token redaction", () => {
   it("does not echo --token value back in result.command", async () => {
     const { run } = fakeRunCoa({ stdout: "[]" });

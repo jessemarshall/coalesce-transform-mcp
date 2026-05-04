@@ -790,7 +790,7 @@ export function defineCoaTools(server: McpServer): ToolDefinition[] {
         inputSchema: RefreshParams,
         annotations: DESTRUCTIVE_ANNOTATIONS,
         confirmMessage: (params) =>
-          `coa_refresh will execute DML in environment ${params.environmentID}${params.include ? ` (selector: ${params.include})` : " (all nodes in the environment)"}.`,
+          `coa_refresh will execute DML in environment ${params.environmentID}${params.include ? ` (selector: ${params.include})` : " (all nodes in the environment)"}.${params.forceIgnoreEnvironmentStatus ? " WARNING: forceIgnoreEnvironmentStatus is set — the safety check that blocks refresh on environments with a failed deploy will be skipped." : ""}`,
       },
       coaRefreshHandler
     ),
